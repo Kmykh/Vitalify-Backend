@@ -20,6 +20,7 @@ jobs:
       - name: Compilar
         run: dotnet build Vitalify.sln --no-restore -c Release
 
-      # No necesita base de datos: son pruebas unitarias y de arquitectura.
+      # Las pruebas de integración levantan PostgreSQL con Testcontainers (el runner ya trae Docker);
+      # no usan Supabase ni secretos.
       - name: Pruebas
         run: dotnet test Vitalify.sln --no-build -c Release --verbosity normal
