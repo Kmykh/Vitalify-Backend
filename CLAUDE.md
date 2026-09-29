@@ -8,6 +8,10 @@ Backend de **Vitalify** (tesis UPC): plataforma IoMT hospitalaria. Un wearable E
 
 El código, los nombres del dominio y los mensajes de commit van en **español**.
 
+## Commits
+
+Se usa [Conventional Commits](https://www.conventionalcommits.org/es/) en español: `tipo(ámbito): descripción en presente y minúscula`. Los tipos son `feat`, `fix`, `test`, `docs`, `refactor`, `build`, `ci` y `chore`. Los ámbitos son la capa o el área afectada: `dominio`, `aplicacion`, `persistencia`, `api`, `arquitectura`, `docker`. Ejemplo: `feat(api): agrega el endpoint de login con JWT`. Se hace un commit por paso lógico, y el repositorio es público en GitHub (`Kmykh/Vitalify-Backend`).
+
 ## Fases
 
 0 base · 1 usuarios, JWT y RBAC · 2 pacientes y sensores · 3 ingesta simulada · 4 NEWS2/MEWS · 5 alertas · 6 consultas · 7 IoT (Mosquitto, MQTT, ESP32), TimescaleDB y despliegue.
