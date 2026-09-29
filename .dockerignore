@@ -1,0 +1,15 @@
+# Nunca copiar secretos a la imagen: las variables llegan por env_file.
+.env
+.env.*
+
+**/bin/
+**/obj/
+.git/
+.github/
+.idea/
+.vs/
+.vscode/
+tests/
+*.md
+Dockerfile
+docker-compose*.yml
