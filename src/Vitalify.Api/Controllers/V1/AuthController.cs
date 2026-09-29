@@ -12,7 +12,6 @@ namespace Vitalify.Api.Controllers.V1;
 /// <summary>Inicio, renovación y cierre de sesión (HU02 y HU04).</summary>
 [ApiController]
 [Route("api/v1/auth")]
-[Produces("application/json")]
 public class AuthController : ControllerBase
 {
     /// <summary>Inicia sesión con correo y contraseña (HU02).</summary>

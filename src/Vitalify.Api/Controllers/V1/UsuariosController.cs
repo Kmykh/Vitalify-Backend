@@ -10,7 +10,6 @@ namespace Vitalify.Api.Controllers.V1;
 [ApiController]
 [Route("api/v1/usuarios")]
 [Authorize(Policy = Politicas.SoloAdministrador)]
-[Produces("application/json")]
 [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
 [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
 public class UsuariosController : ControllerBase

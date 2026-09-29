@@ -8,7 +8,6 @@ namespace Vitalify.Api.Controllers.V1;
 /// <summary>Monitoreo de pacientes (personal clínico).</summary>
 [ApiController]
 [Route("api/v1/monitoreo")]
-[Produces("application/json")]
 public class MonitoreoController : ControllerBase
 {
     /// <summary>Endpoint temporal para comprobar el acceso del personal clínico (HU03 E2).</summary>
