@@ -14,7 +14,8 @@ internal static class ConfiguracionDeDiseno
 {
     public static IConfiguration Cargar()
     {
-        Env.TraversePath().Load();
+        // NoClobber: las variables de entorno ya definidas tienen prioridad sobre el .env.
+        Env.NoClobber().TraversePath().Load();
         return new ConfigurationBuilder().AddEnvironmentVariables().Build();
     }
 }

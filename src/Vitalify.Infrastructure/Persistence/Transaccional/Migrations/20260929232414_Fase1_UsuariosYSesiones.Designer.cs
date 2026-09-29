@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Vitalify.Infrastructure.Persistence.Transaccional;
@@ -11,9 +12,11 @@ using Vitalify.Infrastructure.Persistence.Transaccional;
 namespace Vitalify.Infrastructure.Persistence.Transaccional.Migrations
 {
     [DbContext(typeof(TransaccionalDbContext))]
-    partial class TransaccionalDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260929232414_Fase1_UsuariosYSesiones")]
+    partial class Fase1_UsuariosYSesiones
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
