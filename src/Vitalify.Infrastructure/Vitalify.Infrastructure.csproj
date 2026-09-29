@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Vitalify.Application\Vitalify.Application.csproj" />
+    <ProjectReference Include="..\Vitalify.Domain\Vitalify.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

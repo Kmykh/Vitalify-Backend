@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <!-- Comentarios XML para Swagger. CS1591 se omite para no exigir documentación en cada miembro público. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Vitalify.Application\Vitalify.Application.csproj" />
+    <ProjectReference Include="..\Vitalify.Infrastructure\Vitalify.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

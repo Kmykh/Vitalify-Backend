@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- C# puro: este proyecto no debe tener paquetes NuGet ni referencias a otros proyectos. -->
+
+</Project>
