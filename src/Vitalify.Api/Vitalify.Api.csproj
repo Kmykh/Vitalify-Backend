@@ -12,4 +12,9 @@
     <ProjectReference Include="..\Vitalify.Infrastructure\Vitalify.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="DotNetEnv" Version="3.1.1" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
+  </ItemGroup>
+
 </Project>

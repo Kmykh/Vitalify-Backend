@@ -8,6 +8,8 @@ namespace Vitalify.Infrastructure;
 
 public static class DependencyInjection
 {
+    private static readonly TimeSpan TimeoutHealthCheck = TimeSpan.FromSeconds(5);
+
     /// <summary>
     /// Registra los adaptadores de salida: los dos DbContext y sus health checks
     /// (<c>transaccional</c> e <c>historial</c>).
@@ -23,8 +25,8 @@ public static class DependencyInjection
             OpcionesNpgsql.Configurar(o, historial, HistorialDbContext.Esquema));
 
         services.AddHealthChecks()
-            .AddNpgSql(transaccional, name: "transaccional", tags: ["db"])
-            .AddNpgSql(historial, name: "historial", tags: ["db"]);
+            .AddNpgSql(transaccional, name: "transaccional", tags: ["db"], timeout: TimeoutHealthCheck)
+            .AddNpgSql(historial, name: "historial", tags: ["db"], timeout: TimeoutHealthCheck);
 
         return services;
     }
