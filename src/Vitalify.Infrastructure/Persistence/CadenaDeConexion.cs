@@ -7,11 +7,14 @@ namespace Vitalify.Infrastructure.Persistence;
 /// Lee una cadena de conexión de la configuración y la normaliza al formato clave=valor de Npgsql.
 /// Acepta también el formato URI (<c>postgresql://usuario:contraseña@host:puerto/base</c>) que muestra
 /// el botón Connect de Supabase.
+/// Si la cadena no fija el tamaño del pool, usa 5: el pooler gratuito de Supabase admite pocas conexiones.
 /// </summary>
 public static class CadenaDeConexion
 {
     public const string Transaccional = "Transaccional";
     public const string Historial = "Historial";
+
+    private const int PoolMaximoPorDefecto = 5;
 
     public static string Obtener(IConfiguration configuration, string nombre)
     {
@@ -31,7 +34,13 @@ public static class CadenaDeConexion
         if (!valor.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase)
             && !valor.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
         {
-            return valor;
+            var claveValor = new NpgsqlConnectionStringBuilder(valor);
+            if (!DefinePoolMaximo(valor))
+            {
+                claveValor.MaxPoolSize = PoolMaximoPorDefecto;
+            }
+
+            return claveValor.ConnectionString;
         }
 
         var uri = new Uri(valor);
@@ -44,7 +53,7 @@ public static class CadenaDeConexion
             Username = Uri.UnescapeDataString(credenciales[0]),
             Password = credenciales.Length > 1 ? Uri.UnescapeDataString(credenciales[1]) : null,
             SslMode = SslMode.Require,
-            MaxPoolSize = 5,
+            MaxPoolSize = PoolMaximoPorDefecto,
         };
 
         // Parámetros de la URI (?sslmode=...&...) sobrescriben los valores por defecto.
@@ -57,5 +66,14 @@ public static class CadenaDeConexion
         }
 
         return builder.ConnectionString;
+    }
+
+    private static bool DefinePoolMaximo(string claveValor)
+    {
+        var crudo = new System.Data.Common.DbConnectionStringBuilder { ConnectionString = claveValor };
+        return crudo.Keys.Cast<string>()
+            .Select(k => k.Replace(" ", string.Empty, StringComparison.Ordinal))
+            .Any(k => k.Equals("MaximumPoolSize", StringComparison.OrdinalIgnoreCase)
+                      || k.Equals("MaxPoolSize", StringComparison.OrdinalIgnoreCase));
     }
 }

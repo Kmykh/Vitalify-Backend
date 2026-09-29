@@ -45,7 +45,7 @@ Las cadenas de conexión se leen **solo** del archivo `.env` en la raíz del rep
    - La contraseña es la **de la base de datos del proyecto**, no la de tu cuenta de Supabase.
    - También puedes pegar la cadena en formato URI tal como la muestra Supabase (`postgresql://postgres.<ref>:<contraseña>@<host>:5432/postgres`). La API la convierte sola y le agrega `SSL Mode=Require` y `Maximum Pool Size=5`. Si la contraseña tiene caracteres especiales dentro de la URI, deben ir codificados (`@` → `%40`, `:` → `%3A`, etc.).
    - Si el valor contiene `#` o espacios, ponlo entre comillas dobles.
-   - El pool es pequeño (5) porque el pooler gratuito de Supabase admite pocas conexiones y hay dos contextos.
+   - El pool es pequeño (5) porque el pooler gratuito de Supabase admite pocas conexiones y hay dos contextos. Si la cadena no incluye `Maximum Pool Size`, la API usa 5 igualmente.
 
 ## Aplicar las migraciones
 
