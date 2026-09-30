@@ -1,8 +1,10 @@
 using FluentValidation;
 using Vitalify.Application.Comun;
 using Vitalify.Application.Puertos;
+using Vitalify.Application.Telemetria;
 using Vitalify.Domain.Auditoria;
 using Vitalify.Domain.Dispositivos;
+using Vitalify.Domain.Telemetria;
 
 namespace Vitalify.Application.Pacientes;
 
@@ -38,23 +40,32 @@ public sealed class ListarPacientesHospitalizados(
     }
 }
 
-/// <summary>HU07: pacientes activos con un sensor vinculado.</summary>
-public sealed class ListarPacientesMonitoreados(IRepositorioHospitalizaciones hospitalizaciones, IReloj reloj)
+/// <summary>HU07: pacientes activos con un sensor vinculado, con el estado de su señal (sin alertas todavía).</summary>
+public sealed class ListarPacientesMonitoreados(
+    IRepositorioHospitalizaciones hospitalizaciones, IRepositorioEstadoSignos estados, OpcionesTelemetria opciones, IReloj reloj)
 {
     public const string SinDatos = "sin-datos";
     public const string MensajeSinPacientes = "No hay pacientes con un sensor vinculado en este momento.";
 
     public async Task<Resultado<PacientesMonitoreadosDto>> EjecutarAsync(CancellationToken ct = default)
     {
-        var hoy = DateOnly.FromDateTime(reloj.AhoraUtc);
+        var ahora = reloj.AhoraUtc;
+        var hoy = DateOnly.FromDateTime(ahora);
         var activas = await hospitalizaciones.ListarActivasConDispositivoAsync(ct);
+        var estadosSignos = await estados.ObtenerVariosAsync(activas.Select(l => l.HospitalizacionId).ToList(), ct);
 
         var items = activas
-            .Select(l => new PacienteMonitoreadoDto(
-                l.PacienteId, l.NombreCompleto, Domain.Pacientes.Paciente.CalcularEdad(l.FechaNacimiento, hoy), l.CodigoCama,
-                l.Servicio, l.CodigoDispositivo!, l.IngresoEn,
-                // TODO fase 4: completar el último NEWS2/MEWS y el nivel de riesgo con la última evaluación.
-                UltimoNews2: null, UltimoMews: null, NivelRiesgo: SinDatos))
+            .Select(l =>
+            {
+                var ultimaLectura = estadosSignos.GetValueOrDefault(l.HospitalizacionId)?.UltimaLecturaEn;
+                return new PacienteMonitoreadoDto(
+                    l.PacienteId, l.NombreCompleto, Domain.Pacientes.Paciente.CalcularEdad(l.FechaNacimiento, hoy), l.CodigoCama,
+                    l.Servicio, l.CodigoDispositivo!, l.IngresoEn,
+                    // TODO fase 4: completar el último NEWS2/MEWS y el nivel de riesgo con la última evaluación.
+                    UltimoNews2: null, UltimoMews: null, NivelRiesgo: SinDatos,
+                    UltimaLecturaEn: ultimaLectura,
+                    Senal: TextosEstado.De(Vigencia.SenalDe(ultimaLectura, ahora, opciones.Vigencia)));
+            })
             .ToList();
 
         return new PacientesMonitoreadosDto(items, items.Count == 0 ? MensajeSinPacientes : null);
