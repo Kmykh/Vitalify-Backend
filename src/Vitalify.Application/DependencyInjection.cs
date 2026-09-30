@@ -1,5 +1,8 @@
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
+using Vitalify.Application.Camas;
+using Vitalify.Application.Dispositivos;
+using Vitalify.Application.Pacientes;
 using Vitalify.Application.Sesiones;
 using Vitalify.Application.Usuarios;
 
@@ -9,7 +12,8 @@ public static class DependencyInjection
 {
     /// <summary>
     /// Registra los casos de uso y sus validadores. <see cref="OpcionesSesion"/> y los puertos los registra
-    /// la infraestructura.
+    /// la infraestructura. Los validadores son singleton: no guardan estado (los que usan <c>IReloj</c> lo
+    /// reciben también como singleton).
     /// </summary>
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
@@ -25,6 +29,29 @@ public static class DependencyInjection
         services.AddScoped<IniciarSesion>();
         services.AddScoped<RefrescarSesion>();
         services.AddScoped<CerrarSesion>();
+
+        services.AddSingleton<IValidator<RegistrarCamaComando>, RegistrarCamaValidador>();
+        services.AddSingleton<IValidator<RegistrarDispositivoComando>, RegistrarDispositivoValidador>();
+        services.AddSingleton<IValidator<CambiarEstadoDispositivoComando>, CambiarEstadoDispositivoValidador>();
+        services.AddSingleton<IValidator<RegistrarIngresoPacienteComando>, RegistrarIngresoPacienteValidador>();
+        services.AddSingleton<IValidator<ActualizarDatosPacienteComando>, ActualizarDatosPacienteValidador>();
+        services.AddSingleton<IValidator<RegistrarEgresoComando>, RegistrarEgresoValidador>();
+        services.AddSingleton<IValidator<ListarPacientesHospitalizadosConsulta>, ListarPacientesHospitalizadosValidador>();
+
+        services.AddScoped<RegistrarCama>();
+        services.AddScoped<ListarCamas>();
+        services.AddScoped<RegistrarDispositivo>();
+        services.AddScoped<CambiarEstadoDispositivo>();
+        services.AddScoped<ListarDispositivos>();
+        services.AddScoped<RegistrarIngresoPaciente>();
+        services.AddScoped<ActualizarDatosPaciente>();
+        services.AddScoped<VincularDispositivo>();
+        services.AddScoped<LiberarDispositivo>();
+        services.AddScoped<RegistrarEgreso>();
+        services.AddScoped<ListarPacientesHospitalizados>();
+        services.AddScoped<ListarPacientesMonitoreados>();
+        services.AddScoped<ObtenerPaciente>();
+        services.AddScoped<ObtenerHospitalizacionActivaPorDispositivo>();
 
         return services;
     }
