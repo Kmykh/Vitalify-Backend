@@ -2,6 +2,9 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc;
+using Vitalify.Application.Camas;
+using Vitalify.Application.Dispositivos;
+using Vitalify.Application.Pacientes;
 using Vitalify.Application.Sesiones;
 using Vitalify.Application.Usuarios;
 
@@ -41,6 +44,52 @@ public static class ClienteApi
         return correo;
     }
 
+    private static int _ultimoDni = Random.Shared.Next(10_000_000, 80_000_000);
+
+    /// <summary>DNI único dentro de la ejecución.</summary>
+    public static string NuevoDni() => Interlocked.Increment(ref _ultimoDni).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    public static async Task<CamaDto> CrearCamaAsync(this HttpClient administrador)
+    {
+        var respuesta = await administrador.PostAsJsonAsync("/api/v1/camas",
+            new { codigo = $"T-{Guid.NewGuid().ToString("N")[..10].ToUpperInvariant()}", servicio = "Medicina B" });
+        Assert.Equal(HttpStatusCode.Created, respuesta.StatusCode);
+        return (await respuesta.Content.ReadFromJsonAsync<CamaDto>())!;
+    }
+
+    public static async Task<DispositivoDto> CrearDispositivoAsync(this HttpClient administrador)
+    {
+        var respuesta = await administrador.PostAsJsonAsync("/api/v1/dispositivos",
+            new { codigo = $"ESP32-{Guid.NewGuid().ToString("N")[..10].ToUpperInvariant()}", descripcion = "Wearable de prueba" });
+        Assert.Equal(HttpStatusCode.Created, respuesta.StatusCode);
+        return (await respuesta.Content.ReadFromJsonAsync<DispositivoDto>())!;
+    }
+
+    public static Task<HttpResponseMessage> IngresarAsync(this HttpClient enfermera, Guid camaId, string dni, string nombre = "Paciente de Prueba") =>
+        enfermera.PostAsJsonAsync("/api/v1/pacientes", new
+        {
+            nombreCompleto = nombre,
+            tipoDocumento = "Dni",
+            numeroDocumento = dni,
+            fechaNacimiento = "1958-03-14",
+            camaId,
+            diagnosticoIngreso = "Neumonía adquirida en la comunidad",
+        });
+
+    /// <summary>Ingresa un paciente con DNI único en la cama indicada y verifica el 201.</summary>
+    public static async Task<FichaPacienteDto> IngresarPacienteAsync(this HttpClient enfermera, Guid camaId, string? dni = null)
+    {
+        var respuesta = await enfermera.IngresarAsync(camaId, dni ?? NuevoDni());
+        Assert.Equal(HttpStatusCode.Created, respuesta.StatusCode);
+        return (await respuesta.Content.ReadFromJsonAsync<FichaPacienteDto>())!;
+    }
+
+    public static Task<HttpResponseMessage> VincularAsync(this HttpClient enfermera, Guid pacienteId, Guid dispositivoId) =>
+        enfermera.PostAsJsonAsync($"/api/v1/pacientes/{pacienteId}/dispositivo", new { dispositivoId });
+
+    public static Task<HttpResponseMessage> EgresarAsync(this HttpClient enfermera, Guid pacienteId, string motivo = "AltaMedica") =>
+        enfermera.PostAsJsonAsync($"/api/v1/pacientes/{pacienteId}/egreso", new { motivo, observacion = "Evolución favorable" });
+
     public static async Task<ProblemDetails> LeerProblemaAsync(this HttpResponseMessage respuesta)
     {
         Assert.Equal("application/problem+json", respuesta.Content.Headers.ContentType?.MediaType);
@@ -63,6 +112,10 @@ public abstract class PruebaApi(FabricaVitalify fabrica)
         await cliente.IniciarSesionAsync(FabricaVitalify.AdminCorreo, FabricaVitalify.AdminContrasena);
         return cliente;
     }
+
+    protected async Task<HttpClient> ClienteEnfermeraAsync() => (await ClienteConRolAsync("Enfermera")).Cliente;
+
+    protected async Task<HttpClient> ClienteMedicoAsync() => (await ClienteConRolAsync("Medico")).Cliente;
 
     /// <summary>Crea una cuenta con el rol indicado y devuelve un cliente con su sesión iniciada.</summary>
     protected async Task<(HttpClient Cliente, SesionIniciada Sesion)> ClienteConRolAsync(string rol)
