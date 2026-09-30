@@ -30,6 +30,12 @@ public class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
 
     public RelojAjustable Reloj { get; } = new();
 
+    /// <summary>Solicitudes de nueva lectura que recibió el puerto <see cref="ISolicitudNuevaLectura"/>.</summary>
+    public SolicitudesRegistradas SolicitudesNuevaLectura { get; } = new();
+
+    /// <summary>Entorno de ASP.NET Core con el que arranca la API.</summary>
+    protected virtual string Entorno => "Development";
+
     public async Task InitializeAsync()
     {
         await _postgres.StartAsync();
@@ -82,13 +88,21 @@ public class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
         return await consulta(scope.ServiceProvider.GetRequiredService<TransaccionalDbContext>());
     }
 
+    public async Task<T> ConsultarHistorialAsync<T>(Func<HistorialDbContext, Task<T>> consulta)
+    {
+        await using var scope = Services.CreateAsyncScope();
+        return await consulta(scope.ServiceProvider.GetRequiredService<HistorialDbContext>());
+    }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment("Development");
+        builder.UseEnvironment(Entorno);
         builder.ConfigureTestServices(services =>
         {
             services.RemoveAll<IReloj>();
             services.AddSingleton<IReloj>(Reloj);
+            services.RemoveAll<ISolicitudNuevaLectura>();
+            services.AddSingleton<ISolicitudNuevaLectura>(SolicitudesNuevaLectura);
             services.AddSingleton<IStartupFilter, FiltroIpDePrueba>();
         });
     }
@@ -136,4 +150,29 @@ public sealed class FabricaVitalifyAislada : FabricaVitalify;
 public sealed class ColeccionApiAislada : ICollectionFixture<FabricaVitalifyAislada>
 {
     public const string Nombre = "api-aislada";
+}
+
+/// <summary>La API en entorno Production (su propio contenedor), para lo que solo existe en Development.</summary>
+public sealed class FabricaVitalifyProduccion : FabricaVitalify
+{
+    protected override string Entorno => "Production";
+}
+
+[CollectionDefinition(Nombre)]
+public sealed class ColeccionApiProduccion : ICollectionFixture<FabricaVitalifyProduccion>
+{
+    public const string Nombre = "api-produccion";
+}
+
+public sealed class SolicitudesRegistradas : ISolicitudNuevaLectura
+{
+    private readonly System.Collections.Concurrent.ConcurrentQueue<SolicitudNuevaLectura> _solicitudes = new();
+
+    public IReadOnlyCollection<SolicitudNuevaLectura> Todas => _solicitudes;
+
+    public Task SolicitarAsync(SolicitudNuevaLectura solicitud, CancellationToken ct = default)
+    {
+        _solicitudes.Enqueue(solicitud);
+        return Task.CompletedTask;
+    }
 }

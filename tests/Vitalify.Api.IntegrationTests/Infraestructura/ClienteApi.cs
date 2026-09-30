@@ -90,6 +90,24 @@ public static class ClienteApi
     public static Task<HttpResponseMessage> EgresarAsync(this HttpClient enfermera, Guid pacienteId, string motivo = "AltaMedica") =>
         enfermera.PostAsJsonAsync($"/api/v1/pacientes/{pacienteId}/egreso", new { motivo, observacion = "Evolución favorable" });
 
+    /// <summary>Envía un mensaje del contrato de telemetría al endpoint de desarrollo (requiere administrador).</summary>
+    public static Task<HttpResponseMessage> EnviarTelemetriaAsync(this HttpClient administrador, object mensaje) =>
+        administrador.PostAsJsonAsync("/api/v1/dev/telemetria", mensaje);
+
+    /// <summary>Envía la lectura, verifica el 200 y devuelve el resultado de la ingesta.</summary>
+    public static async Task<Application.Telemetria.ResultadoIngesta> RegistrarTelemetriaAsync(this HttpClient administrador, object mensaje)
+    {
+        var respuesta = await administrador.EnviarTelemetriaAsync(mensaje);
+        Assert.Equal(HttpStatusCode.OK, respuesta.StatusCode);
+        return (await respuesta.Content.ReadFromJsonAsync<Application.Telemetria.ResultadoIngesta>())!;
+    }
+
+    /// <summary>Marca de tiempo del contrato: ISO 8601 en UTC con milisegundos.</summary>
+    public static string Ts(DateTime momento) => momento.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>Trunca a milisegundos, como hace el contrato.</summary>
+    public static DateTime Ms(DateTime momento) => new(momento.Ticks - (momento.Ticks % TimeSpan.TicksPerMillisecond), DateTimeKind.Utc);
+
     public static async Task<ProblemDetails> LeerProblemaAsync(this HttpResponseMessage respuesta)
     {
         Assert.Equal("application/problem+json", respuesta.Content.Headers.ContentType?.MediaType);
@@ -114,6 +132,18 @@ public abstract class PruebaApi(FabricaVitalify fabrica)
     }
 
     protected async Task<HttpClient> ClienteEnfermeraAsync() => (await ClienteConRolAsync("Enfermera")).Cliente;
+
+    /// <summary>Paciente ingresado con un sensor recién creado y vinculado.</summary>
+    protected async Task<(HttpClient Enfermera, FichaPacienteDto Ficha, DispositivoDto Sensor, CamaDto Cama)> PacienteConSensorAsync()
+    {
+        var administrador = await ClienteAdministradorAsync();
+        var cama = await administrador.CrearCamaAsync();
+        var sensor = await administrador.CrearDispositivoAsync();
+        var enfermera = await ClienteEnfermeraAsync();
+        var ficha = await enfermera.IngresarPacienteAsync(cama.Id);
+        Assert.Equal(HttpStatusCode.OK, (await enfermera.VincularAsync(ficha.Id, sensor.Id)).StatusCode);
+        return (enfermera, ficha, sensor, cama);
+    }
 
     protected async Task<HttpClient> ClienteMedicoAsync() => (await ClienteConRolAsync("Medico")).Cliente;
 
