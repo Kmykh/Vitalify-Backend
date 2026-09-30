@@ -49,6 +49,8 @@ public class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
             ["Seed__AdminNombre"] = "Administrador de pruebas",
             ["Seed__AdminContrasena"] = AdminContrasena,
             ["RateLimit__LoginIntentosPorMinuto"] = "5",
+            ["Simulador__Habilitado"] = "false",
+            ["Seed__DatosDemo"] = "false",
         };
         foreach (var (clave, valor) in configuracion)
         {
