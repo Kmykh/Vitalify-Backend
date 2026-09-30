@@ -28,7 +28,10 @@ Control de acceso basado en roles (RBAC) de Vitalify. Cada rol tiene permisos di
 | Dispositivos (inventario y estado) | `POST /dispositivos`, `PATCH /dispositivos/{id}/estado` · `GET /dispositivos?estado=` | **G** | L | L | `SoloAdministrador` para escribir · `AdministradorOPersonalClinico` para leer |
 | Pacientes: ingreso, edición de datos básicos y egreso (HU05, HU08) | `POST /pacientes`, `PUT /pacientes/{id}`, `POST /pacientes/{id}/egreso` · `GET /pacientes`, `GET /pacientes/{id}` | — | L | **G** | `SoloEnfermera` para escribir · `PersonalClinico` para leer |
 | Vincular y liberar un sensor (HU06) | `POST /pacientes/{id}/dispositivo`, `DELETE /pacientes/{id}/dispositivo` | — | L | **G** | `SoloEnfermera` para escribir · `PersonalClinico` para leer (en la ficha) |
-| Pacientes monitoreados (HU07) | `GET /pacientes/monitoreados` | — | L | L | `PersonalClinico` |
+| Pacientes monitoreados (HU07), con última lectura y señal | `GET /pacientes/monitoreados` | — | L | L | `PersonalClinico` |
+| Signos vitales actuales (HU10, HU11 y HU12) | `GET /pacientes/{id}/signos/actual` | — | L | L | `PersonalClinico` |
+| Incidencias de telemetría (datos técnicos, sin datos del paciente) | `GET /telemetria/incidencias` | L | — | — | `SoloAdministrador` |
+| Ingesta de telemetría de desarrollo (solo Development) | `POST /dev/telemetria` | **G** | — | — | `SoloAdministrador` |
 | Estado del servicio | `GET /ping`, `GET /health` | ✓ | ✓ | ✓ | Anónimo |
 
 Todas las rutas empiezan por `/api/v1`, salvo `/health`.
@@ -37,6 +40,10 @@ Notas:
 - El administrador solo registra cuentas con rol `Medico` o `Enfermera`. El primer administrador se crea con la semilla del `.env`.
 - No existe ningún endpoint para borrar pacientes ni hospitalizaciones. El egreso archiva la hospitalización (queda `Finalizada`).
 - Cada consulta a la ficha de un paciente (`GET /pacientes/{id}`) queda registrada como `ConsultaFichaPaciente`.
+- **Telemetría:**
+  - Los signos del paciente son información clínica, así que solo los ve el personal clínico.
+  - Las incidencias de la ingesta son datos técnicos del sensor (dispositivo, variable, valor recibido, ids), así que las revisa el administrador. Nunca incluyen el nombre ni el documento del paciente.
+  - La ingesta real (MQTT, fase 7) no usa usuarios; hoy el endpoint de desarrollo exige un administrador.
 
 ### Cambio respecto de la versión anterior
 
@@ -48,7 +55,7 @@ Se confirmarán al implementar cada fase.
 
 | Módulo | Fase | Administrador | Médico | Enfermera | Política prevista |
 |---|:---:|:---:|:---:|:---:|---|
-| Signos vitales en tiempo real | 3 y 6 | — | L | L | `PersonalClinico` |
+| Signos vitales en tiempo real (actualización en vivo con SignalR) | 6 y 7 | — | L | L | `PersonalClinico` |
 | Puntajes NEWS2/MEWS en la lista de monitoreo | 4 | — | L | L | `PersonalClinico` |
 | Alertas NEWS2/MEWS | 5 | — | **A** | **A** | `PersonalClinico` |
 | Historial de signos vitales y puntajes de riesgo | 6 | — | L | L | `PersonalClinico` |
@@ -77,9 +84,10 @@ Se confirmarán al implementar cada fase.
 | El administrador no accede al monitoreo clínico | `ElAdministradorNoAccedeAlMonitoreoClinico` |
 | El administrador recibe 403 en monitoreados, en el ingreso y en el listado de pacientes | `ElAdministradorRecibe403EnMonitoreadosYEnElIngresoDePacientes` |
 | La enfermera recibe 403 al registrar dispositivos | `LaEnfermeraRecibe403AlRegistrarDispositivos` |
+| La enfermera recibe 403 en las incidencias técnicas y el administrador recibe 403 en los signos del paciente | `LaEnfermeraRecibe403EnIncidenciasYElAdministrador403EnLosSignos` |
 | El médico recibe 403 al ingresar pacientes | `ElMedicoRecibe403AlIngresarPacientes` |
 | El administrador ve la ocupación de las camas sin datos del paciente | `ElAdministradorVeLaOcupacionDeLaCamaPeroNoQuienLaOcupa` |
 | La auditoría del ingreso no contiene el nombre ni el documento | `HU05_E1_EnfermeraCompletaNombreEdadCamaYDiagnostico_PacienteRegistradoYHabilitadoParaSensor` |
 | Un token con la firma alterada (rol cambiado a Administrador) es rechazado | `UnTokenConLaFirmaAlterada_Devuelve401` |
 
-Las pruebas están en `tests/Vitalify.Api.IntegrationTests/` (`HU03ControlDeAccesoTests.cs`, `PermisosFase2Tests.cs` y `HU05RegistroDePacienteTests.cs`).
+Las pruebas están en `tests/Vitalify.Api.IntegrationTests/` (`HU03ControlDeAccesoTests.cs`, `PermisosFase2Tests.cs`, `HU05RegistroDePacienteTests.cs` y `TelemetriaExtrasTests.cs`).

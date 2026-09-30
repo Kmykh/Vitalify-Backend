@@ -70,6 +70,8 @@ dotnet ef database update --context TransaccionalDbContext --project src/Vitalif
 dotnet ef database update --context HistorialDbContext     --project src/Vitalify.Infrastructure --startup-project src/Vitalify.Infrastructure
 ```
 
+El esquema `vitalify_historial` guarda la telemetría (fase 3): `lectura_signos`, `estado_signos_actual` e `incidencia_telemetria`.
+
 Después, en el **Table Editor** de Supabase aparecen los esquemas `vitalify` y `vitalify_historial`, cada uno con su tabla `__EFMigrationsHistory`. El esquema `vitalify` tiene además `usuario`, `sesion_refresco`, `token_revocado` y `auditoria` (fase 1) y `cama`, `dispositivo`, `paciente`, `hospitalizacion` y `asignacion_dispositivo` (fase 2).
 
 ## Levantar el proyecto
@@ -115,12 +117,30 @@ Usa el mismo `.env` (con `env_file`). La API queda en <http://localhost:8080> (`
 | POST | `/api/v1/pacientes/{id}/dispositivo` | Enfermera | Vincula un sensor disponible (HU06) |
 | DELETE | `/api/v1/pacientes/{id}/dispositivo` | Enfermera | Libera el sensor |
 | POST | `/api/v1/pacientes/{id}/egreso` | Enfermera | Egreso con motivo; libera el sensor en la misma transacción (HU08) |
-| GET | `/api/v1/pacientes/monitoreados` | Médico o Enfermera | Pacientes con sensor (HU07). Puntajes NEWS2/MEWS en la fase 4 |
+| GET | `/api/v1/pacientes/monitoreados` | Médico o Enfermera | Pacientes con sensor (HU07), con `ultimaLecturaEn` y `senal`. Puntajes NEWS2/MEWS en la fase 4 |
+| GET | `/api/v1/pacientes/{id}/signos/actual` | Médico o Enfermera | Último valor de cada signo con `vigente`, `pendiente-actualizacion` o `sin-datos` |
+| GET | `/api/v1/telemetria/incidencias?desde=&hasta=&dispositivo=&tipo=` | Administrador | Log de incidencias técnicas de la telemetría |
+| POST | `/api/v1/dev/telemetria` | Administrador | **Solo Development:** envía una lectura como el ESP32 |
 | GET | `/api/v1/ping` | anónimo | `{ "servicio": "vitalify-api", "version": "0.1.0", "hora": <UTC> }` |
 | GET | `/health` | anónimo | Estado de las conexiones `transaccional` e `historial` (200 o 503) |
 | GET | `/swagger` | anónimo | Documentación OpenAPI (solo en Development). Botón **Authorize**: pega el `accessToken` |
 
 Los errores salen como ProblemDetails en español. Su `type` identifica el caso: `credenciales-invalidas`, `sesion-expirada`, `correo-en-uso`, `acceso-denegado`, etc. Los permisos de cada rol están en [`docs/matriz-permisos.md`](docs/matriz-permisos.md).
+
+### Telemetría (sin hardware)
+
+- El contrato del mensaje del ESP32 está en [`docs/contrato-telemetria.md`](docs/contrato-telemetria.md).
+- Para generar lecturas sin el wearable, activa el simulador en el `.env`:
+
+  ```
+  Simulador__Habilitado=true
+  Simulador__IntervaloSegundos=10
+  Simulador__Escenarios__ESP32-001=Estable
+  Simulador__Escenarios__ESP32-002=SensorDefectuoso
+  ```
+
+  Envía una lectura por cada sensor vinculado a un paciente. Los escenarios son `Estable`, `Deterioro`, `Caida` y `SensorDefectuoso`.
+- Déjalo en `false` cuando no lo uses: cada lectura ocupa espacio en Supabase.
 
 ### Sesión
 
@@ -152,8 +172,8 @@ El CI (`.github/workflows/ci.yml`) ejecuta restore, build y todas las pruebas, i
 |------|-----------------------------------------------|
 | 0    | Base del proyecto                             |
 | 1    | Usuarios, JWT y RBAC                          |
-| 2    | Pacientes, camas y sensores (este estado)     |
-| 3    | Ingesta simulada de signos vitales            |
+| 2    | Pacientes, camas y sensores                   |
+| 3    | Ingesta simulada de signos vitales (este estado) |
 | 4    | Cálculo de NEWS2 y MEWS                       |
 | 5    | Alertas                                       |
 | 6    | Consultas                                     |
