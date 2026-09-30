@@ -15,6 +15,9 @@ public static class Politicas
     public const string SoloMedico = nameof(SoloMedico);
     public const string SoloEnfermera = nameof(SoloEnfermera);
 
+    /// <summary>Lectura de catálogos (camas y dispositivos) sin datos de pacientes.</summary>
+    public const string AdministradorOPersonalClinico = nameof(AdministradorOPersonalClinico);
+
     /// <summary>
     /// Registra las políticas. Por defecto (<c>FallbackPolicy</c>) todo endpoint exige autenticación, salvo los
     /// marcados con <c>[AllowAnonymous]</c>.
@@ -27,6 +30,8 @@ public static class Politicas
             o.AddPolicy(PersonalClinico, p => p.RequireAuthenticatedUser().RequireRole(nameof(Rol.Medico), nameof(Rol.Enfermera)));
             o.AddPolicy(SoloMedico, p => p.RequireAuthenticatedUser().RequireRole(nameof(Rol.Medico)));
             o.AddPolicy(SoloEnfermera, p => p.RequireAuthenticatedUser().RequireRole(nameof(Rol.Enfermera)));
+            o.AddPolicy(AdministradorOPersonalClinico, p => p.RequireAuthenticatedUser()
+                .RequireRole(nameof(Rol.Administrador), nameof(Rol.Medico), nameof(Rol.Enfermera)));
 
             o.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
         });
