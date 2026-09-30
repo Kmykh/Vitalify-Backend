@@ -20,7 +20,7 @@ namespace Vitalify.Api.IntegrationTests.Infraestructura;
 /// variables de entorno, que tienen prioridad sobre el .env del desarrollador porque Program.cs lo carga con
 /// NoClobber. Las migraciones se aplican antes de arrancar la API para que la semilla encuentre las tablas.
 /// </summary>
-public sealed class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
+public class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
 {
     public const string AdminCorreo = "admin@vitalify.test";
     public const string AdminContrasena = "AdminPrueba123";
@@ -125,4 +125,13 @@ internal sealed class FiltroIpDePrueba : IStartupFilter
 public sealed class ColeccionApi : ICollectionFixture<FabricaVitalify>
 {
     public const string Nombre = "api";
+}
+
+/// <summary>Base de datos propia (otro contenedor) para las pruebas que necesitan partir sin datos.</summary>
+public sealed class FabricaVitalifyAislada : FabricaVitalify;
+
+[CollectionDefinition(Nombre)]
+public sealed class ColeccionApiAislada : ICollectionFixture<FabricaVitalifyAislada>
+{
+    public const string Nombre = "api-aislada";
 }

@@ -36,18 +36,17 @@ public class HU03ControlDeAccesoTests(FabricaVitalify fabrica) : PruebaApi(fabri
     {
         var (medico, _) = await ClienteConRolAsync("Medico");
 
-        var respuesta = await medico.GetAsync("/api/v1/monitoreo/resumen");
+        var respuesta = await medico.GetAsync("/api/v1/pacientes/monitoreados");
 
         Assert.Equal(HttpStatusCode.OK, respuesta.StatusCode);
-        var cuerpo = (await respuesta.Content.ReadFromJsonAsync<ResumenMonitoreoRespuesta>())!;
-        Assert.Equal("acceso permitido", cuerpo.Mensaje);
-        Assert.Equal("Medico", cuerpo.Rol);
+        var cuerpo = (await respuesta.Content.ReadFromJsonAsync<PacientesMonitoreadosRespuesta>())!;
+        Assert.NotNull(cuerpo.Items);
     }
 
     [Fact]
     public async Task ElAdministradorNoAccedeAlMonitoreoClinico()
     {
-        var respuesta = await (await ClienteAdministradorAsync()).GetAsync("/api/v1/monitoreo/resumen");
+        var respuesta = await (await ClienteAdministradorAsync()).GetAsync("/api/v1/pacientes/monitoreados");
 
         Assert.Equal(HttpStatusCode.Forbidden, respuesta.StatusCode);
     }

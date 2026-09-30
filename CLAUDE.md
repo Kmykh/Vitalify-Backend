@@ -16,7 +16,7 @@ Se usa [Conventional Commits](https://www.conventionalcommits.org/es/) en españ
 
 0 base · 1 usuarios, JWT y RBAC · 2 pacientes y sensores · 3 ingesta simulada · 4 NEWS2/MEWS · 5 alertas · 6 consultas · 7 IoT (Mosquitto, MQTT, ESP32), TimescaleDB y despliegue.
 
-La fase 1 (HU01 a HU04: registro, login JWT, RBAC y cierre de sesión) está hecha. No adelantar trabajo de fases posteriores: TimescaleDB, MQTT, SignalR y push llegan en la fase 7.
+Hechas: fase 1 (HU01 a HU04: registro, login JWT, RBAC y cierre de sesión) y fase 2 (HU05, HU06, HU08 y la base de la HU07: pacientes, camas y sensores). No adelantar trabajo de fases posteriores: telemetría (3), NEWS2/MEWS (4), alertas (5); TimescaleDB, MQTT, SignalR y push llegan en la fase 7.
 
 ## Comandos
 
@@ -67,17 +67,28 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
 - Cada contexto guarda su `__EFMigrationsHistory` en su propio esquema (`OpcionesNpgsql.Configurar`) y sus migraciones en `Persistence/<Contexto>/Migrations`.
 - Las configuraciones de entidades (`IEntityTypeConfiguration`) se aplican por namespace: pon las de cada contexto bajo `Persistence.Transaccional` o `Persistence.Historial`.
 - Tablas y columnas en snake_case mediante `ConvencionSnakeCase` (propia). **No usar EFCore.NamingConventions**: también renombra las columnas de `__EFMigrationsHistory` y rompe la tabla que ya existe en Supabase. Antes de aplicar una migración, revisar el SQL con `dotnet ef migrations script`.
-- Migraciones de `TransaccionalDbContext`: `Inicial` (esquema) y `Fase1_UsuariosYSesiones` (`usuario`, `sesion_refresco`, `token_revocado`, `auditoria`).
+- Migraciones de `TransaccionalDbContext`: `Inicial` (esquema), `Fase1_UsuariosYSesiones` (`usuario`, `sesion_refresco`, `token_revocado`, `auditoria`) y `Fase2_PacientesYSensores` (`cama`, `dispositivo`, `paciente`, `hospitalizacion`, `asignacion_dispositivo`).
+- Un índice con nombre propio debe llevar `.HasDatabaseName(...)`. `HasIndex(expr, nombre)` solo nombra el índice en el modelo de EF: sin `HasDatabaseName`, la convención le pone el nombre por defecto y choca con otros índices sobre la misma columna.
+- Los filtros de `HasFilter` son SQL literal: se escriben con los nombres de columna en snake_case (`estado = 'Activa'`, `liberado_en IS NULL`).
+- Enums guardados como texto (`HasConversion<string>()`). Ninguna clave foránea borra en cascada los datos clínicos (`Restrict`).
 - **`HistorialDbContext` pasará a TimescaleDB en la fase 7.** Solo cambiará su cadena de conexión y se agregará una migración. Por eso no debe usar nada propio de Supabase y los casos de uso deben acceder al historial por su propio puerto.
 - `CadenaDeConexion.Obtener` lee la cadena y acepta tanto el formato clave=valor de Npgsql como una URI `postgresql://`, que convierte agregando `SSL Mode=Require`. En ambos formatos usa `Maximum Pool Size=5` si la cadena no lo fija. El pool es pequeño porque el pooler gratuito de Supabase admite pocas conexiones.
 - `FabricasDeDiseno.cs` tiene los `IDesignTimeDbContextFactory` que usa `dotnet ef`. Cargan el `.env` igual que la API.
-- `IUnidadDeTrabajo.GuardarCambiosAsync` traduce la violación del índice `ux_usuario_correo` a `Conflicto` (`correo-en-uso`).
+- `IUnidadDeTrabajo.GuardarCambiosAsync` traduce cada índice único a su `Conflicto` (tabla `ConflictosPorIndice` en `UnidadDeTrabajo`):
+  - `ux_usuario_correo` → `correo-en-uso`;
+  - `ux_hospitalizacion_cama_activa` → `cama-ocupada`;
+  - `ux_hospitalizacion_paciente_activa` → `paciente-ya-hospitalizado`;
+  - `ux_asignacion_dispositivo_vigente` → `dispositivo-ya-vinculado`;
+  - `ux_asignacion_hospitalizacion_vigente` → `paciente-ya-tiene-dispositivo`;
+  - además, los códigos únicos de cama, dispositivo y documento del paciente.
+
+  Un índice único nuevo debe agregarse ahí. `DbUpdateConcurrencyException` se traduce a `conflicto-concurrencia`: `dispositivo` usa la columna de sistema `xmin` como token de concurrencia.
 
 ## Configuración y secretos
 
 - **Nunca se escriben contraseñas ni cadenas de conexión en archivos versionados.** Van solo en `.env`, en la raíz, que está en `.gitignore` y `.dockerignore`. No usar `dotnet user-secrets` ni ponerlas en `appsettings*.json`. `.env.example` es la plantilla sin datos reales.
 - `Program.cs` llama a `DotNetEnv.Env.NoClobber().TraversePath().Load()` antes de crear el builder: una variable de entorno ya definida gana sobre el `.env`. Las pruebas de integración dependen de esto para apuntar a su contenedor. Las variables `ConnectionStrings__X` se leen como `ConnectionStrings:X`. En Docker, `docker-compose.yml` pasa el mismo archivo con `env_file`.
-- Variables del `.env`: `ConnectionStrings__Transaccional`, `ConnectionStrings__Historial`, `Jwt__Emisor`, `Jwt__Audiencia`, `Jwt__Clave` (32 o más caracteres; si no, la API no arranca), `Jwt__MinutosAccessToken`, `Jwt__MinutosInactividad`, `Jwt__HorasMaximasSesion` y `Seed__AdminCorreo`, `Seed__AdminNombre`, `Seed__AdminContrasena`.
+- Variables del `.env`: `ConnectionStrings__Transaccional`, `ConnectionStrings__Historial`, `Jwt__Emisor`, `Jwt__Audiencia`, `Jwt__Clave` (32 o más caracteres; si no, la API no arranca), `Jwt__MinutosAccessToken`, `Jwt__MinutosInactividad`, `Jwt__HorasMaximasSesion`, `Seed__AdminCorreo`, `Seed__AdminNombre`, `Seed__AdminContrasena` y `Seed__DatosDemo` (`true` crea camas `MED-B-01` a `MED-B-06` y sensores `ESP32-001` a `ESP32-004`, solo en Development).
 - Nunca escribir en el log contraseñas, tokens ni valores del `.env`.
 
 ## Autenticación y RBAC (fase 1)
@@ -88,17 +99,40 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
   - La sesión expira por inactividad (30 min sin refresh) o por duración máxima (12 h) y responde 401 con `sesion-expirada`.
   - Reusar un token ya rotado revoca todas las sesiones del usuario.
 - **Logout:** guarda el `jti` en `token_revocado`. `OnTokenValidated` lo rechaza consultando `IRepositorioTokensRevocados`, que tiene un `IMemoryCache` delante.
-- **Políticas** (`Api/Seguridad/Politicas.cs`): `SoloAdministrador`, `PersonalClinico`, `SoloMedico`, `SoloEnfermera`.
+- **Políticas** (`Api/Seguridad/Politicas.cs`): `SoloAdministrador`, `PersonalClinico`, `SoloMedico`, `SoloEnfermera` y `AdministradorOPersonalClinico` (para leer catálogos sin datos de pacientes).
   - La `FallbackPolicy` exige autenticación: un endpoint nuevo es privado salvo que lleve `[AllowAnonymous]`.
   - Los 403 se auditan como `AccesoDenegado` (`ManejadorResultadoAutorizacion`).
   - Al agregar módulos, actualizar `docs/matriz-permisos.md`.
 - **Límite de login:** 5 intentos por minuto por IP (`RateLimit:LoginIntentosPorMinuto`); al superarlo, 429.
 - **Administradores:** no se crean por la API. El primero lo crea `SemillaAdministrador` al arrancar, desde `Seed__*`, solo si no existe ninguno.
 
+## Pacientes, camas y sensores (fase 2)
+
+- **Modelo:**
+  - `Cama` y `Dispositivo` forman el catálogo del administrador.
+  - `Paciente` es la persona. Se identifica por tipo y número de documento y se reutiliza en cada reingreso.
+  - `Hospitalizacion` es el episodio. Queda `Activa` o `Finalizada`.
+  - `AsignacionDispositivo` guarda qué sensor estuvo con qué hospitalización y cuándo.
+  - La ocupación de una cama se deriva de las hospitalizaciones activas; no se guarda.
+- **Dispositivo:** tiene una máquina de estados (`Disponible`, `Asignado`, `Mantenimiento`, `DadoDeBaja`), cuyas transiciones están documentadas en la clase. Solo `AsignacionDispositivo.Vincular` y `Liberar` lo asignan o liberan, para que estado y asignación no queden en desacuerdo. `PATCH /dispositivos/{id}/estado` no puede tocar un dispositivo asignado.
+- **Nada se borra:** no hay DELETE de pacientes ni hospitalizaciones. El egreso finaliza la hospitalización y, en el mismo `GuardarCambiosAsync`, libera el sensor.
+- **Ley 29733:**
+  - El administrador no ve datos de pacientes: en `GET /camas` ve si la cama está ocupada, no quién la ocupa.
+  - El 409 de un sensor ocupado indica la cama, nunca el paciente.
+  - La auditoría y los logs llevan solo ids, nunca nombres ni números de documento.
+  - `GET /pacientes/{id}` se audita como `ConsultaFichaPaciente`.
+- **Para la fase 3:** `ObtenerHospitalizacionActivaPorDispositivo(codigo)` resuelve qué hospitalización recibe la telemetría del tópico `device/{codigo}/telemetria`. No tiene endpoint.
+- **Pendiente de la fase 4:** `ListarPacientesMonitoreados` devuelve `ultimoNews2` y `ultimoMews` en `null` y `nivelRiesgo = "sin-datos"`. Hay un `// TODO fase 4` donde se completan.
+- **Edad:** se guarda la `FechaNacimiento`. Si solo se conoce la edad, se estima el 1 de enero del año correspondiente y se marca `FechaNacimientoEstimada`.
+
 ## Pruebas de integración
 
 - `tests/Vitalify.Api.IntegrationTests` usa `WebApplicationFactory` y un PostgreSQL 17 en Testcontainers. `FabricaVitalify` pasa la configuración como variables de entorno y aplica las migraciones antes de arrancar la API.
-- Todas las clases comparten un contenedor y se ejecutan en serie (colección `api`). Usan correos únicos y no dependen del orden.
+- **Contenedores:**
+  - Casi todas las clases comparten un contenedor (colección `api`). Usan correos, códigos y DNI únicos (`ClienteApi.NuevoDni()`) y no dependen del orden.
+  - Las pruebas que necesitan partir de una base vacía usan la colección `api-aislada` (`FabricaVitalifyAislada`), que tiene su propio contenedor.
+  - Las colecciones no corren en paralelo (`Infraestructura/Ensamblado.cs`), porque la configuración va por variables de entorno del proceso.
+- **Atajos** en `ClienteApi`: `CrearCamaAsync`, `CrearDispositivoAsync`, `IngresarPacienteAsync`, `VincularAsync` y `EgresarAsync`. En `PruebaApi`: `ClienteAdministradorAsync`, `ClienteEnfermeraAsync` y `ClienteMedicoAsync`.
 - `RelojAjustable` reemplaza a `IReloj`: `using (Fabrica.Reloj.Adelantar(...))` y se restablece al salir del bloque.
 - Cada `CrearCliente()` usa una IP distinta (encabezado `X-Ip-Prueba`), para que el límite de login no se comparta entre pruebas.
 - Hay una prueba por escenario, con el nombre `HUxx_Ey_...`.

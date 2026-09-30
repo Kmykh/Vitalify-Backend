@@ -65,6 +65,276 @@ namespace Vitalify.Infrastructure.Persistence.Transaccional.Migrations
                     b.ToTable("auditoria", "vitalify");
                 });
 
+            modelBuilder.Entity("Vitalify.Domain.Camas.Cama", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("Activa")
+                        .HasColumnType("boolean")
+                        .HasColumnName("activa");
+
+                    b.Property<string>("Codigo")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("codigo");
+
+                    b.Property<string>("Servicio")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("servicio");
+
+                    b.HasKey("Id")
+                        .HasName("pk_cama");
+
+                    b.HasIndex("Codigo")
+                        .IsUnique()
+                        .HasDatabaseName("ux_cama_codigo");
+
+                    b.ToTable("cama", "vitalify");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Dispositivos.Dispositivo", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Codigo")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("codigo");
+
+                    b.Property<string>("Descripcion")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("descripcion");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("estado");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_dispositivo");
+
+                    b.HasIndex("Codigo")
+                        .IsUnique()
+                        .HasDatabaseName("ux_dispositivo_codigo");
+
+                    b.HasIndex("Estado")
+                        .HasDatabaseName("ix_dispositivo_estado");
+
+                    b.ToTable("dispositivo", "vitalify");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Hospitalizaciones.AsignacionDispositivo", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("AsignadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("asignado_en");
+
+                    b.Property<Guid>("AsignadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("asignado_por");
+
+                    b.Property<Guid>("DispositivoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("dispositivo_id");
+
+                    b.Property<Guid>("HospitalizacionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("hospitalizacion_id");
+
+                    b.Property<DateTime?>("LiberadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("liberado_en");
+
+                    b.Property<Guid?>("LiberadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("liberado_por");
+
+                    b.Property<string>("MotivoLiberacion")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("motivo_liberacion");
+
+                    b.HasKey("Id")
+                        .HasName("pk_asignacion_dispositivo");
+
+                    b.HasIndex("AsignadoPor")
+                        .HasDatabaseName("ix_asignacion_dispositivo_asignado_por");
+
+                    b.HasIndex("DispositivoId")
+                        .HasDatabaseName("ix_asignacion_dispositivo_dispositivo_id");
+
+                    b.HasIndex("HospitalizacionId")
+                        .HasDatabaseName("ix_asignacion_dispositivo_hospitalizacion_id");
+
+                    b.HasIndex("LiberadoPor")
+                        .HasDatabaseName("ix_asignacion_dispositivo_liberado_por");
+
+                    b.HasIndex(new[] { "DispositivoId" }, "ux_asignacion_dispositivo_vigente")
+                        .IsUnique()
+                        .HasDatabaseName("ux_asignacion_dispositivo_vigente")
+                        .HasFilter("liberado_en IS NULL");
+
+                    b.HasIndex(new[] { "HospitalizacionId" }, "ux_asignacion_hospitalizacion_vigente")
+                        .IsUnique()
+                        .HasDatabaseName("ux_asignacion_hospitalizacion_vigente")
+                        .HasFilter("liberado_en IS NULL");
+
+                    b.ToTable("asignacion_dispositivo", "vitalify");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Hospitalizaciones.Hospitalizacion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CamaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cama_id");
+
+                    b.Property<string>("DiagnosticoIngreso")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("diagnostico_ingreso");
+
+                    b.Property<DateTime?>("EgresoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("egreso_en");
+
+                    b.Property<Guid?>("EgresoRegistradoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("egreso_registrado_por");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("estado");
+
+                    b.Property<DateTime>("IngresoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ingreso_en");
+
+                    b.Property<string>("MotivoEgreso")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("motivo_egreso");
+
+                    b.Property<string>("ObservacionEgreso")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("observacion_egreso");
+
+                    b.Property<Guid>("PacienteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("paciente_id");
+
+                    b.Property<Guid>("RegistradoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("registrado_por");
+
+                    b.HasKey("Id")
+                        .HasName("pk_hospitalizacion");
+
+                    b.HasIndex("CamaId")
+                        .HasDatabaseName("ix_hospitalizacion_cama_id");
+
+                    b.HasIndex("EgresoRegistradoPor")
+                        .HasDatabaseName("ix_hospitalizacion_egreso_registrado_por");
+
+                    b.HasIndex("Estado")
+                        .HasDatabaseName("ix_hospitalizacion_estado");
+
+                    b.HasIndex("PacienteId")
+                        .HasDatabaseName("ix_hospitalizacion_paciente_id");
+
+                    b.HasIndex("RegistradoPor")
+                        .HasDatabaseName("ix_hospitalizacion_registrado_por");
+
+                    b.HasIndex(new[] { "CamaId" }, "ux_hospitalizacion_cama_activa")
+                        .IsUnique()
+                        .HasDatabaseName("ux_hospitalizacion_cama_activa")
+                        .HasFilter("estado = 'Activa'");
+
+                    b.HasIndex(new[] { "PacienteId" }, "ux_hospitalizacion_paciente_activa")
+                        .IsUnique()
+                        .HasDatabaseName("ux_hospitalizacion_paciente_activa")
+                        .HasFilter("estado = 'Activa'");
+
+                    b.ToTable("hospitalizacion", "vitalify");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Pacientes.Paciente", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<DateTime>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<DateOnly>("FechaNacimiento")
+                        .HasColumnType("date")
+                        .HasColumnName("fecha_nacimiento");
+
+                    b.Property<bool>("FechaNacimientoEstimada")
+                        .HasColumnType("boolean")
+                        .HasColumnName("fecha_nacimiento_estimada");
+
+                    b.Property<string>("NombreCompleto")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("nombre_completo");
+
+                    b.Property<string>("NumeroDocumento")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("numero_documento");
+
+                    b.Property<string>("TipoDocumento")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("tipo_documento");
+
+                    b.HasKey("Id")
+                        .HasName("pk_paciente");
+
+                    b.HasIndex("TipoDocumento", "NumeroDocumento")
+                        .IsUnique()
+                        .HasDatabaseName("ux_paciente_documento");
+
+                    b.ToTable("paciente", "vitalify");
+                });
+
             modelBuilder.Entity("Vitalify.Domain.Sesiones.SesionRefresco", b =>
                 {
                     b.Property<Guid>("Id")
@@ -204,6 +474,66 @@ namespace Vitalify.Infrastructure.Persistence.Transaccional.Migrations
                         .HasForeignKey("UsuarioId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_auditoria_usuario_usuario_id");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Hospitalizaciones.AsignacionDispositivo", b =>
+                {
+                    b.HasOne("Vitalify.Domain.Usuarios.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("AsignadoPor")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_asignacion_dispositivo_usuario_asignado_por");
+
+                    b.HasOne("Vitalify.Domain.Dispositivos.Dispositivo", null)
+                        .WithMany()
+                        .HasForeignKey("DispositivoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_asignacion_dispositivo_dispositivo_dispositivo_id");
+
+                    b.HasOne("Vitalify.Domain.Hospitalizaciones.Hospitalizacion", null)
+                        .WithMany()
+                        .HasForeignKey("HospitalizacionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_asignacion_dispositivo_hospitalizacion_hospitalizacion_id");
+
+                    b.HasOne("Vitalify.Domain.Usuarios.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("LiberadoPor")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_asignacion_dispositivo_usuario_liberado_por");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Hospitalizaciones.Hospitalizacion", b =>
+                {
+                    b.HasOne("Vitalify.Domain.Camas.Cama", null)
+                        .WithMany()
+                        .HasForeignKey("CamaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_hospitalizacion_cama_cama_id");
+
+                    b.HasOne("Vitalify.Domain.Usuarios.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("EgresoRegistradoPor")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_hospitalizacion_usuario_egreso_registrado_por");
+
+                    b.HasOne("Vitalify.Domain.Pacientes.Paciente", null)
+                        .WithMany()
+                        .HasForeignKey("PacienteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_hospitalizacion_paciente_paciente_id");
+
+                    b.HasOne("Vitalify.Domain.Usuarios.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("RegistradoPor")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_hospitalizacion_usuario_registrado_por");
                 });
 
             modelBuilder.Entity("Vitalify.Domain.Sesiones.SesionRefresco", b =>

@@ -1,4 +1,6 @@
+using System.Text.Json.Serialization;
 using Vitalify.Application.Comun;
+using Vitalify.Application.Pacientes;
 
 namespace Vitalify.Api.Contratos;
 
@@ -9,5 +11,10 @@ public sealed record PaginaRespuesta<T>(IReadOnlyList<T> Elementos, int Pagina, 
         new(pagina.Elementos, pagina.NumeroPagina, pagina.Tamano, pagina.Total, pagina.TotalPaginas);
 }
 
-/// <summary>Respuesta temporal de <c>GET /monitoreo/resumen</c>.</summary>
-public sealed record ResumenMonitoreoRespuesta(string Mensaje, string? Rol);
+/// <summary>Pacientes en monitoreo continuo (HU07). <c>mensaje</c> solo aparece si la lista está vacía.</summary>
+public sealed record PacientesMonitoreadosRespuesta(
+    IReadOnlyList<PacienteMonitoreadoDto> Items,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Mensaje)
+{
+    public static PacientesMonitoreadosRespuesta Desde(PacientesMonitoreadosDto dto) => new(dto.Items, dto.Mensaje);
+}
