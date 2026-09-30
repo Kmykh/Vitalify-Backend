@@ -21,6 +21,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Vitalify.Architecture.Tests
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Vitalify.Domain.Tests", "tests\Vitalify.Domain.Tests\Vitalify.Domain.Tests.csproj", "{10D53161-E211-403A-9DD6-10C4C4E79B6F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Vitalify.Api.IntegrationTests", "tests\Vitalify.Api.IntegrationTests\Vitalify.Api.IntegrationTests.csproj", "{664172CE-EEF7-47DF-A015-9A062A5CC81B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -58,6 +60,10 @@ Global
 		{10D53161-E211-403A-9DD6-10C4C4E79B6F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{10D53161-E211-403A-9DD6-10C4C4E79B6F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{10D53161-E211-403A-9DD6-10C4C4E79B6F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{664172CE-EEF7-47DF-A015-9A062A5CC81B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{664172CE-EEF7-47DF-A015-9A062A5CC81B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{664172CE-EEF7-47DF-A015-9A062A5CC81B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{664172CE-EEF7-47DF-A015-9A062A5CC81B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{43A95D35-4476-4C2E-803E-F50FD65C0EB5} = {39207300-81AA-43BA-B668-F616CF54A8EC}
@@ -67,5 +73,6 @@ Global
 		{10DA1A08-E145-4444-93F6-89FDD37ADA97} = {317C60DD-223F-4FDF-8E6B-0FF115E35B6F}
 		{37E9F973-547B-4D54-B93D-E4EDC35A866E} = {317C60DD-223F-4FDF-8E6B-0FF115E35B6F}
 		{10D53161-E211-403A-9DD6-10C4C4E79B6F} = {317C60DD-223F-4FDF-8E6B-0FF115E35B6F}
+		{664172CE-EEF7-47DF-A015-9A062A5CC81B} = {317C60DD-223F-4FDF-8E6B-0FF115E35B6F}
 	EndGlobalSection
 EndGlobal

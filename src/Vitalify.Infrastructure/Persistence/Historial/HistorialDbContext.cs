@@ -17,5 +17,6 @@ public class HistorialDbContext(DbContextOptions<HistorialDbContext> options) : 
         modelBuilder.ApplyConfigurationsFromAssembly(
             typeof(HistorialDbContext).Assembly,
             t => t.Namespace?.StartsWith(typeof(HistorialDbContext).Namespace!, StringComparison.Ordinal) == true);
+        ConvencionSnakeCase.Aplicar(modelBuilder);
     }
 }

@@ -99,6 +99,18 @@ public class ReglasDeDependenciaTests
         Assert.DoesNotContain(Infrastructure.GetReferencedAssemblies(), a => a.Name == ApiNs);
     }
 
+    [Fact]
+    public void Los_controladores_solo_usan_casos_de_uso_y_no_la_infraestructura()
+    {
+        var resultado = Types.InAssembly(typeof(Api.AssemblyReference).Assembly)
+            .That().ResideInNamespace("Vitalify.Api.Controllers")
+            .ShouldNot()
+            .HaveDependencyOnAny([InfrastructureNs, "Microsoft.EntityFrameworkCore", "Npgsql"])
+            .GetResult();
+
+        Assert.True(resultado.IsSuccessful, Describir(resultado));
+    }
+
     private static string Describir(TestResult resultado) =>
         resultado.IsSuccessful
             ? string.Empty

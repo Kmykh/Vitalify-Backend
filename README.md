@@ -13,15 +13,18 @@ src/
   Vitalify.Infrastructure/  Adaptadores de salida: EF Core, repositorios
   Vitalify.Api/             Adaptadores de entrada: REST, Swagger; raíz de composición
 tests/
-  Vitalify.Domain.Tests/
-  Vitalify.Application.Tests/
-  Vitalify.Architecture.Tests/   Verifican las reglas de dependencia entre capas
+  Vitalify.Domain.Tests/            Pruebas unitarias del dominio
+  Vitalify.Application.Tests/       Casos de uso con fakes en memoria
+  Vitalify.Architecture.Tests/      Verifican las reglas de dependencia entre capas
+  Vitalify.Api.IntegrationTests/    API completa contra PostgreSQL en contenedor (Testcontainers)
+docs/
+  matriz-permisos.md                Roles contra módulos (HU03)
 ```
 
 ## Requisitos
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (solo para correr la API en un contenedor)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/), para las pruebas de integración y para correr la API en un contenedor
 - `dotnet-ef` 8: viene como herramienta local del repositorio. Instálala con:
   ```bash
   dotnet tool restore
@@ -30,7 +33,7 @@ tests/
 
 ## Configuración: archivo `.env`
 
-Las cadenas de conexión se leen **solo** del archivo `.env` en la raíz del repositorio. Ese archivo está en `.gitignore` y nunca se sube.
+Las cadenas de conexión, la clave JWT y los datos del primer administrador se leen **solo** del archivo `.env` en la raíz del repositorio. Ese archivo está en `.gitignore` y nunca se sube. Si una variable también está definida en el entorno (Docker, CI), gana la del entorno.
 
 1. Copia la plantilla:
    ```bash
@@ -46,6 +49,16 @@ Las cadenas de conexión se leen **solo** del archivo `.env` en la raíz del rep
    - También puedes pegar la cadena en formato URI tal como la muestra Supabase (`postgresql://postgres.<ref>:<contraseña>@<host>:5432/postgres`). La API la convierte sola y le agrega `SSL Mode=Require` y `Maximum Pool Size=5`. Si la contraseña tiene caracteres especiales dentro de la URI, deben ir codificados (`@` → `%40`, `:` → `%3A`, etc.).
    - Si el valor contiene `#` o espacios, ponlo entre comillas dobles.
    - El pool es pequeño (5) porque el pooler gratuito de Supabase admite pocas conexiones y hay dos contextos. Si la cadena no incluye `Maximum Pool Size`, la API usa 5 igualmente.
+4. Genera la clave para firmar los JWT y pégala en `Jwt__Clave`:
+   ```bash
+   openssl rand -base64 48
+   ```
+   Debe tener al menos 32 caracteres; si falta o es más corta, la API no arranca y lo indica. Cambiarla invalida todos los tokens emitidos. Las demás variables `Jwt__*` ya traen sus valores en la plantilla (access token de 15 min, 30 min de inactividad y sesión máxima de 12 h).
+5. Configura el **primer administrador** con `Seed__AdminCorreo`, `Seed__AdminNombre` y `Seed__AdminContrasena` (al menos 8 caracteres, con una letra y un número).
+   - Al arrancar, si no existe ningún usuario con rol `Administrador`, la API lo crea con esos datos. Si ya existe uno, no hace nada.
+   - Si faltan las variables, no crea nada y escribe una advertencia en el log. No hay valores por defecto.
+   - Una vez creado, puedes borrar `Seed__AdminContrasena` del `.env`.
+   - Los administradores no se crean por la API: el administrador registra médicos y enfermeras con `POST /api/v1/usuarios`.
 
 ## Aplicar las migraciones
 
@@ -56,7 +69,7 @@ dotnet ef database update --context TransaccionalDbContext --project src/Vitalif
 dotnet ef database update --context HistorialDbContext     --project src/Vitalify.Infrastructure --startup-project src/Vitalify.Infrastructure
 ```
 
-Después, en el **Table Editor** de Supabase aparecen los esquemas `vitalify` y `vitalify_historial`, cada uno con su tabla `__EFMigrationsHistory`.
+Después, en el **Table Editor** de Supabase aparecen los esquemas `vitalify` y `vitalify_historial`, cada uno con su tabla `__EFMigrationsHistory`. Desde la fase 1, `vitalify` tiene además `usuario`, `sesion_refresco`, `token_revocado` y `auditoria`.
 
 ## Levantar el proyecto
 
@@ -78,13 +91,31 @@ docker compose up --build
 
 Usa el mismo `.env` (con `env_file`). La API queda en <http://localhost:8080> (`/swagger`, `/api/v1/ping`, `/health`).
 
-## Endpoints de la fase 0
+## Endpoints
 
-| Método | Ruta           | Descripción                                                                 |
-|--------|----------------|-----------------------------------------------------------------------------|
-| GET    | `/api/v1/ping` | `{ "servicio": "vitalify-api", "version": "0.1.0", "hora": <UTC> }`         |
-| GET    | `/health`      | Estado de las conexiones `transaccional` e `historial` (200 o 503)          |
-| GET    | `/swagger`     | Documentación OpenAPI (solo en Development)                                 |
+| Método | Ruta | Quién | Descripción |
+|---|---|---|---|
+| POST | `/api/v1/auth/login` | anónimo | Devuelve `accessToken`, `expiraEn`, `refreshToken` y `usuario` (con su `rol`). Máximo 5 intentos por minuto por IP |
+| POST | `/api/v1/auth/refresh` | anónimo | Entrega un nuevo par de tokens y rota el refresh token |
+| POST | `/api/v1/auth/logout` | autenticado | Invalida el access token actual y el refresh token enviado |
+| GET | `/api/v1/auth/yo` | autenticado | Datos del usuario actual |
+| POST | `/api/v1/usuarios` | Administrador | Registra un médico o una enfermera |
+| GET | `/api/v1/usuarios?pagina=1&tamano=20` | Administrador | Lista paginada |
+| GET | `/api/v1/usuarios/{id}` | Administrador | Detalle de un usuario |
+| GET | `/api/v1/monitoreo/resumen` | Médico o Enfermera | Endpoint temporal para probar el RBAC |
+| GET | `/api/v1/ping` | anónimo | `{ "servicio": "vitalify-api", "version": "0.1.0", "hora": <UTC> }` |
+| GET | `/health` | anónimo | Estado de las conexiones `transaccional` e `historial` (200 o 503) |
+| GET | `/swagger` | anónimo | Documentación OpenAPI (solo en Development). Botón **Authorize**: pega el `accessToken` |
+
+Los errores salen como ProblemDetails en español. Su `type` identifica el caso: `credenciales-invalidas`, `sesion-expirada`, `correo-en-uso`, `acceso-denegado`, etc. Los permisos de cada rol están en [`docs/matriz-permisos.md`](docs/matriz-permisos.md).
+
+### Sesión
+
+- El **access token** (JWT) dura 15 minutos. Cuando vence, el cliente llama a `/auth/refresh` con su refresh token y recibe un par nuevo. El refresh token anterior deja de servir.
+- La sesión **expira** si el refresh token no se usa en 30 minutos (inactividad) o cuando pasan 12 horas desde el login (un turno). En ambos casos `/auth/refresh` responde 401 con `type` `sesion-expirada`, y el cliente debe volver al login.
+  - El cliente debe renovar el token solo cuando el usuario interactúa. Si lo renueva con un temporizador, la inactividad nunca se cumple.
+- Si se presenta un refresh token que ya se rotó, se entiende como un posible robo y se revocan **todas** las sesiones del usuario. Por eso el cliente no debe hacer dos refresh en paralelo con el mismo token.
+- En la base, el refresh token se guarda solo como hash SHA-256 y las contraseñas con PBKDF2.
 
 ## Pruebas
 
@@ -92,14 +123,22 @@ Usa el mismo `.env` (con `env_file`). La API queda en <http://localhost:8080> (`
 dotnet test
 ```
 
-No necesitan base de datos. El CI (`.github/workflows/ci.yml`) ejecuta restore, build y test en cada push y pull request.
+- Las pruebas unitarias y de arquitectura no necesitan nada más.
+- Las de integración (`Vitalify.Api.IntegrationTests`) levantan un PostgreSQL 17 en Docker con Testcontainers, así que Docker Desktop debe estar encendido. **Nunca tocan Supabase.**
+- Hay una prueba por cada escenario de las historias. Por ejemplo, para correr solo los de la HU04:
+
+```bash
+dotnet test --filter "FullyQualifiedName~HU04"
+```
+
+El CI (`.github/workflows/ci.yml`) ejecuta restore, build y todas las pruebas, incluidas las de integración, en cada push y pull request.
 
 ## Fases del backend
 
 | Fase | Contenido                                     |
 |------|-----------------------------------------------|
-| 0    | Base del proyecto (este estado)               |
-| 1    | Usuarios, JWT y RBAC                          |
+| 0    | Base del proyecto                             |
+| 1    | Usuarios, JWT y RBAC (este estado)            |
 | 2    | Pacientes y sensores                          |
 | 3    | Ingesta simulada de signos vitales            |
 | 4    | Cálculo de NEWS2 y MEWS                       |
