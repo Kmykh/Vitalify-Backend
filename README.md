@@ -59,6 +59,7 @@ Las cadenas de conexión, la clave JWT y los datos del primer administrador se l
    - Si faltan las variables, no crea nada y escribe una advertencia en el log. No hay valores por defecto.
    - Una vez creado, puedes borrar `Seed__AdminContrasena` del `.env`.
    - Los administradores no se crean por la API: el administrador registra médicos y enfermeras con `POST /api/v1/usuarios`.
+6. Opcional, solo en Development: `Seed__DatosDemo=true` crea al arrancar las camas `MED-B-01` a `MED-B-06` (servicio "Medicina B") y los sensores `ESP32-001` a `ESP32-004` que falten. No crea pacientes.
 
 ## Aplicar las migraciones
 
@@ -69,7 +70,7 @@ dotnet ef database update --context TransaccionalDbContext --project src/Vitalif
 dotnet ef database update --context HistorialDbContext     --project src/Vitalify.Infrastructure --startup-project src/Vitalify.Infrastructure
 ```
 
-Después, en el **Table Editor** de Supabase aparecen los esquemas `vitalify` y `vitalify_historial`, cada uno con su tabla `__EFMigrationsHistory`. Desde la fase 1, `vitalify` tiene además `usuario`, `sesion_refresco`, `token_revocado` y `auditoria`.
+Después, en el **Table Editor** de Supabase aparecen los esquemas `vitalify` y `vitalify_historial`, cada uno con su tabla `__EFMigrationsHistory`. El esquema `vitalify` tiene además `usuario`, `sesion_refresco`, `token_revocado` y `auditoria` (fase 1) y `cama`, `dispositivo`, `paciente`, `hospitalizacion` y `asignacion_dispositivo` (fase 2).
 
 ## Levantar el proyecto
 
@@ -102,7 +103,19 @@ Usa el mismo `.env` (con `env_file`). La API queda en <http://localhost:8080> (`
 | POST | `/api/v1/usuarios` | Administrador | Registra un médico o una enfermera |
 | GET | `/api/v1/usuarios?pagina=1&tamano=20` | Administrador | Lista paginada |
 | GET | `/api/v1/usuarios/{id}` | Administrador | Detalle de un usuario |
-| GET | `/api/v1/monitoreo/resumen` | Médico o Enfermera | Endpoint temporal para probar el RBAC |
+| POST | `/api/v1/camas` | Administrador | Registra una cama (código único, por ejemplo `MED-B-05`) |
+| GET | `/api/v1/camas?soloDisponibles=true` | todos | Camas con su ocupación, sin datos del paciente |
+| POST | `/api/v1/dispositivos` | Administrador | Registra un wearable (código `^[A-Z0-9-]{3,32}$`, por ejemplo `ESP32-001`) |
+| PATCH | `/api/v1/dispositivos/{id}/estado` | Administrador | `Mantenimiento`, `DadoDeBaja` o `Disponible` (reactivar) |
+| GET | `/api/v1/dispositivos?estado=Disponible` | todos | Dispositivos; si están asignados, la cama |
+| POST | `/api/v1/pacientes` | Enfermera | Ingreso: datos básicos (`fechaNacimiento` o `edad`), cama y diagnóstico (HU05) |
+| PUT | `/api/v1/pacientes/{id}` | Enfermera | Corrige los datos básicos y el diagnóstico |
+| GET | `/api/v1/pacientes?pagina=&tamano=&buscar=` | Médico o Enfermera | Pacientes hospitalizados |
+| GET | `/api/v1/pacientes/{id}` | Médico o Enfermera | Ficha con la hospitalización, la cama y el sensor (auditada) |
+| POST | `/api/v1/pacientes/{id}/dispositivo` | Enfermera | Vincula un sensor disponible (HU06) |
+| DELETE | `/api/v1/pacientes/{id}/dispositivo` | Enfermera | Libera el sensor |
+| POST | `/api/v1/pacientes/{id}/egreso` | Enfermera | Egreso con motivo; libera el sensor en la misma transacción (HU08) |
+| GET | `/api/v1/pacientes/monitoreados` | Médico o Enfermera | Pacientes con sensor (HU07). Puntajes NEWS2/MEWS en la fase 4 |
 | GET | `/api/v1/ping` | anónimo | `{ "servicio": "vitalify-api", "version": "0.1.0", "hora": <UTC> }` |
 | GET | `/health` | anónimo | Estado de las conexiones `transaccional` e `historial` (200 o 503) |
 | GET | `/swagger` | anónimo | Documentación OpenAPI (solo en Development). Botón **Authorize**: pega el `accessToken` |
@@ -138,8 +151,8 @@ El CI (`.github/workflows/ci.yml`) ejecuta restore, build y todas las pruebas, i
 | Fase | Contenido                                     |
 |------|-----------------------------------------------|
 | 0    | Base del proyecto                             |
-| 1    | Usuarios, JWT y RBAC (este estado)            |
-| 2    | Pacientes y sensores                          |
+| 1    | Usuarios, JWT y RBAC                          |
+| 2    | Pacientes, camas y sensores (este estado)     |
 | 3    | Ingesta simulada de signos vitales            |
 | 4    | Cálculo de NEWS2 y MEWS                       |
 | 5    | Alertas                                       |
