@@ -83,15 +83,4 @@ public class HU08EgresoTests(FabricaVitalify fabrica) : PruebaApi(fabrica)
         Assert.Equal(HttpStatusCode.Conflict, respuesta.StatusCode);
         Assert.Equal("sin-hospitalizacion-activa", (await respuesta.LeerProblemaAsync()).Type);
     }
-
-    private async Task<(HttpClient Enfermera, FichaPacienteDto Ficha, DispositivoDto Sensor, CamaDto Cama)> PacienteConSensorAsync()
-    {
-        var administrador = await ClienteAdministradorAsync();
-        var cama = await administrador.CrearCamaAsync();
-        var sensor = await administrador.CrearDispositivoAsync();
-        var enfermera = await ClienteEnfermeraAsync();
-        var ficha = await enfermera.IngresarPacienteAsync(cama.Id);
-        Assert.Equal(HttpStatusCode.OK, (await enfermera.VincularAsync(ficha.Id, sensor.Id)).StatusCode);
-        return (enfermera, ficha, sensor, cama);
-    }
 }

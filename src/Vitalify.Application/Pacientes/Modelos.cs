@@ -59,9 +59,10 @@ public sealed record PacienteHospitalizadoDto(
 
 /// <summary>Fila de la lista de monitoreo (HU07).</summary>
 /// <param name="NivelRiesgo">Hasta la fase 4 siempre es <c>sin-datos</c>.</param>
+/// <param name="Senal"><c>con-datos</c>, <c>sin-datos</c> (nunca llegó una lectura) o <c>sin-senal</c> (nada en 2 × la vigencia).</param>
 public sealed record PacienteMonitoreadoDto(
     Guid PacienteId, string NombreCompleto, int Edad, string Cama, string Servicio, string CodigoDispositivo,
-    DateTime IngresoEn, int? UltimoNews2, int? UltimoMews, string NivelRiesgo);
+    DateTime IngresoEn, int? UltimoNews2, int? UltimoMews, string NivelRiesgo, DateTime? UltimaLecturaEn, string Senal);
 
 public sealed record PacientesMonitoreadosDto(IReadOnlyList<PacienteMonitoreadoDto> Items, string? Mensaje);
 

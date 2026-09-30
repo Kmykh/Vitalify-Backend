@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Vitalify.Api.Configuracion;
+using Vitalify.Api.Entrada.Desarrollo;
+using Vitalify.Api.Entrada.Simulador;
 using Vitalify.Api.Seguridad;
 using Vitalify.Application;
 using Vitalify.Infrastructure;
@@ -40,6 +42,7 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddAutenticacionVitalify();
 builder.Services.AddAutorizacionVitalify();
 builder.Services.AddLimiteDeLogin(builder.Configuration);
+builder.Services.AddSimuladorTelemetria(builder.Configuration);
 
 var app = builder.Build();
 
@@ -62,6 +65,12 @@ app.UseAuthorization();
 app.UseRateLimiter();
 
 app.MapControllers();
+
+// Adaptador de entrada temporal de la telemetría: la ruta no existe fuera de Development.
+if (app.Environment.IsDevelopment())
+{
+    app.MapTelemetriaDesarrollo();
+}
 app.MapHealthChecks("/health", RespuestaHealth.Opciones).AllowAnonymous();
 
 app.Run();

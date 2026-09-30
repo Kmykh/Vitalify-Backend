@@ -66,6 +66,15 @@ internal sealed class RepositorioHospitalizaciones(TransaccionalDbContext db) : 
         .AsNoTracking()
         .SingleOrDefaultAsync(ct);
 
+    public async Task<IReadOnlyList<string>> ListarCodigosDispositivosVinculadosAsync(CancellationToken ct = default) =>
+        await (from a in db.AsignacionesDispositivo
+               where a.LiberadoEn == null
+               join h in db.Hospitalizaciones on a.HospitalizacionId equals h.Id
+               where h.Estado == EstadoHospitalizacion.Activa
+               join d in db.Dispositivos on a.DispositivoId equals d.Id
+               orderby d.Codigo
+               select d.Codigo).ToListAsync(ct);
+
     public void Agregar(Hospitalizacion hospitalizacion) => db.Hospitalizaciones.Add(hospitalizacion);
 
     public void AgregarAsignacion(AsignacionDispositivo asignacion) => db.AsignacionesDispositivo.Add(asignacion);
