@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Vitalify.Infrastructure.Persistence.Historial;
@@ -11,9 +12,11 @@ using Vitalify.Infrastructure.Persistence.Historial;
 namespace Vitalify.Infrastructure.Persistence.Historial.Migrations
 {
     [DbContext(typeof(HistorialDbContext))]
-    partial class HistorialDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261002010922_Fase4_MotorClinico")]
+    partial class Fase4_MotorClinico
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
