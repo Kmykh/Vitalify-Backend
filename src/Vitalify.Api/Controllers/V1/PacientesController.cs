@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Vitalify.Api.Contratos;
 using Vitalify.Api.Seguridad;
+using Vitalify.Application.Clinica;
 using Vitalify.Application.Pacientes;
 using Vitalify.Application.Telemetria;
 
@@ -84,9 +85,11 @@ public class PacientesController : ControllerBase
 
     /// <summary>Pacientes activos en monitoreo continuo, es decir, con un sensor vinculado (HU07).</summary>
     /// <remarks>
-    /// <c>ultimoNews2</c>, <c>ultimoMews</c> y <c>nivelRiesgo</c> se completan en la fase 4; por ahora son
-    /// <c>null</c> y <c>sin-datos</c>. <c>senal</c> es <c>con-datos</c>, <c>sin-datos</c> o <c>sin-senal</c> (no llega nada
-    /// en el doble de la vigencia). Si no hay pacientes, <c>items</c> está vacío y <c>mensaje</c> lo indica.
+    /// <c>ultimoNews2</c>, <c>ultimoMews</c> y <c>nivelRiesgo</c> (<c>bajo</c>, <c>bajo-medio</c>, <c>medio</c>, <c>alto</c> o
+    /// <c>sin-datos</c>) vienen de la última evaluación; <c>evaluacionCompleta</c> es false si el puntaje es parcial.
+    /// <c>senal</c> es <c>con-datos</c>, <c>sin-datos</c> o <c>sin-senal</c> (no llega nada en el doble de la vigencia) y
+    /// <c>conexionSensor</c>, <c>en-linea</c>, <c>fuera-de-linea</c> o <c>desconocida</c> (tópico MQTT de estado). Si no hay
+    /// pacientes, <c>items</c> está vacío y <c>mensaje</c> lo indica.
     /// </remarks>
     /// <response code="200">Lista de monitoreo (posiblemente vacía).</response>
     [HttpGet("monitoreados")]
@@ -123,6 +126,49 @@ public class PacientesController : ControllerBase
     {
         var resultado = await obtener.EjecutarAsync(id, ct);
         return resultado.EsExito ? Ok(resultado.Valor) : this.Problema(resultado.Error);
+    }
+
+    /// <summary>Última evaluación de riesgo NEWS2 y MEWS del paciente, con el desglose por parámetro.</summary>
+    /// <remarks>
+    /// Se recalcula con cada lectura del wearable y con cada observación. El wearable mide FC, SpO2 y temperatura: sin
+    /// observaciones de FR, presión, conciencia y oxígeno, el puntaje es <b>parcial</b> (<c>completo: false</c>) y
+    /// <c>faltantes</c> dice qué falta. <c>ultimaEvaluacion</c> es null si aún no hay ninguna.
+    /// </remarks>
+    /// <response code="200">Riesgo actual.</response>
+    /// <response code="404">El paciente no existe o no tiene una hospitalización activa.</response>
+    [HttpGet("{id:guid}/riesgo")]
+    [Authorize(Policy = Politicas.PersonalClinico)]
+    [ProducesResponseType<RiesgoPacienteDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<RiesgoPacienteDto>> Riesgo(Guid id, [FromServices] ObtenerRiesgoPaciente obtener, CancellationToken ct)
+    {
+        var resultado = await obtener.EjecutarAsync(id, ct);
+        return resultado.EsExito ? Ok(resultado.Valor) : this.Problema(resultado.Error);
+    }
+
+    /// <summary>Registra signos que el wearable no mide y recalcula el riesgo.</summary>
+    /// <remarks>
+    /// FR, presión (pas y pad juntas), nivel de conciencia ACVPU, oxígeno suplementario y temperatura de termómetro
+    /// clínico. Cada valor cuenta para NEWS2/MEWS durante 4 h; gana el valor más reciente entre la observación y el sensor.
+    /// </remarks>
+    /// <response code="201">Observación registrada, con la nueva evaluación de riesgo.</response>
+    /// <response code="400">Sin valores, valores imposibles, presión incompleta o fecha fuera de rango.</response>
+    /// <response code="404">El paciente no existe o no tiene una hospitalización activa.</response>
+    [HttpPost("{id:guid}/observaciones")]
+    [Authorize(Policy = Politicas.PersonalClinico)]
+    [ProducesResponseType<ObservacionRegistradaDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ObservacionRegistradaDto>> RegistrarObservacion(
+        Guid id, RegistrarObservacionSolicitud solicitud, [FromServices] RegistrarObservacion registrar, CancellationToken ct)
+    {
+        var resultado = await registrar.EjecutarAsync(new RegistrarObservacionComando(
+            id, solicitud.Fr, solicitud.Pas, solicitud.Pad, solicitud.Temperatura, solicitud.Conciencia, solicitud.OxigenoSuplementario,
+            solicitud.ObservadaEn, User.IdUsuario() ?? Guid.Empty, HttpContext.Ip()), ct);
+
+        return resultado.EsExito
+            ? CreatedAtAction(nameof(Riesgo), new { id }, resultado.Valor)
+            : this.Problema(resultado.Error);
     }
 
     /// <summary>Vincula un sensor disponible a la cama del paciente (HU06).</summary>

@@ -49,6 +49,17 @@ public sealed record ActualizarPacienteSolicitud(string NombreCompleto, string? 
 /// <param name="DispositivoId">Sensor disponible (ver <c>GET /dispositivos?estado=Disponible</c>).</param>
 public sealed record VincularDispositivoSolicitud(Guid? DispositivoId);
 
+/// <summary>Lo que el wearable no mide (o una temperatura de termómetro clínico). Al menos un valor.</summary>
+/// <param name="Fr">Frecuencia respiratoria (rpm).</param>
+/// <param name="Pas">Presión sistólica (mmHg); va con <c>pad</c>.</param>
+/// <param name="Pad">Presión diastólica (mmHg); va con <c>pas</c>.</param>
+/// <param name="Temperatura">°C, de un termómetro clínico.</param>
+/// <param name="Conciencia"><c>Alerta</c>, <c>ConfusionNueva</c>, <c>RespondeVoz</c>, <c>RespondeDolor</c> o <c>NoResponde</c>.</param>
+/// <param name="OxigenoSuplementario">true si recibe oxígeno.</param>
+/// <param name="ObservadaEn">Momento de la medición (UTC); si falta, ahora. Hasta 4 h atrás.</param>
+public sealed record RegistrarObservacionSolicitud(
+    int? Fr, int? Pas, int? Pad, decimal? Temperatura, string? Conciencia, bool? OxigenoSuplementario, DateTime? ObservadaEn);
+
 /// <param name="Motivo"><c>AltaMedica</c>, <c>Traslado</c>, <c>Fallecimiento</c>, <c>Voluntaria</c> u <c>Otro</c>.</param>
 /// <param name="Observacion">Opcional, hasta 500 caracteres.</param>
 public sealed record RegistrarEgresoSolicitud(string Motivo, string? Observacion);
