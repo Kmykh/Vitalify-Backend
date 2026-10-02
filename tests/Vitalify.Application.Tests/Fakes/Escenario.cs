@@ -1,4 +1,5 @@
 using Vitalify.Application.Camas;
+using Vitalify.Application.Clinica;
 using Vitalify.Application.Dispositivos;
 using Vitalify.Application.Pacientes;
 using Vitalify.Application.Sesiones;
@@ -35,6 +36,8 @@ public sealed class Escenario
     public HistorialEnMemoria Historial { get; } = new();
     public SolicitudNuevaLecturaFalsa SolicitudNuevaLectura { get; } = new();
     public ManejadorLecturaRegistradaFalso Manejador { get; } = new();
+    public PresenciaEnMemoria Presencia { get; } = new();
+    public OpcionesClinicas Clinicas { get; set; } = OpcionesClinicas.PorDefecto;
 
     public Escenario()
     {
@@ -88,13 +91,28 @@ public sealed class Escenario
     public RegistrarEgreso RegistrarEgreso() =>
         new(new RegistrarEgresoValidador(), Pacientes, Dispositivos, Hospitalizaciones, Auditoria, UnidadDeTrabajo, Resolutor, Reloj);
 
-    public ListarPacientesMonitoreados ListarPacientesMonitoreados() => new(Hospitalizaciones, Historial, OpcionesTelemetria.PorDefecto, Reloj);
+    public ListarPacientesMonitoreados ListarPacientesMonitoreados() =>
+        new(Hospitalizaciones, Historial, Historial, Presencia, OpcionesTelemetria.PorDefecto, Reloj);
 
+    /// <summary>Con el motor clínico enganchado, como en la API.</summary>
     public RegistrarLectura RegistrarLectura() =>
-        new(Resolutor, Historial, Historial, Historial, Historial, SolicitudNuevaLectura, [Manejador],
+        new(Resolutor, Historial, Historial, Historial, Historial, SolicitudNuevaLectura,
+            [Manejador, new EvaluarRiesgoAlRegistrarLectura(Evaluador(), Historial, Historial)],
             Domain.Telemetria.RangosFisiologicos.PorDefecto, OpcionesTelemetria.PorDefecto, Reloj);
 
-    public ObtenerSignosActuales ObtenerSignosActuales() => new(Pacientes, Hospitalizaciones, Historial, OpcionesTelemetria.PorDefecto, Reloj);
+    public ObtenerSignosActuales ObtenerSignosActuales() =>
+        new(Pacientes, Hospitalizaciones, Historial, Presencia, OpcionesTelemetria.PorDefecto, Reloj);
+
+    public EvaluadorRiesgo Evaluador() => new(Historial, Historial, Historial, OpcionesTelemetria.PorDefecto, Clinicas, Reloj);
+
+    public RegistrarObservacion RegistrarObservacion() =>
+        new(new RegistrarObservacionValidador(Domain.Telemetria.RangosFisiologicos.PorDefecto, Clinicas, Reloj),
+            Pacientes, Hospitalizaciones, Historial, Evaluador(), Historial, Auditoria, UnidadDeTrabajo,
+            Domain.Telemetria.RangosFisiologicos.PorDefecto, Reloj);
+
+    public ObtenerRiesgoPaciente ObtenerRiesgoPaciente() => new(Pacientes, Hospitalizaciones, Historial);
+
+    public RegistrarPresenciaDispositivo RegistrarPresencia() => new(Presencia, Reloj);
 
     public ListarIncidencias ListarIncidencias() => new(new ListarIncidenciasValidador(), Historial);
 

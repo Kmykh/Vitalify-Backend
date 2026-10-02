@@ -1,6 +1,7 @@
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Vitalify.Application.Camas;
+using Vitalify.Application.Clinica;
 using Vitalify.Application.Dispositivos;
 using Vitalify.Application.Pacientes;
 using Vitalify.Application.Sesiones;
@@ -59,6 +60,14 @@ public static class DependencyInjection
         services.AddScoped<IListarDispositivosVinculados, ListarDispositivosVinculados>();
         services.AddScoped<ObtenerSignosActuales>();
         services.AddScoped<ListarIncidencias>();
+
+        // Motor clínico (fase 4): se engancha a la ingesta como manejador de LecturaRegistrada.
+        services.AddSingleton<IValidator<RegistrarObservacionComando>, RegistrarObservacionValidador>();
+        services.AddScoped<EvaluadorRiesgo>();
+        services.AddScoped<IManejadorLecturaRegistrada, EvaluarRiesgoAlRegistrarLectura>();
+        services.AddScoped<RegistrarObservacion>();
+        services.AddScoped<ObtenerRiesgoPaciente>();
+        services.AddSingleton<RegistrarPresenciaDispositivo>();
 
         return services;
     }

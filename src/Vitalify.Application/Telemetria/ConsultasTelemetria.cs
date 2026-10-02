@@ -1,4 +1,5 @@
 using FluentValidation;
+using Vitalify.Application.Clinica;
 using Vitalify.Application.Comun;
 using Vitalify.Application.Pacientes;
 using Vitalify.Application.Puertos;
@@ -40,7 +41,8 @@ public sealed record SignosActualesDto(
     DateTime? UltimaCaidaEn,
     int? Bateria,
     DateTime? UltimaLecturaEn,
-    string Senal);
+    string Senal,
+    string ConexionSensor);
 
 /// <summary>
 /// HU11: estado actual de los signos del paciente. El estado de cada variable se calcula al leer con
@@ -50,6 +52,7 @@ public sealed class ObtenerSignosActuales(
     IRepositorioPacientes pacientes,
     IRepositorioHospitalizaciones hospitalizaciones,
     IRepositorioEstadoSignos estados,
+    IPresenciaDispositivos presencia,
     OpcionesTelemetria opciones,
     IReloj reloj)
 {
@@ -85,7 +88,8 @@ public sealed class ObtenerSignosActuales(
             e?.UltimaCaidaEn,
             e?.Bateria,
             e?.UltimaLecturaEn,
-            TextosEstado.De(Vigencia.SenalDe(e?.UltimaLecturaEn, ahora, opciones.Vigencia)));
+            TextosEstado.De(Vigencia.SenalDe(e?.UltimaLecturaEn, ahora, opciones.Vigencia)),
+            RegistrarPresenciaDispositivo.Texto(activa.CodigoDispositivo is { } codigo ? presencia.Obtener(codigo) : null));
     }
 }
 
