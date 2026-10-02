@@ -20,8 +20,9 @@ Hechas:
 - Fase 1 (HU01 a HU04): registro, login JWT, RBAC y cierre de sesión.
 - Fase 2 (HU05, HU06, HU08 y la base de la HU07): pacientes, camas y sensores.
 - Fase 3 (HU10, HU11 y HU12): ingesta de signos vitales con datos simulados.
+- Fase 4: motor clínico NEWS2/MEWS, adaptado al hardware real. A pedido del usuario se adelantó de la fase 7 el **receptor MQTT**, para que el backend reciba lo que publica el wearable real (proyecto `../IOT/tesis_V01`, repositorio `Kmykh/IoT-Vitalfy`).
 
-No adelantar trabajo de fases posteriores: NEWS2/MEWS (4), alertas (5); TimescaleDB, MQTT, SignalR y push llegan en la fase 7.
+No adelantar trabajo de fases posteriores: alertas (5), consultas del dashboard (6); TimescaleDB, SignalR, push y despliegue (7). **No usar datos simulados para verificar lo que ya puede verificarse con el wearable real.**
 
 ## Comandos
 
@@ -34,7 +35,8 @@ dotnet test tests/Vitalify.Domain.Tests                                # un proy
 dotnet run --project src/Vitalify.Api        # http://localhost:5080/swagger
 docker compose up --build                    # http://localhost:8080
 
-Simulador__Habilitado=true dotnet run --project src/Vitalify.Api   # telemetría simulada (ver docs/contrato-telemetria.md)
+cd ../IOT/tesis_V01/broker && docker compose up -d                 # broker Mosquitto del IoT (el backend lo lee con Mqtt__*)
+Simulador__Habilitado=true dotnet run --project src/Vitalify.Api   # telemetría simulada, solo en Development y sin hardware
 
 dotnet tool restore              # instala dotnet-ef 8 (herramienta local; la global puede ser otra versión)
 dotnet ef database update --context TransaccionalDbContext --project src/Vitalify.Infrastructure --startup-project src/Vitalify.Infrastructure
@@ -82,7 +84,7 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
 - **`HistorialDbContext` pasará a TimescaleDB en la fase 7.** Solo cambiará su cadena de conexión y se agregará una migración. Por eso no debe usar nada propio de Supabase y los casos de uso deben acceder al historial por sus propios puertos (`IRepositorioLecturas`, `IRepositorioEstadoSignos`, `IRepositorioIncidencias`, `IUnidadDeTrabajoHistorial`).
   - No hay claves foráneas entre esquemas: el historial guarda `hospitalizacion_id`, `paciente_id` y `codigo_dispositivo` como valores.
   - `lectura_signos` tiene la clave `(codigo_dispositivo, medido_en)`, que incluye la columna de tiempo, como exige una hypertable.
-  - Migraciones de `HistorialDbContext`: `Inicial` y `Fase3_Telemetria`.
+  - Migraciones de `HistorialDbContext`: `Inicial`, `Fase3_Telemetria` y `Fase4_MotorClinico` (`observacion_enfermeria` y `evaluacion_riesgo`).
 - `CadenaDeConexion.Obtener` lee la cadena y acepta tanto el formato clave=valor de Npgsql como una URI `postgresql://`, que convierte agregando `SSL Mode=Require`. En ambos formatos usa `Maximum Pool Size=5` si la cadena no lo fija. El pool es pequeño porque el pooler gratuito de Supabase admite pocas conexiones.
 - `FabricasDeDiseno.cs` tiene los `IDesignTimeDbContextFactory` que usa `dotnet ef`. Cargan el `.env` igual que la API.
 - `IUnidadDeTrabajo.GuardarCambiosAsync` traduce cada índice único a su `Conflicto` (tabla `ConflictosPorIndice` en `UnidadDeTrabajo`):
@@ -160,13 +162,37 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
   - Simulador: `Simulador__Habilitado` (**false** por defecto), `Simulador__IntervaloSegundos` (10, mínimo 5 por el límite de 500 MB de Supabase), `Simulador__Semilla`, `Simulador__MinutosDeterioro`, `Simulador__LecturasEntreCaidas` y `Simulador__Escenarios__{codigo}` (`Estable`, `Deterioro`, `Caida` o `SensorDefectuoso`).
 - **Datos personales:** el historial y las incidencias nunca guardan el nombre ni el documento del paciente. Las incidencias son del administrador y los signos, del personal clínico.
 
+## IoT y motor clínico (fase 4)
+
+- **Hardware real** (README del IoT):
+  - ESP32-S3 con MAX30102 (FC y SpO2), AD8232 (ECG; la FC sale del ECG si es confiable), DS18B20 (temperatura de piel) y ADXL345 (caídas).
+  - Publica en `device/{codigo}/telemetria`, con QoS 1, cada 10 s, y al instante si hay una caída. Usa un búfer offline de 1 h y publica `online`/`offline` (retenido, *last will*) en `device/{codigo}/estado`.
+  - **No mide FR, PAS, PAD ni batería.**
+- **`ReceptorMqtt`** (`Api/Entrada/Mqtt`):
+  - Entra como `vitalify-backend`, con sesión persistente y client id fijo, y suscribe ambos tópicos.
+  - Pasa la telemetría por `MensajeTelemetria` a `IRegistrarLectura` (origen `Mqtt`). El código del JSON debe coincidir con el del tópico.
+  - El estado va a `RegistrarPresenciaDispositivo` → `IPresenciaDispositivos` (en memoria), que se ve como `conexionSensor` en monitoreados y en signos.
+  - Si está habilitado, `/health` incluye `mqtt`.
+  - Configuración: `Mqtt__Habilitado`, `Mqtt__Servidor`, `Mqtt__Puerto`, `Mqtt__Usuario` y `Mqtt__Clave` (= `MQTT_BACKEND_CLAVE` de `../IOT/tesis_V01/broker/.env`). Si la API corre en Docker, `docker-compose.yml` usa `host.docker.internal` como servidor.
+- **Motor clínico** (`Domain/Clinica`, `Application/Clinica`, `docs/motor-clinico.md`):
+  - `CalculadoraNews2` (RCP 2017) y `CalculadoraMews` (Subbe 2001) son tablas puras con pruebas en cada límite.
+  - `EvaluarRiesgoAlRegistrarLectura` se engancha a `LecturaRegistrada`; las lecturas atrasadas no evalúan.
+  - `EvaluadorRiesgo` toma por parámetro el valor más reciente entre el wearable (si está vigente) y la última `ObservacionEnfermeria` (dentro de `Clinico__HorasVigenciaObservacion`, 4 h).
+  - Lo que falta suma 0 y queda en `faltantes`, con `completo: false`. **Un puntaje parcial es una cota inferior.**
+  - `Clinico__AjusteTemperaturaSensor` (°C, 0 por defecto) corrige la temperatura de piel del DS18B20 antes de puntuar.
+  - Las evaluaciones se guardan en `evaluacion_riesgo`; el desglose por parámetro se recalcula al leer.
+  - Endpoints: `GET /pacientes/{id}/riesgo` y `POST /pacientes/{id}/observaciones` (`PersonalClinico`).
+  - Las alertas por nivel medio o alto son de la fase 5.
+- **Contrato con el firmware:** `ContratoFirmwareTests` usa los JSON exactos de `IOT/tesis_V01/tesis/pruebas/pruebas.cpp`. Si cambia el firmware, cambia esa prueba.
+
 ## Pruebas de integración
 
 - `tests/Vitalify.Api.IntegrationTests` usa `WebApplicationFactory` y un PostgreSQL 17 en Testcontainers. `FabricaVitalify` pasa la configuración como variables de entorno y aplica las migraciones antes de arrancar la API.
 - **Contenedores:**
   - Casi todas las clases comparten un contenedor (colección `api`). Usan correos, códigos y DNI únicos (`ClienteApi.NuevoDni()`) y no dependen del orden.
   - Las pruebas que necesitan partir de una base vacía usan la colección `api-aislada` (`FabricaVitalifyAislada`), que tiene su propio contenedor.
-  - Las colecciones no corren en paralelo (`Infraestructura/Ensamblado.cs`), porque la configuración va por variables de entorno del proceso.
+  - La colección `api-mqtt` (`FabricaVitalifyMqtt`) levanta además un Mosquitto real (`eclipse-mosquitto:2`, con anónimos permitidos). `PublicarAsync` publica como el ESP32 y `EsperarAsync` espera la ingesta asíncrona.
+  - Las colecciones no corren en paralelo (`Infraestructura/Ensamblado.cs`), porque la configuración va por variables de entorno del proceso. Una fábrica derivada agrega contenedores y variables con `ConfiguracionAdicionalAsync`.
 - **Atajos** en `ClienteApi`: `CrearCamaAsync`, `CrearDispositivoAsync`, `IngresarPacienteAsync`, `VincularAsync`, `EgresarAsync`, `RegistrarTelemetriaAsync` (entra por `/dev/telemetria`), `Ts` y `Ms`. En `PruebaApi`: `ClienteAdministradorAsync`, `ClienteEnfermeraAsync`, `ClienteMedicoAsync` y `PacienteConSensorAsync`.
 - **Fábrica:**
   - `FabricaVitalify.ConsultarHistorialAsync` lee `HistorialDbContext`.

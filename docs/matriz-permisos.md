@@ -30,6 +30,8 @@ Control de acceso basado en roles (RBAC) de Vitalify. Cada rol tiene permisos di
 | Vincular y liberar un sensor (HU06) | `POST /pacientes/{id}/dispositivo`, `DELETE /pacientes/{id}/dispositivo` | — | L | **G** | `SoloEnfermera` para escribir · `PersonalClinico` para leer (en la ficha) |
 | Pacientes monitoreados (HU07), con última lectura y señal | `GET /pacientes/monitoreados` | — | L | L | `PersonalClinico` |
 | Signos vitales actuales (HU10, HU11 y HU12) | `GET /pacientes/{id}/signos/actual` | — | L | L | `PersonalClinico` |
+| Riesgo NEWS2 y MEWS (fase 4) | `GET /pacientes/{id}/riesgo` | — | L | L | `PersonalClinico` |
+| Observaciones de signos (FR, presión, conciencia, oxígeno, temperatura) | `POST /pacientes/{id}/observaciones` | — | **G** | **G** | `PersonalClinico` |
 | Incidencias de telemetría (datos técnicos, sin datos del paciente) | `GET /telemetria/incidencias` | L | — | — | `SoloAdministrador` |
 | Ingesta de telemetría de desarrollo (solo Development) | `POST /dev/telemetria` | **G** | — | — | `SoloAdministrador` |
 | Estado del servicio | `GET /ping`, `GET /health` | ✓ | ✓ | ✓ | Anónimo |
@@ -43,7 +45,8 @@ Notas:
 - **Telemetría:**
   - Los signos del paciente son información clínica, así que solo los ve el personal clínico.
   - Las incidencias de la ingesta son datos técnicos del sensor (dispositivo, variable, valor recibido, ids), así que las revisa el administrador. Nunca incluyen el nombre ni el documento del paciente.
-  - La ingesta real (MQTT, fase 7) no usa usuarios; hoy el endpoint de desarrollo exige un administrador.
+  - La ingesta real por MQTT no usa usuarios de la API: la autentica el broker (cada wearable con su código y clave, y un ACL por tópico). El endpoint de desarrollo exige un administrador.
+- **Observaciones:** las registra el médico o la enfermera y quedan auditadas como `ObservacionRegistrada`.
 
 ### Cambio respecto de la versión anterior
 
@@ -56,7 +59,6 @@ Se confirmarán al implementar cada fase.
 | Módulo | Fase | Administrador | Médico | Enfermera | Política prevista |
 |---|:---:|:---:|:---:|:---:|---|
 | Signos vitales en tiempo real (actualización en vivo con SignalR) | 6 y 7 | — | L | L | `PersonalClinico` |
-| Puntajes NEWS2/MEWS en la lista de monitoreo | 4 | — | L | L | `PersonalClinico` |
 | Alertas NEWS2/MEWS | 5 | — | **A** | **A** | `PersonalClinico` |
 | Historial de signos vitales y puntajes de riesgo | 6 | — | L | L | `PersonalClinico` |
 | Observaciones clínicas (notas) | 6 | — | **G** | **G** | `PersonalClinico`. Cada uno edita solo sus propias notas |
@@ -85,6 +87,7 @@ Se confirmarán al implementar cada fase.
 | El administrador recibe 403 en monitoreados, en el ingreso y en el listado de pacientes | `ElAdministradorRecibe403EnMonitoreadosYEnElIngresoDePacientes` |
 | La enfermera recibe 403 al registrar dispositivos | `LaEnfermeraRecibe403AlRegistrarDispositivos` |
 | La enfermera recibe 403 en las incidencias técnicas y el administrador recibe 403 en los signos del paciente | `LaEnfermeraRecibe403EnIncidenciasYElAdministrador403EnLosSignos` |
+| El administrador no ve el riesgo ni registra observaciones; el médico sí | `ElAdministradorNoVeElRiesgoNiRegistraObservacionesYElMedicoSi` |
 | El médico recibe 403 al ingresar pacientes | `ElMedicoRecibe403AlIngresarPacientes` |
 | El administrador ve la ocupación de las camas sin datos del paciente | `ElAdministradorVeLaOcupacionDeLaCamaPeroNoQuienLaOcupa` |
 | La auditoría del ingreso no contiene el nombre ni el documento | `HU05_E1_EnfermeraCompletaNombreEdadCamaYDiagnostico_PacienteRegistradoYHabilitadoParaSensor` |
