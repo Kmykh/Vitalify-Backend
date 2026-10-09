@@ -9,6 +9,9 @@ public interface IRepositorioLecturas
 {
     Task<bool> ExisteAsync(string codigoDispositivo, DateTime medidoEn, CancellationToken ct = default);
 
+    /// <summary>Lecturas de la hospitalización medidas entre ambos límites (inclusive), de la más antigua a la más reciente.</summary>
+    Task<IReadOnlyList<LecturaSignos>> ListarPorHospitalizacionAsync(Guid hospitalizacionId, DateTime desde, DateTime hasta, CancellationToken ct = default);
+
     void Agregar(LecturaSignos lectura);
 }
 

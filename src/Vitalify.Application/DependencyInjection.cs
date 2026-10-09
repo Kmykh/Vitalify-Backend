@@ -59,6 +59,7 @@ public static class DependencyInjection
         services.AddScoped<IRegistrarLectura, RegistrarLectura>();
         services.AddScoped<IListarDispositivosVinculados, ListarDispositivosVinculados>();
         services.AddScoped<ObtenerSignosActuales>();
+        services.AddScoped<ObtenerHistorialSignos>();
         services.AddScoped<ListarIncidencias>();
 
         // Motor clínico (fase 4): se engancha a la ingesta como manejador de LecturaRegistrada.
