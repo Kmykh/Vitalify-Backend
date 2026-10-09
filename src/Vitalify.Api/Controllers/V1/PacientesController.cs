@@ -128,6 +128,33 @@ public class PacientesController : ControllerBase
         return resultado.EsExito ? Ok(resultado.Valor) : this.Problema(resultado.Error);
     }
 
+    /// <summary>Lecturas del wearable de la hospitalización activa en un rango de tiempo, para los gráficos.</summary>
+    /// <remarks>
+    /// Devuelve las lecturas guardadas con <c>medidoEn</c> entre <c>desde</c> y <c>hasta</c> (inclusive), de la más
+    /// antigua a la más reciente. Sin parámetros, la última hora. El rango máximo es de 24 h. Cada lectura trae solo las
+    /// variables válidas que midió el sensor; las demás vienen en null.
+    /// </remarks>
+    /// <param name="id">Paciente.</param>
+    /// <param name="obtener">Caso de uso.</param>
+    /// <param name="ct">Cancelación.</param>
+    /// <param name="desde">Inicio (UTC). Por defecto, una hora antes de <c>hasta</c>.</param>
+    /// <param name="hasta">Fin (UTC). Por defecto, ahora.</param>
+    /// <response code="200">Lecturas del rango (posiblemente ninguna).</response>
+    /// <response code="400">Rango invertido o de más de 24 h.</response>
+    /// <response code="404">El paciente no existe o no tiene una hospitalización activa.</response>
+    [HttpGet("{id:guid}/signos/historial")]
+    [Authorize(Policy = Politicas.PersonalClinico)]
+    [ProducesResponseType<HistorialSignosDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<HistorialSignosDto>> HistorialSignos(
+        Guid id, [FromServices] ObtenerHistorialSignos obtener, CancellationToken ct,
+        [FromQuery] DateTime? desde = null, [FromQuery] DateTime? hasta = null)
+    {
+        var resultado = await obtener.EjecutarAsync(new ObtenerHistorialSignosConsulta(id, desde, hasta), ct);
+        return resultado.EsExito ? Ok(resultado.Valor) : this.Problema(resultado.Error);
+    }
+
     /// <summary>Última evaluación de riesgo NEWS2 y MEWS del paciente, con el desglose por parámetro.</summary>
     /// <remarks>
     /// Se recalcula con cada lectura del wearable y con cada observación. El wearable mide FC, SpO2 y temperatura: sin
