@@ -66,6 +66,12 @@ public static class DependencyInjection
         services.AddScoped<IUnidadDeTrabajoHistorial, UnidadDeTrabajoHistorial>();
         services.AddScoped<IResolutorDispositivos, ResolutorDispositivosConCache>();
         services.AddSingleton<ISolicitudNuevaLectura, SolicitudNuevaLecturaEnLog>();
+        services.AddSingleton<IPresenciaDispositivos, PresenciaDispositivosEnMemoria>();
+
+        // Motor clínico: observaciones y evaluaciones en el historial.
+        services.AddSingleton(ConfiguracionTelemetria.CargarOpcionesClinicas(configuration));
+        services.AddScoped<IRepositorioObservaciones, RepositorioObservaciones>();
+        services.AddScoped<IRepositorioEvaluaciones, RepositorioEvaluaciones>();
 
         services.AddHostedService<SemillaAdministrador>();
         services.AddHostedService<SemillaDatosDemo>();

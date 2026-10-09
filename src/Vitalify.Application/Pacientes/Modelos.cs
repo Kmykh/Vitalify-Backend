@@ -58,11 +58,14 @@ public sealed record PacienteHospitalizadoDto(
 }
 
 /// <summary>Fila de la lista de monitoreo (HU07).</summary>
-/// <param name="NivelRiesgo">Hasta la fase 4 siempre es <c>sin-datos</c>.</param>
+/// <param name="NivelRiesgo">Nivel NEWS2 de la última evaluación (<c>bajo</c>, <c>bajo-medio</c>, <c>medio</c>, <c>alto</c>) o <c>sin-datos</c>.</param>
+/// <param name="EvaluacionCompleta">false si faltaron parámetros (el puntaje es parcial); null sin evaluación.</param>
 /// <param name="Senal"><c>con-datos</c>, <c>sin-datos</c> (nunca llegó una lectura) o <c>sin-senal</c> (nada en 2 × la vigencia).</param>
+/// <param name="ConexionSensor"><c>en-linea</c>, <c>fuera-de-linea</c> o <c>desconocida</c> (tópico MQTT de estado).</param>
 public sealed record PacienteMonitoreadoDto(
     Guid PacienteId, string NombreCompleto, int Edad, string Cama, string Servicio, string CodigoDispositivo,
-    DateTime IngresoEn, int? UltimoNews2, int? UltimoMews, string NivelRiesgo, DateTime? UltimaLecturaEn, string Senal);
+    DateTime IngresoEn, int? UltimoNews2, int? UltimoMews, string NivelRiesgo, bool? EvaluacionCompleta,
+    DateTime? UltimaLecturaEn, string Senal, string ConexionSensor);
 
 public sealed record PacientesMonitoreadosDto(IReadOnlyList<PacienteMonitoreadoDto> Items, string? Mensaje);
 

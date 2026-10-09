@@ -9,10 +9,13 @@ services:
       - "8080:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      # Dentro del contenedor, "localhost" es el propio contenedor: el broker del IoT corre en la laptop.
+      Mqtt__Servidor: host.docker.internal
     # Mismo .env que usa `dotnet run` (cadenas de conexión de Supabase).
     env_file:
       - .env
     restart: unless-stopped
 
-  # Fase 7: aquí se agregarán `timescaledb` (historial de signos vitales, reemplaza a
-  # Supabase para HistorialDbContext) y `mosquitto` (broker MQTT para los wearables ESP32).
+  # El broker MQTT de los wearables vive en el proyecto IoT (IOT/tesis_V01/broker).
+  # Fase 7: aquí se agregará `timescaledb` (historial de signos vitales, reemplaza a Supabase
+  # para HistorialDbContext).

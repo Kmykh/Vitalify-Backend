@@ -1,4 +1,5 @@
 using FluentValidation;
+using Vitalify.Application.Clinica;
 using Vitalify.Application.Comun;
 using Vitalify.Application.Pacientes;
 using Vitalify.Application.Puertos;
@@ -40,7 +41,8 @@ public sealed record SignosActualesDto(
     DateTime? UltimaCaidaEn,
     int? Bateria,
     DateTime? UltimaLecturaEn,
-    string Senal);
+    string Senal,
+    string ConexionSensor);
 
 /// <summary>
 /// HU11: estado actual de los signos del paciente. El estado de cada variable se calcula al leer con
@@ -50,6 +52,7 @@ public sealed class ObtenerSignosActuales(
     IRepositorioPacientes pacientes,
     IRepositorioHospitalizaciones hospitalizaciones,
     IRepositorioEstadoSignos estados,
+    IPresenciaDispositivos presencia,
     OpcionesTelemetria opciones,
     IReloj reloj)
 {
@@ -85,7 +88,70 @@ public sealed class ObtenerSignosActuales(
             e?.UltimaCaidaEn,
             e?.Bateria,
             e?.UltimaLecturaEn,
-            TextosEstado.De(Vigencia.SenalDe(e?.UltimaLecturaEn, ahora, opciones.Vigencia)));
+            TextosEstado.De(Vigencia.SenalDe(e?.UltimaLecturaEn, ahora, opciones.Vigencia)),
+            RegistrarPresenciaDispositivo.Texto(activa.CodigoDispositivo is { } codigo ? presencia.Obtener(codigo) : null));
+    }
+}
+
+/// <param name="Desde">Si falta, una hora antes de <paramref name="Hasta"/>.</param>
+/// <param name="Hasta">Si falta, ahora.</param>
+public sealed record ObtenerHistorialSignosConsulta(Guid PacienteId, DateTime? Desde = null, DateTime? Hasta = null);
+
+/// <summary>
+/// Una lectura del wearable tal como se guardó (solo las variables válidas). <c>Seq</c> es el contador del firmware y
+/// <c>RecibidoEn</c>, cuándo la registró el backend (con <c>MedidoEn</c> da el retraso de la transmisión).
+/// </summary>
+public sealed record LecturaHistorialDto(
+    DateTime MedidoEn, DateTime RecibidoEn, long Seq, int? Fc, int? Spo2, decimal? Temperatura, int? Fr, int? Pas, int? Pad,
+    bool Caida, string Origen)
+{
+    public static LecturaHistorialDto Desde(LecturaSignos l) =>
+        new(l.MedidoEn, l.RecibidoEn, l.Seq, l.Fc, l.Spo2, l.Temperatura, l.Fr, l.Pas, l.Pad, l.Caida, l.Origen.ToString());
+}
+
+public sealed record HistorialSignosDto(
+    Guid PacienteId, Guid HospitalizacionId, DateTime Desde, DateTime Hasta, IReadOnlyList<LecturaHistorialDto> Lecturas);
+
+/// <summary>
+/// Lecturas de la hospitalización activa en un rango de hasta 24 h, para los gráficos del dashboard. Solo lee el
+/// historial: no recalcula estados ni puntajes.
+/// </summary>
+public sealed class ObtenerHistorialSignos(
+    IRepositorioPacientes pacientes,
+    IRepositorioHospitalizaciones hospitalizaciones,
+    IRepositorioLecturas lecturas,
+    IReloj reloj)
+{
+    public static readonly TimeSpan RangoPorDefecto = TimeSpan.FromHours(1);
+    public static readonly TimeSpan RangoMaximo = TimeSpan.FromHours(24);
+
+    public async Task<Resultado<HistorialSignosDto>> EjecutarAsync(ObtenerHistorialSignosConsulta consulta, CancellationToken ct = default)
+    {
+        var hasta = consulta.Hasta?.ToUniversalTime() ?? reloj.AhoraUtc;
+        var desde = consulta.Desde?.ToUniversalTime() ?? hasta - RangoPorDefecto;
+        if (desde > hasta)
+        {
+            return ErroresComunes.ValidacionDeCampo("hasta", "hasta debe ser posterior a desde.");
+        }
+
+        if (hasta - desde > RangoMaximo)
+        {
+            return ErroresComunes.ValidacionDeCampo("desde", $"El rango no puede superar {RangoMaximo.TotalHours:0} horas.");
+        }
+
+        if (await pacientes.ObtenerPorIdAsync(consulta.PacienteId, ct) is null)
+        {
+            return ErroresPaciente.NoEncontrado;
+        }
+
+        var activa = await hospitalizaciones.ObtenerActivaDePacienteAsync(consulta.PacienteId, ct);
+        if (activa is null)
+        {
+            return ErroresPaciente.SinHospitalizacionActivaNoEncontrada;
+        }
+
+        var filas = await lecturas.ListarPorHospitalizacionAsync(activa.Id, desde, hasta, ct);
+        return new HistorialSignosDto(consulta.PacienteId, activa.Id, desde, hasta, filas.Select(LecturaHistorialDto.Desde).ToList());
     }
 }
 

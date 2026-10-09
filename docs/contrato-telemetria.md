@@ -1,19 +1,34 @@
 # Contrato de telemetría (firmware ESP32 → backend)
 
-Este documento define el mensaje que publica el wearable ESP32 con los signos vitales del paciente. Todos los adaptadores de entrada lo usan: hoy el simulador y el endpoint de desarrollo, y en la fase 7 el broker MQTT.
+Este documento define el mensaje que publica el wearable ESP32 con los signos vitales del paciente (firmware en `IOT/tesis_V01`, repositorio `Kmykh/IoT-Vitalfy`). Lo usan todos los adaptadores de entrada: el **receptor MQTT**, que es el camino real, y, solo en Development, el endpoint de pruebas y el simulador.
 
 El backend lo interpreta en un solo lugar (`MensajeTelemetria`) y lo pasa al único puerto de entrada de la telemetría, `IRegistrarLectura`. El núcleo no sabe quién envió la lectura: solo guarda su `origen` (`Simulador`, `ApiDesarrollo` o `Mqtt`) para trazabilidad.
 
-## Transporte (fase 7)
+## Transporte: MQTT
+
+```
+ESP32 (usuario = código)  ──QoS 1──>  Mosquitto (IOT/tesis_V01/broker)  ──QoS 1──>  ReceptorMqtt (backend)
+   device/ESP32-001/telemetria                                                       → MensajeTelemetria → IRegistrarLectura
+   device/ESP32-001/estado  (online / offline, retenido)                             → presencia del wearable
+```
 
 | Aspecto | Valor |
 |---|---|
-| Tópico | `device/{codigo}/telemetria`. `{codigo}` es el código del dispositivo registrado en Vitalify (patrón `^[A-Z0-9-]{3,32}$`, por ejemplo `ESP32-001`) |
-| QoS | **1** (al menos una vez) |
+| Tópico de lecturas | `device/{codigo}/telemetria`. `{codigo}` es el código del dispositivo registrado en Vitalify (patrón `^[A-Z0-9-]{3,32}$`, por ejemplo `ESP32-001`). Es también el usuario MQTT del wearable |
+| Tópico de estado | `device/{codigo}/estado`: `online` al conectar y `offline` como *last will* (lo publica el broker si el ESP32 desaparece). Ambos son retenidos |
+| QoS | **1** (al menos una vez), en el wearable y en el backend |
 | Formato | JSON en UTF-8 |
-| Frecuencia sugerida | Una lectura cada 10 s |
+| Frecuencia | Una lectura cada 10 s, y otra al instante si se confirma una caída |
+| Búfer del wearable | Hasta 360 lecturas (1 h) sin red ni broker; se envían en orden al volver |
 
-Con QoS 1, **el mismo mensaje puede llegar dos veces**. Por eso el backend deduplica por `(dispositivo, ts)`: una lectura repetida se ignora sin error y la ingesta es idempotente.
+**Backend (`src/Vitalify.Api/Entrada/Mqtt/ReceptorMqtt.cs`):**
+- **Conexión:** entra como `vitalify-backend` con **sesión persistente** y un *client id* fijo. Así, lo que publiquen los wearables mientras el backend está caído queda en el broker (hasta 1000 mensajes) y llega al reconectar.
+- **Suscripción:** `device/+/telemetria` y `device/+/estado`, con QoS 1.
+- **Configuración:** `Mqtt__Habilitado`, `Mqtt__Servidor`, `Mqtt__Puerto`, `Mqtt__Usuario` y `Mqtt__Clave`. La clave es `MQTT_BACKEND_CLAVE` de `broker/.env`.
+- **Código del dispositivo:** el del JSON debe coincidir con el del tópico; si no, el mensaje se ignora. El ACL del broker ya impide que un wearable publique en el tópico de otro.
+- **Mensajes malformados:** se registran en el log y no detienen el receptor.
+
+Con QoS 1, **el mismo mensaje puede llegar dos veces**: por ejemplo, si el PUBACK se pierde y el ESP32 reenvía desde su búfer. Por eso el backend deduplica por `(dispositivo, ts)`: una lectura repetida se ignora sin error y la ingesta es idempotente.
 
 ## Mensaje
 
@@ -48,6 +63,19 @@ Con QoS 1, **el mismo mensaje puede llegar dos veces**. Por eso el backend dedup
 | `bateria` | número | no | % | Batería del wearable (0 a 100) |
 
 - **Todas las variables son opcionales**, porque cada sensor puede fallar por separado: si el sensor de temperatura no mide, se omite `temp`. Un campo con `null` es lo mismo que un campo ausente.
+- **Lo que envía hoy el wearable de Vitalify:** `fc` (del ECG si los electrodos dan un ritmo confiable; si no, del PPG), `spo2`, `temp` y `caida`.
+  - Sin dedo no van `fc` ni `spo2`, salvo que la FC venga del ECG; sin sonda no va `temp`; sin paciente conectado no se envía nada.
+  - **No mide `fr`, `pas`, `pad` ni `bateria`**: el contrato los admite para hardware futuro. Para NEWS2 y MEWS se completan con observaciones del personal clínico (ver `docs/motor-clinico.md`).
+  - `seq` vuelve a 0 cuando el ESP32 se reinicia.
+
+Ejemplos reales, generados por `construirJsonTelemetria` del firmware:
+
+```json
+{"dispositivo":"ESP32-001","ts":"2026-09-30T14:05:10.250Z","seq":18234,"fc":82,"spo2":97,"temp":36.8,"caida":false}
+{"dispositivo":"ESP32-001","ts":"2026-09-30T14:05:10.250Z","seq":5,"temp":-0.5,"caida":true}
+```
+
+`ContratoFirmwareTests` (backend) prueba que esos mismos JSON se interpretan sin errores. `IotMqttTests` los publica en un Mosquitto real y verifica que se registren.
 - **Redondeo:** FC, FR, SpO2, PAS, PAD y batería se redondean a entero; la temperatura, a un decimal.
 - **Campos extra:** se ignoran. Un campo conocido con un tipo incorrecto (por ejemplo `"fc": "82"`) invalida el mensaje.
 
@@ -124,10 +152,17 @@ La señal del sensor (`senal`, también en `GET /pacientes/monitoreados`) puede 
 
 Hoy el adaptador de `ISolicitudNuevaLectura` solo lo escribe en el log. La tabla de incidencias ya lo registra con `requiere_nueva_lectura = true`.
 
-En la fase 7 publicará un comando al dispositivo. La siguiente es una **propuesta**, que se confirmará en esa fase:
+Solo se dispara con la presión incompleta, y el wearable actual no mide presión, así que con este hardware no ocurre. El ACL del broker ya reserva el tópico de comandos (el backend escribe y cada wearable lee el suyo), pero el firmware todavía no se suscribe. La siguiente es una **propuesta**:
 
 - Tópico: `device/{codigo}/comandos`, QoS 1.
 - Mensaje: `{"accion": "repetir-medicion", "variable": "presion", "motivo": "..."}`.
+
+## Probarlo con el wearable real
+
+1. **Broker:** `cd IOT/tesis_V01/broker && docker compose up -d`.
+2. **Backend:** en su `.env`, `Mqtt__Habilitado=true`, `Mqtt__Usuario=vitalify-backend` y `Mqtt__Clave` igual a `MQTT_BACKEND_CLAVE` de `broker/.env`. Después, `dotnet run --project src/Vitalify.Api`. En `/health` aparece `mqtt: Healthy`.
+3. **Wearable:** en la misma red Wi-Fi que la laptop. `ESP32-001` debe estar registrado y vinculado a un paciente activo.
+4. **Verificar:** `GET /api/v1/pacientes/{id}/signos/actual`, `.../riesgo` y `/pacientes/monitoreados` (con `conexionSensor: "en-linea"`).
 
 ## Probarlo sin hardware (solo en Development)
 

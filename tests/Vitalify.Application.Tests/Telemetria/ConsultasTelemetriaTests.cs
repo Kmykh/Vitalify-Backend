@@ -54,6 +54,47 @@ public class ConsultasTelemetriaTests
     }
 
     [Fact]
+    public async Task El_historial_por_defecto_trae_la_ultima_hora_en_orden_cronologico()
+    {
+        var pacienteId = await PacienteConSensorAsync();
+        await _e.RegistrarLectura().EjecutarAsync(_e.Lectura(new(Fc: 70), segundos: -90 * 60));
+        await _e.RegistrarLectura().EjecutarAsync(_e.Lectura(new(Fc: 82, Spo2: 97), segundos: -10));
+        await _e.RegistrarLectura().EjecutarAsync(_e.Lectura(new(Fc: 78), segundos: -20 * 60, caida: true));
+
+        var historial = (await _e.ObtenerHistorialSignos().EjecutarAsync(new(pacienteId))).Valor;
+
+        Assert.Equal([78, 82], historial.Lecturas.Select(l => l.Fc));
+        Assert.True(historial.Lecturas[0].Caida);
+        Assert.Equal((97, "ApiDesarrollo"), (historial.Lecturas[1].Spo2, historial.Lecturas[1].Origen));
+        Assert.Equal((1L, TimeSpan.FromSeconds(10)), (historial.Lecturas[1].Seq, historial.Lecturas[1].RecibidoEn - historial.Lecturas[1].MedidoEn));
+        Assert.Equal(TimeSpan.FromHours(1), historial.Hasta - historial.Desde);
+    }
+
+    [Fact]
+    public async Task El_historial_rechaza_un_rango_invertido_o_de_mas_de_24_horas()
+    {
+        var pacienteId = await PacienteConSensorAsync();
+        var ahora = _e.Reloj.AhoraUtc;
+
+        var invertido = await _e.ObtenerHistorialSignos().EjecutarAsync(new(pacienteId, ahora, ahora.AddHours(-1)));
+        var largo = await _e.ObtenerHistorialSignos().EjecutarAsync(new(pacienteId, ahora.AddHours(-25), ahora));
+
+        Assert.Contains("hasta", invertido.Error.Detalles.Keys);
+        Assert.Contains("desde", largo.Error.Detalles.Keys);
+    }
+
+    [Fact]
+    public async Task Sin_hospitalizacion_activa_el_historial_no_se_encuentra()
+    {
+        var pacienteId = await PacienteConSensorAsync();
+        await _e.RegistrarEgreso().EjecutarAsync(new(pacienteId, "AltaMedica", null, _e.EnfermeraId, null));
+
+        var resultado = await _e.ObtenerHistorialSignos().EjecutarAsync(new(pacienteId));
+
+        Assert.Equal((TipoError.NoEncontrado, "sin-hospitalizacion-activa"), (resultado.Error.Tipo, resultado.Error.Codigo));
+    }
+
+    [Fact]
     public async Task Monitoreados_indica_la_senal_de_cada_paciente()
     {
         await PacienteConSensorAsync();

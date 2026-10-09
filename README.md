@@ -119,13 +119,36 @@ Usa el mismo `.env` (con `env_file`). La API queda en <http://localhost:8080> (`
 | POST | `/api/v1/pacientes/{id}/egreso` | Enfermera | Egreso con motivo; libera el sensor en la misma transacción (HU08) |
 | GET | `/api/v1/pacientes/monitoreados` | Médico o Enfermera | Pacientes con sensor (HU07), con `ultimaLecturaEn` y `senal`. Puntajes NEWS2/MEWS en la fase 4 |
 | GET | `/api/v1/pacientes/{id}/signos/actual` | Médico o Enfermera | Último valor de cada signo con `vigente`, `pendiente-actualizacion` o `sin-datos` |
+| GET | `/api/v1/pacientes/{id}/signos/historial?desde=&hasta=` | Médico o Enfermera | Lecturas de la hospitalización activa en el rango (por defecto la última hora; máximo 24 h), para los gráficos del dashboard web |
 | GET | `/api/v1/telemetria/incidencias?desde=&hasta=&dispositivo=&tipo=` | Administrador | Log de incidencias técnicas de la telemetría |
+| GET | `/api/v1/pacientes/{id}/riesgo` | Médico o Enfermera | NEWS2 y MEWS: total, nivel, si es completo, puntos por parámetro y faltantes |
+| POST | `/api/v1/pacientes/{id}/observaciones` | Médico o Enfermera | Registra FR, presión, conciencia, oxígeno o temperatura de termómetro y recalcula el riesgo |
 | POST | `/api/v1/dev/telemetria` | Administrador | **Solo Development:** envía una lectura como el ESP32 |
 | GET | `/api/v1/ping` | anónimo | `{ "servicio": "vitalify-api", "version": "0.1.0", "hora": <UTC> }` |
 | GET | `/health` | anónimo | Estado de las conexiones `transaccional` e `historial` (200 o 503) |
 | GET | `/swagger` | anónimo | Documentación OpenAPI (solo en Development). Botón **Authorize**: pega el `accessToken` |
 
 Los errores salen como ProblemDetails en español. Su `type` identifica el caso: `credenciales-invalidas`, `sesion-expirada`, `correo-en-uso`, `acceso-denegado`, etc. Los permisos de cada rol están en [`docs/matriz-permisos.md`](docs/matriz-permisos.md).
+
+### Telemetría con el wearable real (MQTT)
+
+El firmware y el broker están en el proyecto IoT (`../IOT/tesis_V01`). Para recibir las lecturas reales:
+
+1. Levanta el broker: `cd ../IOT/tesis_V01/broker && docker compose up -d`.
+2. En el `.env` del backend:
+
+   ```
+   Mqtt__Habilitado=true
+   Mqtt__Servidor=localhost
+   Mqtt__Puerto=1883
+   Mqtt__Usuario=vitalify-backend
+   Mqtt__Clave=<MQTT_BACKEND_CLAVE de broker/.env>
+   ```
+
+3. Arranca la API. `/health` debe mostrar `mqtt: Healthy`.
+4. Registra el sensor `ESP32-001` (o `Seed__DatosDemo=true`), vincúlalo a un paciente y enciende el wearable en la misma red Wi-Fi que la laptop.
+
+Las lecturas aparecen en `/pacientes/{id}/signos/actual` y el riesgo en `/pacientes/{id}/riesgo`. Cómo se calcula NEWS2/MEWS con este hardware: [`docs/motor-clinico.md`](docs/motor-clinico.md).
 
 ### Telemetría (sin hardware)
 
@@ -173,8 +196,8 @@ El CI (`.github/workflows/ci.yml`) ejecuta restore, build y todas las pruebas, i
 | 0    | Base del proyecto                             |
 | 1    | Usuarios, JWT y RBAC                          |
 | 2    | Pacientes, camas y sensores                   |
-| 3    | Ingesta simulada de signos vitales (este estado) |
-| 4    | Cálculo de NEWS2 y MEWS                       |
+| 3    | Ingesta simulada de signos vitales            |
+| 4    | Cálculo de NEWS2 y MEWS con el wearable real por MQTT (este estado) |
 | 5    | Alertas                                       |
 | 6    | Consultas                                     |
 | 7    | IoT (Mosquitto, MQTT, ESP32), TimescaleDB y despliegue |
