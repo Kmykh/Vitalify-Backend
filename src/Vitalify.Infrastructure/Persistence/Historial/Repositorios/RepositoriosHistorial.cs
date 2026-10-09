@@ -10,6 +10,12 @@ internal sealed class RepositorioLecturas(HistorialDbContext db) : IRepositorioL
     public Task<bool> ExisteAsync(string codigoDispositivo, DateTime medidoEn, CancellationToken ct = default) =>
         db.Lecturas.AnyAsync(l => l.CodigoDispositivo == codigoDispositivo && l.MedidoEn == medidoEn, ct);
 
+    public async Task<IReadOnlyList<LecturaSignos>> ListarPorHospitalizacionAsync(Guid hospitalizacionId, DateTime desde, DateTime hasta, CancellationToken ct = default) =>
+        await db.Lecturas.AsNoTracking()
+            .Where(l => l.HospitalizacionId == hospitalizacionId && l.MedidoEn >= desde && l.MedidoEn <= hasta)
+            .OrderBy(l => l.MedidoEn)
+            .ToListAsync(ct);
+
     public void Agregar(LecturaSignos lectura) => db.Lecturas.Add(lectura);
 }
 
