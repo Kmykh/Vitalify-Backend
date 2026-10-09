@@ -103,6 +103,8 @@ public sealed class Escenario
     public ObtenerSignosActuales ObtenerSignosActuales() =>
         new(Pacientes, Hospitalizaciones, Historial, Presencia, OpcionesTelemetria.PorDefecto, Reloj);
 
+    public ObtenerHistorialSignos ObtenerHistorialSignos() => new(Pacientes, Hospitalizaciones, Historial, Reloj);
+
     public EvaluadorRiesgo Evaluador() => new(Historial, Historial, Historial, OpcionesTelemetria.PorDefecto, Clinicas, Reloj);
 
     public RegistrarObservacion RegistrarObservacion() =>

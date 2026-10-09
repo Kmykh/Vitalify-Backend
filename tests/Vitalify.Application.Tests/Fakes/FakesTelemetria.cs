@@ -50,6 +50,12 @@ public sealed class HistorialEnMemoria
     public Task<bool> ExisteAsync(string codigoDispositivo, DateTime medidoEn, CancellationToken ct = default) =>
         Task.FromResult(Lecturas.Any(l => l.CodigoDispositivo == codigoDispositivo && l.MedidoEn == medidoEn));
 
+    public Task<IReadOnlyList<LecturaSignos>> ListarPorHospitalizacionAsync(Guid hospitalizacionId, DateTime desde, DateTime hasta, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<LecturaSignos>>(Lecturas
+            .Where(l => l.HospitalizacionId == hospitalizacionId && l.MedidoEn >= desde && l.MedidoEn <= hasta)
+            .OrderBy(l => l.MedidoEn)
+            .ToList());
+
     public void Agregar(LecturaSignos lectura) => _lecturasPendientes.Add(lectura);
 
     public Task<EstadoSignosActual?> ObtenerAsync(Guid hospitalizacionId, CancellationToken ct = default) =>
