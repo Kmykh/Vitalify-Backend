@@ -119,6 +119,7 @@ Usa el mismo `.env` (con `env_file`). La API queda en <http://localhost:8080> (`
 | POST | `/api/v1/pacientes/{id}/egreso` | Enfermera | Egreso con motivo; libera el sensor en la misma transacción (HU08) |
 | GET | `/api/v1/pacientes/monitoreados` | Médico o Enfermera | Pacientes con sensor (HU07), con `ultimaLecturaEn` y `senal`. Puntajes NEWS2/MEWS en la fase 4 |
 | GET | `/api/v1/pacientes/{id}/signos/actual` | Médico o Enfermera | Último valor de cada signo con `vigente`, `pendiente-actualizacion` o `sin-datos` |
+| GET | `/api/v1/pacientes/{id}/signos/historial?desde=&hasta=` | Médico o Enfermera | Lecturas de la hospitalización activa en el rango (por defecto la última hora; máximo 24 h), para los gráficos del dashboard web |
 | GET | `/api/v1/telemetria/incidencias?desde=&hasta=&dispositivo=&tipo=` | Administrador | Log de incidencias técnicas de la telemetría |
 | GET | `/api/v1/pacientes/{id}/riesgo` | Médico o Enfermera | NEWS2 y MEWS: total, nivel, si es completo, puntos por parámetro y faltantes |
 | POST | `/api/v1/pacientes/{id}/observaciones` | Médico o Enfermera | Registra FR, presión, conciencia, oxígeno o temperatura de termómetro y recalcula el riesgo |

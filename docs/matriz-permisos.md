@@ -30,6 +30,7 @@ Control de acceso basado en roles (RBAC) de Vitalify. Cada rol tiene permisos di
 | Vincular y liberar un sensor (HU06) | `POST /pacientes/{id}/dispositivo`, `DELETE /pacientes/{id}/dispositivo` | — | L | **G** | `SoloEnfermera` para escribir · `PersonalClinico` para leer (en la ficha) |
 | Pacientes monitoreados (HU07), con última lectura y señal | `GET /pacientes/monitoreados` | — | L | L | `PersonalClinico` |
 | Signos vitales actuales (HU10, HU11 y HU12) | `GET /pacientes/{id}/signos/actual` | — | L | L | `PersonalClinico` |
+| Historial de lecturas del wearable (gráficos del dashboard) | `GET /pacientes/{id}/signos/historial` | — | L | L | `PersonalClinico` |
 | Riesgo NEWS2 y MEWS (fase 4) | `GET /pacientes/{id}/riesgo` | — | L | L | `PersonalClinico` |
 | Observaciones de signos (FR, presión, conciencia, oxígeno, temperatura) | `POST /pacientes/{id}/observaciones` | — | **G** | **G** | `PersonalClinico` |
 | Incidencias de telemetría (datos técnicos, sin datos del paciente) | `GET /telemetria/incidencias` | L | — | — | `SoloAdministrador` |
@@ -60,7 +61,7 @@ Se confirmarán al implementar cada fase.
 |---|:---:|:---:|:---:|:---:|---|
 | Signos vitales en tiempo real (actualización en vivo con SignalR) | 6 y 7 | — | L | L | `PersonalClinico` |
 | Alertas NEWS2/MEWS | 5 | — | **A** | **A** | `PersonalClinico` |
-| Historial de signos vitales y puntajes de riesgo | 6 | — | L | L | `PersonalClinico` |
+| Historial de puntajes de riesgo | 6 | — | L | L | `PersonalClinico` |
 | Observaciones clínicas (notas) | 6 | — | **G** | **G** | `PersonalClinico`. Cada uno edita solo sus propias notas |
 | Configuración de umbrales de alerta por paciente | 6 | — | **G** | L | `SoloMedico` para escribir, `PersonalClinico` para leer |
 | Consulta de la auditoría de seguridad | — | L | — | — | `SoloAdministrador` |
@@ -88,6 +89,7 @@ Se confirmarán al implementar cada fase.
 | La enfermera recibe 403 al registrar dispositivos | `LaEnfermeraRecibe403AlRegistrarDispositivos` |
 | La enfermera recibe 403 en las incidencias técnicas y el administrador recibe 403 en los signos del paciente | `LaEnfermeraRecibe403EnIncidenciasYElAdministrador403EnLosSignos` |
 | El administrador no ve el riesgo ni registra observaciones; el médico sí | `ElAdministradorNoVeElRiesgoNiRegistraObservacionesYElMedicoSi` |
+| El administrador recibe 403 en el historial de signos | `ElAdministradorRecibe403YUnPacienteInexistente404` |
 | El médico recibe 403 al ingresar pacientes | `ElMedicoRecibe403AlIngresarPacientes` |
 | El administrador ve la ocupación de las camas sin datos del paciente | `ElAdministradorVeLaOcupacionDeLaCamaPeroNoQuienLaOcupa` |
 | La auditoría del ingreso no contiene el nombre ni el documento | `HU05_E1_EnfermeraCompletaNombreEdadCamaYDiagnostico_PacienteRegistradoYHabilitadoParaSensor` |

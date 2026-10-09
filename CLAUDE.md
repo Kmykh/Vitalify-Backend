@@ -21,6 +21,7 @@ Hechas:
 - Fase 2 (HU05, HU06, HU08 y la base de la HU07): pacientes, camas y sensores.
 - Fase 3 (HU10, HU11 y HU12): ingesta de signos vitales con datos simulados.
 - Fase 4: motor clínico NEWS2/MEWS, adaptado al hardware real. A pedido del usuario se adelantó de la fase 7 el **receptor MQTT**, para que el backend reciba lo que publica el wearable real (proyecto `../IOT/tesis_V01`, repositorio `Kmykh/IoT-Vitalfy`).
+- Adelantado de la fase 6 a pedido del usuario: `GET /pacientes/{id}/signos/historial?desde=&hasta=` (`ObtenerHistorialSignos`, `IRepositorioLecturas.ListarPorHospitalizacionAsync`). Lee `lectura_signos` de la hospitalización activa, por defecto la última hora y como máximo 24 h, para los gráficos del dashboard React de prueba en `../Web`.
 
 No adelantar trabajo de fases posteriores: alertas (5), consultas del dashboard (6); TimescaleDB, SignalR, push y despliegue (7). **No usar datos simulados para verificar lo que ya puede verificarse con el wearable real.**
 
