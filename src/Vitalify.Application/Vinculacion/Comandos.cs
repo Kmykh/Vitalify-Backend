@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 
 namespace Vitalify.Application.Vinculacion;
@@ -61,6 +62,9 @@ public static class ContratoComandos
 
     public const string AccionSolicitarQr = "solicitar-qr";
 
+    /// <summary>UTF-8 sin escapar las tildes: el JSON va a un ESP32 (ArduinoJson), nunca a una página HTML.</summary>
+    private static readonly JsonWriterOptions OpcionesEscritura = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
     public static string Topico(string codigoDispositivo) => $"device/{codigoDispositivo}/comandos";
 
     /// <summary>
@@ -71,7 +75,7 @@ public static class ContratoComandos
     {
         ArgumentNullException.ThrowIfNull(comando);
         using var buffer = new MemoryStream();
-        using (var json = new Utf8JsonWriter(buffer))
+        using (var json = new Utf8JsonWriter(buffer, OpcionesEscritura))
         {
             json.WriteStartObject();
             json.WriteString("accion", comando.Accion);
