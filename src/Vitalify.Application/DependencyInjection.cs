@@ -4,6 +4,7 @@ using Vitalify.Application.Camas;
 using Vitalify.Application.Dispositivos;
 using Vitalify.Application.Pacientes;
 using Vitalify.Application.Sesiones;
+using Vitalify.Application.Telemetria;
 using Vitalify.Application.Usuarios;
 
 namespace Vitalify.Application;
@@ -52,6 +53,12 @@ public static class DependencyInjection
         services.AddScoped<ListarPacientesMonitoreados>();
         services.AddScoped<ObtenerPaciente>();
         services.AddScoped<ObtenerHospitalizacionActivaPorDispositivo>();
+
+        services.AddSingleton<IValidator<ListarIncidenciasConsulta>, ListarIncidenciasValidador>();
+        services.AddScoped<IRegistrarLectura, RegistrarLectura>();
+        services.AddScoped<IListarDispositivosVinculados, ListarDispositivosVinculados>();
+        services.AddScoped<ObtenerSignosActuales>();
+        services.AddScoped<ListarIncidencias>();
 
         return services;
     }

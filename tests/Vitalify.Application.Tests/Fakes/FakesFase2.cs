@@ -121,6 +121,9 @@ public sealed class RepositorioHospitalizacionesEnMemoria : IRepositorioHospital
         return Task.FromResult(resultado.SingleOrDefault());
     }
 
+    public Task<IReadOnlyList<string>> ListarCodigosDispositivosVinculadosAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<string>>(Lecturas().Where(l => l.CodigoDispositivo is not null).Select(l => l.CodigoDispositivo!).Order().ToList());
+
     public void Agregar(Hospitalizacion hospitalizacion) => Hospitalizaciones.Add(hospitalizacion);
 
     public void AgregarAsignacion(AsignacionDispositivo asignacion) => Asignaciones.Add(asignacion);

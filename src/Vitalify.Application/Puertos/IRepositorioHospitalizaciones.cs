@@ -24,6 +24,8 @@ public interface IRepositorioHospitalizaciones
 
     Task<HospitalizacionPorDispositivoDto?> ObtenerActivaPorCodigoDispositivoAsync(string codigoDispositivo, CancellationToken ct = default);
 
+    Task<IReadOnlyList<string>> ListarCodigosDispositivosVinculadosAsync(CancellationToken ct = default);
+
     void Agregar(Hospitalizacion hospitalizacion);
 
     void AgregarAsignacion(AsignacionDispositivo asignacion);

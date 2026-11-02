@@ -34,6 +34,7 @@ public sealed class RegistrarEgreso(
     IRepositorioHospitalizaciones hospitalizaciones,
     IRepositorioAuditoria auditoria,
     IUnidadDeTrabajo unidadDeTrabajo,
+    IResolutorDispositivos resolutorDispositivos,
     IReloj reloj)
 {
     public async Task<Resultado<EgresoDto>> EjecutarAsync(RegistrarEgresoComando comando, CancellationToken ct = default)
@@ -75,8 +76,16 @@ public sealed class RegistrarEgreso(
             $"Paciente {hospitalizacion.PacienteId}, hospitalización {hospitalizacion.Id}, motivo {motivo}."));
 
         var guardado = await unidadDeTrabajo.GuardarCambiosAsync(ct);
-        return guardado.EsExito
-            ? new EgresoDto(hospitalizacion.PacienteId, hospitalizacion.Id, ahora, motivo.ToString(), dispositivoLiberado)
-            : guardado.Error;
+        if (!guardado.EsExito)
+        {
+            return guardado.Error;
+        }
+
+        if (dispositivoLiberado is not null)
+        {
+            resolutorDispositivos.Invalidar(dispositivoLiberado);
+        }
+
+        return new EgresoDto(hospitalizacion.PacienteId, hospitalizacion.Id, ahora, motivo.ToString(), dispositivoLiberado);
     }
 }

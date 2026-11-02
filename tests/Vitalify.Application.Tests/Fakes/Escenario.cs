@@ -2,6 +2,7 @@ using Vitalify.Application.Camas;
 using Vitalify.Application.Dispositivos;
 using Vitalify.Application.Pacientes;
 using Vitalify.Application.Sesiones;
+using Vitalify.Application.Telemetria;
 using Vitalify.Application.Usuarios;
 using Vitalify.Domain.Camas;
 using Vitalify.Domain.Dispositivos;
@@ -30,6 +31,11 @@ public sealed class Escenario
 
     public Guid EnfermeraId { get; } = Guid.NewGuid();
 
+    public ResolutorDispositivosFalso Resolutor { get; }
+    public HistorialEnMemoria Historial { get; } = new();
+    public SolicitudNuevaLecturaFalsa SolicitudNuevaLectura { get; } = new();
+    public ManejadorLecturaRegistradaFalso Manejador { get; } = new();
+
     public Escenario()
     {
         Camas = new RepositorioCamasEnMemoria(Hospitalizaciones.Ocupada);
@@ -37,6 +43,7 @@ public sealed class Escenario
         Hospitalizaciones.Pacientes = Pacientes;
         Hospitalizaciones.Camas = Camas;
         Hospitalizaciones.Dispositivos = Dispositivos;
+        Resolutor = new ResolutorDispositivosFalso(Hospitalizaciones, Dispositivos);
     }
 
     public RegistrarUsuario RegistrarUsuario() =>
@@ -73,14 +80,27 @@ public sealed class Escenario
         new(new ActualizarDatosPacienteValidador(Reloj), Pacientes, Hospitalizaciones, Auditoria, UnidadDeTrabajo, Reloj);
 
     public VincularDispositivo VincularDispositivo() =>
-        new(Pacientes, Dispositivos, Camas, Hospitalizaciones, Auditoria, UnidadDeTrabajo, Reloj);
+        new(Pacientes, Dispositivos, Camas, Hospitalizaciones, Auditoria, UnidadDeTrabajo, Resolutor, Reloj);
 
-    public LiberarDispositivo LiberarDispositivo() => new(Pacientes, Dispositivos, Hospitalizaciones, Auditoria, UnidadDeTrabajo, Reloj);
+    public LiberarDispositivo LiberarDispositivo() =>
+        new(Pacientes, Dispositivos, Hospitalizaciones, Auditoria, UnidadDeTrabajo, Resolutor, Reloj);
 
     public RegistrarEgreso RegistrarEgreso() =>
-        new(new RegistrarEgresoValidador(), Pacientes, Dispositivos, Hospitalizaciones, Auditoria, UnidadDeTrabajo, Reloj);
+        new(new RegistrarEgresoValidador(), Pacientes, Dispositivos, Hospitalizaciones, Auditoria, UnidadDeTrabajo, Resolutor, Reloj);
 
-    public ListarPacientesMonitoreados ListarPacientesMonitoreados() => new(Hospitalizaciones, Reloj);
+    public ListarPacientesMonitoreados ListarPacientesMonitoreados() => new(Hospitalizaciones, Historial, OpcionesTelemetria.PorDefecto, Reloj);
+
+    public RegistrarLectura RegistrarLectura() =>
+        new(Resolutor, Historial, Historial, Historial, Historial, SolicitudNuevaLectura, [Manejador],
+            Domain.Telemetria.RangosFisiologicos.PorDefecto, OpcionesTelemetria.PorDefecto, Reloj);
+
+    public ObtenerSignosActuales ObtenerSignosActuales() => new(Pacientes, Hospitalizaciones, Historial, OpcionesTelemetria.PorDefecto, Reloj);
+
+    public ListarIncidencias ListarIncidencias() => new(new ListarIncidenciasValidador(), Historial);
+
+    /// <summary>Lectura del contrato con marca de tiempo relativa a la hora actual del reloj falso.</summary>
+    public LecturaTelemetria Lectura(Domain.Telemetria.SignosMedidos signos, string dispositivo = "ESP32-001", int segundos = 0, bool caida = false) =>
+        new(dispositivo, Reloj.AhoraUtc.AddSeconds(segundos), 1, signos, caida, Domain.Telemetria.OrigenLectura.ApiDesarrollo);
 
     public ListarPacientesHospitalizados ListarPacientesHospitalizados() =>
         new(new ListarPacientesHospitalizadosValidador(), Hospitalizaciones, Reloj);

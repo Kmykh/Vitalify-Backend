@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Vitalify.Api.Contratos;
 using Vitalify.Api.Seguridad;
 using Vitalify.Application.Pacientes;
+using Vitalify.Application.Telemetria;
 
 namespace Vitalify.Api.Controllers.V1;
 
@@ -84,7 +85,8 @@ public class PacientesController : ControllerBase
     /// <summary>Pacientes activos en monitoreo continuo, es decir, con un sensor vinculado (HU07).</summary>
     /// <remarks>
     /// <c>ultimoNews2</c>, <c>ultimoMews</c> y <c>nivelRiesgo</c> se completan en la fase 4; por ahora son
-    /// <c>null</c> y <c>sin-datos</c>. Si no hay pacientes, <c>items</c> está vacío y <c>mensaje</c> lo indica.
+    /// <c>null</c> y <c>sin-datos</c>. <c>senal</c> es <c>con-datos</c>, <c>sin-datos</c> o <c>sin-senal</c> (no llega nada
+    /// en el doble de la vigencia). Si no hay pacientes, <c>items</c> está vacío y <c>mensaje</c> lo indica.
     /// </remarks>
     /// <response code="200">Lista de monitoreo (posiblemente vacía).</response>
     [HttpGet("monitoreados")]
@@ -103,6 +105,23 @@ public class PacientesController : ControllerBase
     public async Task<ActionResult<FichaPacienteDto>> Obtener(Guid id, [FromServices] ObtenerPaciente obtener, CancellationToken ct)
     {
         var resultado = await obtener.EjecutarAsync(new ObtenerPacienteConsulta(id, User.IdUsuario() ?? Guid.Empty, HttpContext.Ip()), ct);
+        return resultado.EsExito ? Ok(resultado.Valor) : this.Problema(resultado.Error);
+    }
+
+    /// <summary>Estado actual de los signos vitales del paciente (HU10, HU11 y HU12).</summary>
+    /// <remarks>
+    /// Cada variable trae su último valor válido, cuándo se midió y su estado: <c>vigente</c>,
+    /// <c>pendiente-actualizacion</c> (no llega hace más de la vigencia, 90 s por defecto) o <c>sin-datos</c>.
+    /// </remarks>
+    /// <response code="200">Signos actuales.</response>
+    /// <response code="404">El paciente no existe o no tiene una hospitalización activa.</response>
+    [HttpGet("{id:guid}/signos/actual")]
+    [Authorize(Policy = Politicas.PersonalClinico)]
+    [ProducesResponseType<SignosActualesDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<SignosActualesDto>> SignosActuales(Guid id, [FromServices] ObtenerSignosActuales obtener, CancellationToken ct)
+    {
+        var resultado = await obtener.EjecutarAsync(id, ct);
         return resultado.EsExito ? Ok(resultado.Valor) : this.Problema(resultado.Error);
     }
 

@@ -4,10 +4,12 @@ using Vitalify.Application.Puertos;
 using Vitalify.Application.Sesiones;
 using Vitalify.Infrastructure.Persistence;
 using Vitalify.Infrastructure.Persistence.Historial;
+using Vitalify.Infrastructure.Persistence.Historial.Repositorios;
 using Vitalify.Infrastructure.Persistence.Transaccional;
 using Vitalify.Infrastructure.Persistence.Transaccional.Repositorios;
 using Vitalify.Infrastructure.Seguridad;
 using Vitalify.Infrastructure.Semillas;
+using Vitalify.Infrastructure.Telemetria;
 
 namespace Vitalify.Infrastructure;
 
@@ -17,8 +19,8 @@ public static class DependencyInjection
 
     /// <summary>
     /// Registra los adaptadores de salida: los dos DbContext y sus health checks (<c>transaccional</c> e
-    /// <c>historial</c>), los repositorios, la seguridad (hasher, tokens, reloj) y las semillas (administrador y
-    /// datos de demostración).
+    /// <c>historial</c>), los repositorios, la seguridad (hasher, tokens, reloj), la telemetría y las semillas
+    /// (administrador y datos de demostración).
     /// Falla al arrancar si falta una cadena de conexión o la configuración JWT es inválida.
     /// </summary>
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
@@ -54,6 +56,16 @@ public static class DependencyInjection
         services.AddScoped<IRepositorioPacientes, RepositorioPacientes>();
         services.AddScoped<IRepositorioHospitalizaciones, RepositorioHospitalizaciones>();
         services.AddScoped<IUnidadDeTrabajo, UnidadDeTrabajo>();
+
+        // Telemetría: historial en HistorialDbContext (vitalify_historial), resolución de dispositivos con caché.
+        services.AddSingleton(ConfiguracionTelemetria.CargarOpciones(configuration));
+        services.AddSingleton(ConfiguracionTelemetria.CargarRangos(configuration));
+        services.AddScoped<IRepositorioLecturas, RepositorioLecturas>();
+        services.AddScoped<IRepositorioEstadoSignos, RepositorioEstadoSignos>();
+        services.AddScoped<IRepositorioIncidencias, RepositorioIncidencias>();
+        services.AddScoped<IUnidadDeTrabajoHistorial, UnidadDeTrabajoHistorial>();
+        services.AddScoped<IResolutorDispositivos, ResolutorDispositivosConCache>();
+        services.AddSingleton<ISolicitudNuevaLectura, SolicitudNuevaLecturaEnLog>();
 
         services.AddHostedService<SemillaAdministrador>();
         services.AddHostedService<SemillaDatosDemo>();

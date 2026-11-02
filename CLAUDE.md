@@ -16,7 +16,12 @@ Se usa [Conventional Commits](https://www.conventionalcommits.org/es/) en españ
 
 0 base · 1 usuarios, JWT y RBAC · 2 pacientes y sensores · 3 ingesta simulada · 4 NEWS2/MEWS · 5 alertas · 6 consultas · 7 IoT (Mosquitto, MQTT, ESP32), TimescaleDB y despliegue.
 
-Hechas: fase 1 (HU01 a HU04: registro, login JWT, RBAC y cierre de sesión) y fase 2 (HU05, HU06, HU08 y la base de la HU07: pacientes, camas y sensores). No adelantar trabajo de fases posteriores: telemetría (3), NEWS2/MEWS (4), alertas (5); TimescaleDB, MQTT, SignalR y push llegan en la fase 7.
+Hechas:
+- Fase 1 (HU01 a HU04): registro, login JWT, RBAC y cierre de sesión.
+- Fase 2 (HU05, HU06, HU08 y la base de la HU07): pacientes, camas y sensores.
+- Fase 3 (HU10, HU11 y HU12): ingesta de signos vitales con datos simulados.
+
+No adelantar trabajo de fases posteriores: NEWS2/MEWS (4), alertas (5); TimescaleDB, MQTT, SignalR y push llegan en la fase 7.
 
 ## Comandos
 
@@ -29,8 +34,11 @@ dotnet test tests/Vitalify.Domain.Tests                                # un proy
 dotnet run --project src/Vitalify.Api        # http://localhost:5080/swagger
 docker compose up --build                    # http://localhost:8080
 
+Simulador__Habilitado=true dotnet run --project src/Vitalify.Api   # telemetría simulada (ver docs/contrato-telemetria.md)
+
 dotnet tool restore              # instala dotnet-ef 8 (herramienta local; la global puede ser otra versión)
 dotnet ef database update --context TransaccionalDbContext --project src/Vitalify.Infrastructure --startup-project src/Vitalify.Infrastructure
+dotnet ef database update --context HistorialDbContext --project src/Vitalify.Infrastructure --startup-project src/Vitalify.Infrastructure
 dotnet ef migrations add <Nombre> --context TransaccionalDbContext -o Persistence/Transaccional/Migrations --project src/Vitalify.Infrastructure --startup-project src/Vitalify.Infrastructure
 dotnet ef migrations add <Nombre> --context HistorialDbContext -o Persistence/Historial/Migrations --project src/Vitalify.Infrastructure --startup-project src/Vitalify.Infrastructure
 ```
@@ -61,7 +69,7 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
 | Contexto | Esquema | Cadena | Contenido |
 |---|---|---|---|
 | `TransaccionalDbContext` | `vitalify` | `ConnectionStrings:Transaccional` | usuarios, pacientes, alertas (desde la fase 1) |
-| `HistorialDbContext` | `vitalify_historial` | `ConnectionStrings:Historial` | signos vitales y evaluaciones de riesgo (desde la fase 3) |
+| `HistorialDbContext` | `vitalify_historial` | `ConnectionStrings:Historial` | `lectura_signos`, `estado_signos_actual` e `incidencia_telemetria` (fase 3); evaluaciones de riesgo en la fase 4 |
 
 - Nunca usar el esquema `public`: Supabase lo expone por su API de datos.
 - Cada contexto guarda su `__EFMigrationsHistory` en su propio esquema (`OpcionesNpgsql.Configurar`) y sus migraciones en `Persistence/<Contexto>/Migrations`.
@@ -71,7 +79,10 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
 - Un índice con nombre propio debe llevar `.HasDatabaseName(...)`. `HasIndex(expr, nombre)` solo nombra el índice en el modelo de EF: sin `HasDatabaseName`, la convención le pone el nombre por defecto y choca con otros índices sobre la misma columna.
 - Los filtros de `HasFilter` son SQL literal: se escriben con los nombres de columna en snake_case (`estado = 'Activa'`, `liberado_en IS NULL`).
 - Enums guardados como texto (`HasConversion<string>()`). Ninguna clave foránea borra en cascada los datos clínicos (`Restrict`).
-- **`HistorialDbContext` pasará a TimescaleDB en la fase 7.** Solo cambiará su cadena de conexión y se agregará una migración. Por eso no debe usar nada propio de Supabase y los casos de uso deben acceder al historial por su propio puerto.
+- **`HistorialDbContext` pasará a TimescaleDB en la fase 7.** Solo cambiará su cadena de conexión y se agregará una migración. Por eso no debe usar nada propio de Supabase y los casos de uso deben acceder al historial por sus propios puertos (`IRepositorioLecturas`, `IRepositorioEstadoSignos`, `IRepositorioIncidencias`, `IUnidadDeTrabajoHistorial`).
+  - No hay claves foráneas entre esquemas: el historial guarda `hospitalizacion_id`, `paciente_id` y `codigo_dispositivo` como valores.
+  - `lectura_signos` tiene la clave `(codigo_dispositivo, medido_en)`, que incluye la columna de tiempo, como exige una hypertable.
+  - Migraciones de `HistorialDbContext`: `Inicial` y `Fase3_Telemetria`.
 - `CadenaDeConexion.Obtener` lee la cadena y acepta tanto el formato clave=valor de Npgsql como una URI `postgresql://`, que convierte agregando `SSL Mode=Require`. En ambos formatos usa `Maximum Pool Size=5` si la cadena no lo fija. El pool es pequeño porque el pooler gratuito de Supabase admite pocas conexiones.
 - `FabricasDeDiseno.cs` tiene los `IDesignTimeDbContextFactory` que usa `dotnet ef`. Cargan el `.env` igual que la API.
 - `IUnidadDeTrabajo.GuardarCambiosAsync` traduce cada índice único a su `Conflicto` (tabla `ConflictosPorIndice` en `UnidadDeTrabajo`):
@@ -125,6 +136,30 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
 - **Pendiente de la fase 4:** `ListarPacientesMonitoreados` devuelve `ultimoNews2` y `ultimoMews` en `null` y `nivelRiesgo = "sin-datos"`. Hay un `// TODO fase 4` donde se completan.
 - **Edad:** se guarda la `FechaNacimiento`. Si solo se conoce la edad, se estima el 1 de enero del año correspondiente y se marca `FechaNacimientoEstimada`.
 
+## Telemetría (fase 3)
+
+- **Un único puerto de entrada: `IRegistrarLectura`** (caso de uso `RegistrarLectura`).
+  - Lo llaman el endpoint `POST /api/v1/dev/telemetria` (solo Development, `SoloAdministrador`) y `SimuladorTelemetriaWorker`. En la fase 7 lo llamará el adaptador MQTT.
+  - Los adaptadores viven en `src/Vitalify.Api/Entrada/` y nunca usan Infrastructure ni EF Core (lo verifica una prueba de arquitectura).
+  - El JSON se interpreta con `MensajeTelemetria.Interpretar`, que todos los adaptadores comparten.
+  - `origen` es solo trazabilidad: el núcleo no se comporta distinto según quién envió la lectura.
+- **Contrato del firmware:** `docs/contrato-telemetria.md`. Cambiarlo es cambiar el firmware del ESP32.
+- **Reglas** (en el dominio, puras):
+  - `RangosFisiologicos`: rangos de plausibilidad, no clínicos.
+  - `EvaluadorSignos`: descarte por variable; la presión es un par.
+  - `VentanaDeRecepcion`: hasta 2 min en el futuro y 24 h de retraso.
+  - `EstadoSignosActual.Aplicar`: cada variable solo avanza si su medición es más reciente.
+  - `Vigencia`: `vigente`, `pendiente-actualizacion` o `sin-datos`, y la señal. Se calcula **al leer** con `IReloj`; no hay jobs.
+- **Duplicados:** idempotencia por `(dispositivo, ts)`. Se revisa antes de guardar y, si hay una carrera, la clave primaria lo detecta y la unidad de trabajo lo traduce a `lectura-duplicada`, que el caso de uso devuelve como `Duplicada`.
+- **Concurrencia en el estado:** `estado_signos_actual` usa `xmin` y `RegistrarLectura` reintenta hasta 3 veces si hay conflicto.
+- **Caché del dispositivo:** `IResolutorDispositivos` recuerda durante 15 s a qué hospitalización corresponde cada dispositivo. `VincularDispositivo`, `LiberarDispositivo` y `RegistrarEgreso` llaman a `Invalidar`; si no lo hicieran, tras un re-vínculo las lecturas irían al paciente anterior.
+- **Presión incompleta:** se llama a `ISolicitudNuevaLectura`. Hoy su adaptador solo escribe en el log; en la fase 7 publicará un comando MQTT.
+- **Punto de extensión de la fase 4:** `IManejadorLecturaRegistrada` recibe el evento `LecturaRegistrada` después de guardar. Hoy no hay ninguno registrado; NEWS2/MEWS se engancha ahí, **no dentro de `RegistrarLectura`**.
+- **Configuración:**
+  - `Telemetria__SegundosVigencia` (90), `Telemetria__HorasMaximasRetraso` (24), `Telemetria__MinutosToleranciaFuturo` (2), `Telemetria__SegundosCacheDispositivo` (15) y `Telemetria__Rangos__{Fc|Fr|Spo2|Temperatura|Pas|Pad}__{Minimo|Maximo}`.
+  - Simulador: `Simulador__Habilitado` (**false** por defecto), `Simulador__IntervaloSegundos` (10, mínimo 5 por el límite de 500 MB de Supabase), `Simulador__Semilla`, `Simulador__MinutosDeterioro`, `Simulador__LecturasEntreCaidas` y `Simulador__Escenarios__{codigo}` (`Estable`, `Deterioro`, `Caida` o `SensorDefectuoso`).
+- **Datos personales:** el historial y las incidencias nunca guardan el nombre ni el documento del paciente. Las incidencias son del administrador y los signos, del personal clínico.
+
 ## Pruebas de integración
 
 - `tests/Vitalify.Api.IntegrationTests` usa `WebApplicationFactory` y un PostgreSQL 17 en Testcontainers. `FabricaVitalify` pasa la configuración como variables de entorno y aplica las migraciones antes de arrancar la API.
@@ -132,7 +167,12 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
   - Casi todas las clases comparten un contenedor (colección `api`). Usan correos, códigos y DNI únicos (`ClienteApi.NuevoDni()`) y no dependen del orden.
   - Las pruebas que necesitan partir de una base vacía usan la colección `api-aislada` (`FabricaVitalifyAislada`), que tiene su propio contenedor.
   - Las colecciones no corren en paralelo (`Infraestructura/Ensamblado.cs`), porque la configuración va por variables de entorno del proceso.
-- **Atajos** en `ClienteApi`: `CrearCamaAsync`, `CrearDispositivoAsync`, `IngresarPacienteAsync`, `VincularAsync` y `EgresarAsync`. En `PruebaApi`: `ClienteAdministradorAsync`, `ClienteEnfermeraAsync` y `ClienteMedicoAsync`.
+- **Atajos** en `ClienteApi`: `CrearCamaAsync`, `CrearDispositivoAsync`, `IngresarPacienteAsync`, `VincularAsync`, `EgresarAsync`, `RegistrarTelemetriaAsync` (entra por `/dev/telemetria`), `Ts` y `Ms`. En `PruebaApi`: `ClienteAdministradorAsync`, `ClienteEnfermeraAsync`, `ClienteMedicoAsync` y `PacienteConSensorAsync`.
+- **Fábrica:**
+  - `FabricaVitalify.ConsultarHistorialAsync` lee `HistorialDbContext`.
+  - `SolicitudesNuevaLectura` registra las solicitudes de nueva lectura.
+  - `FabricaVitalifyProduccion` (colección `api-produccion`) arranca en Production, para probar lo que solo existe en Development.
+- **`tests/Vitalify.Api.Tests`:** pruebas unitarias de los adaptadores de entrada (determinismo del simulador; el worker solo llama al puerto).
 - `RelojAjustable` reemplaza a `IReloj`: `using (Fabrica.Reloj.Adelantar(...))` y se restablece al salir del bloque.
 - Cada `CrearCliente()` usa una IP distinta (encabezado `X-Ip-Prueba`), para que el límite de login no se comparta entre pruebas.
 - Hay una prueba por escenario, con el nombre `HUxx_Ey_...`.

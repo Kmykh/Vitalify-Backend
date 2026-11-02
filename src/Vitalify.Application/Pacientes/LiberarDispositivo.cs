@@ -14,6 +14,7 @@ public sealed class LiberarDispositivo(
     IRepositorioHospitalizaciones hospitalizaciones,
     IRepositorioAuditoria auditoria,
     IUnidadDeTrabajo unidadDeTrabajo,
+    IResolutorDispositivos resolutorDispositivos,
     IReloj reloj)
 {
     public async Task<Resultado<Unidad>> EjecutarAsync(LiberarDispositivoComando comando, CancellationToken ct = default)
@@ -42,6 +43,12 @@ public sealed class LiberarDispositivo(
             AccionAuditoria.DispositivoLiberado, ahora, comando.UsuarioId, comando.Ip,
             $"Dispositivo {dispositivo.Id} liberado de la hospitalización {hospitalizacion.Id} (manual)."));
 
-        return await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        var guardado = await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        if (guardado.EsExito)
+        {
+            resolutorDispositivos.Invalidar(dispositivo.Codigo);
+        }
+
+        return guardado;
     }
 }

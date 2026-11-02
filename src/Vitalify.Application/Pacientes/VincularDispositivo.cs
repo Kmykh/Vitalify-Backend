@@ -20,6 +20,7 @@ public sealed class VincularDispositivo(
     IRepositorioHospitalizaciones hospitalizaciones,
     IRepositorioAuditoria auditoria,
     IUnidadDeTrabajo unidadDeTrabajo,
+    IResolutorDispositivos resolutorDispositivos,
     IReloj reloj)
 {
     public async Task<Resultado<VinculacionDto>> EjecutarAsync(VincularDispositivoComando comando, CancellationToken ct = default)
@@ -74,7 +75,13 @@ public sealed class VincularDispositivo(
             $"Dispositivo {dispositivo.Id} vinculado a la hospitalización {hospitalizacion.Id} (paciente {hospitalizacion.PacienteId})."));
 
         var guardado = await unidadDeTrabajo.GuardarCambiosAsync(ct);
-        return guardado.EsExito ? Dto(asignacion, dispositivo, cama.Codigo, hospitalizacion) : guardado.Error;
+        if (!guardado.EsExito)
+        {
+            return guardado.Error;
+        }
+
+        resolutorDispositivos.Invalidar(dispositivo.Codigo);
+        return Dto(asignacion, dispositivo, cama.Codigo, hospitalizacion);
     }
 
     private static VinculacionDto Dto(AsignacionDispositivo asignacion, Dispositivo dispositivo, string cama, Hospitalizacion hospitalizacion) =>

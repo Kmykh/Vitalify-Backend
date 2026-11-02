@@ -100,10 +100,11 @@ public class ReglasDeDependenciaTests
     }
 
     [Fact]
-    public void Los_controladores_solo_usan_casos_de_uso_y_no_la_infraestructura()
+    public void Los_adaptadores_de_entrada_solo_usan_casos_de_uso_y_no_la_infraestructura()
     {
+        // Controladores, endpoint de desarrollo y simulador entran por los puertos de Application.
         var resultado = Types.InAssembly(typeof(Api.AssemblyReference).Assembly)
-            .That().ResideInNamespace("Vitalify.Api.Controllers")
+            .That().ResideInNamespace("Vitalify.Api.Controllers").Or().ResideInNamespace("Vitalify.Api.Entrada")
             .ShouldNot()
             .HaveDependencyOnAny([InfrastructureNs, "Microsoft.EntityFrameworkCore", "Npgsql"])
             .GetResult();
