@@ -23,6 +23,166 @@ namespace Vitalify.Infrastructure.Persistence.Historial.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Vitalify.Domain.Clinica.EvaluacionRiesgo", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Conciencia")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("conciencia");
+
+                    b.Property<string>("EscalaSpo2")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("escala_spo2");
+
+                    b.Property<DateTime>("EvaluadaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("evaluada_en");
+
+                    b.Property<int?>("Fc")
+                        .HasColumnType("integer")
+                        .HasColumnName("fc");
+
+                    b.Property<int?>("Fr")
+                        .HasColumnType("integer")
+                        .HasColumnName("fr");
+
+                    b.Property<Guid>("HospitalizacionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("hospitalizacion_id");
+
+                    b.Property<bool>("MewsCompleto")
+                        .HasColumnType("boolean")
+                        .HasColumnName("mews_completo");
+
+                    b.Property<string>("MewsNivel")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("mews_nivel");
+
+                    b.Property<int>("MewsTotal")
+                        .HasColumnType("integer")
+                        .HasColumnName("mews_total");
+
+                    b.Property<bool>("News2Completo")
+                        .HasColumnType("boolean")
+                        .HasColumnName("news2_completo");
+
+                    b.Property<string>("News2Nivel")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("news2_nivel");
+
+                    b.Property<int>("News2Total")
+                        .HasColumnType("integer")
+                        .HasColumnName("news2_total");
+
+                    b.Property<string>("Origen")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("origen");
+
+                    b.Property<bool?>("OxigenoSuplementario")
+                        .HasColumnType("boolean")
+                        .HasColumnName("oxigeno_suplementario");
+
+                    b.Property<Guid>("PacienteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("paciente_id");
+
+                    b.Property<int?>("Pas")
+                        .HasColumnType("integer")
+                        .HasColumnName("pas");
+
+                    b.Property<int?>("Spo2")
+                        .HasColumnType("integer")
+                        .HasColumnName("spo2");
+
+                    b.Property<decimal?>("Temperatura")
+                        .HasPrecision(4, 1)
+                        .HasColumnType("numeric(4,1)")
+                        .HasColumnName("temperatura");
+
+                    b.HasKey("Id")
+                        .HasName("pk_evaluacion_riesgo");
+
+                    b.HasIndex("HospitalizacionId", "EvaluadaEn")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_evaluacion_riesgo_hospitalizacion_id_evaluada_en");
+
+                    b.ToTable("evaluacion_riesgo", "vitalify_historial");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Clinica.ObservacionEnfermeria", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Conciencia")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("conciencia");
+
+                    b.Property<int?>("Fr")
+                        .HasColumnType("integer")
+                        .HasColumnName("fr");
+
+                    b.Property<Guid>("HospitalizacionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("hospitalizacion_id");
+
+                    b.Property<DateTime>("ObservadaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("observada_en");
+
+                    b.Property<bool?>("OxigenoSuplementario")
+                        .HasColumnType("boolean")
+                        .HasColumnName("oxigeno_suplementario");
+
+                    b.Property<Guid>("PacienteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("paciente_id");
+
+                    b.Property<int?>("Pad")
+                        .HasColumnType("integer")
+                        .HasColumnName("pad");
+
+                    b.Property<int?>("Pas")
+                        .HasColumnType("integer")
+                        .HasColumnName("pas");
+
+                    b.Property<DateTime>("RegistradaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("registrada_en");
+
+                    b.Property<Guid>("RegistradaPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("registrada_por");
+
+                    b.Property<decimal?>("Temperatura")
+                        .HasPrecision(4, 1)
+                        .HasColumnType("numeric(4,1)")
+                        .HasColumnName("temperatura");
+
+                    b.HasKey("Id")
+                        .HasName("pk_observacion_enfermeria");
+
+                    b.HasIndex("HospitalizacionId", "ObservadaEn")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_observacion_enfermeria_hospitalizacion_id_observada_en");
+
+                    b.ToTable("observacion_enfermeria", "vitalify_historial");
+                });
+
             modelBuilder.Entity("Vitalify.Domain.Telemetria.EstadoSignosActual", b =>
                 {
                     b.Property<Guid>("HospitalizacionId")

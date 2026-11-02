@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Extensions.Configuration;
+using Vitalify.Application.Clinica;
 using Vitalify.Application.Telemetria;
 using Vitalify.Domain.Comun;
 using Vitalify.Domain.Telemetria;
@@ -26,6 +27,22 @@ internal static class ConfiguracionTelemetria
                 TimeSpan.FromMinutes((double)Numero(s, "MinutosToleranciaFuturo", 2, minimo: 0)),
                 TimeSpan.FromHours((double)Numero(s, "HorasMaximasRetraso", 24, minimo: 1))),
             TimeSpan.FromSeconds((double)cache));
+    }
+
+    /// <summary>
+    /// Sección <c>Clinico</c>: <c>Clinico__HorasVigenciaObservacion</c> (4) y <c>Clinico__AjusteTemperaturaSensor</c>
+    /// (0, en °C; se suma a la temperatura del wearable antes de puntuar).
+    /// </summary>
+    public static OpcionesClinicas CargarOpcionesClinicas(IConfiguration configuration)
+    {
+        var s = configuration.GetSection("Clinico");
+        var ajuste = Numero(s, "AjusteTemperaturaSensor", 0m);
+        if (Math.Abs(ajuste) > 5m)
+        {
+            throw new InvalidOperationException("Clinico__AjusteTemperaturaSensor debe estar entre -5 y 5 °C.");
+        }
+
+        return new OpcionesClinicas(TimeSpan.FromHours((double)Numero(s, "HorasVigenciaObservacion", 4, minimo: 0.25m)), ajuste);
     }
 
     public static RangosFisiologicos CargarRangos(IConfiguration configuration)

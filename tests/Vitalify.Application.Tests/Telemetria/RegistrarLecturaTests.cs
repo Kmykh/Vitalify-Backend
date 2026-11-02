@@ -176,7 +176,7 @@ public class RegistrarLecturaTests
         var resultado = await Registrar(_e.Lectura(new(Fc: 80)));
 
         Assert.Equal("Aceptada", resultado.Valor.Estado);
-        Assert.Equal(2, _e.Historial.Guardados);
+        Assert.Equal(3, _e.Historial.Guardados); // intento con conflicto, reintento y la evaluación de riesgo
         Assert.Single(_e.Historial.Lecturas);
     }
 

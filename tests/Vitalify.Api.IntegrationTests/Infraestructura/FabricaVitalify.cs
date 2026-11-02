@@ -57,7 +57,14 @@ public class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
             ["RateLimit__LoginIntentosPorMinuto"] = "5",
             ["Simulador__Habilitado"] = "false",
             ["Seed__DatosDemo"] = "false",
+            ["Mqtt__Habilitado"] = "false",
+            ["Clinico__AjusteTemperaturaSensor"] = "0",
         };
+        foreach (var (clave, valor) in await ConfiguracionAdicionalAsync())
+        {
+            configuracion[clave] = valor;
+        }
+
         foreach (var (clave, valor) in configuracion)
         {
             Environment.SetEnvironmentVariable(clave, valor);
@@ -71,7 +78,14 @@ public class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
     {
         await base.DisposeAsync();
         await _postgres.DisposeAsync();
+        await LiberarAdicionalAsync();
     }
+
+    /// <summary>Para las fábricas derivadas: levantar otros contenedores y agregar variables de entorno.</summary>
+    protected virtual Task<IReadOnlyDictionary<string, string>> ConfiguracionAdicionalAsync() =>
+        Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>());
+
+    protected virtual Task LiberarAdicionalAsync() => Task.CompletedTask;
 
     /// <summary>Cliente HTTP con una IP propia, para que el límite de intentos de login no se comparta entre pruebas.</summary>
     public HttpClient CrearCliente(string? ip = null)
