@@ -14,7 +14,7 @@ Se usa [Conventional Commits](https://www.conventionalcommits.org/es/) en españ
 
 ## Fases
 
-0 base · 1 usuarios, JWT y RBAC · 2 pacientes y sensores · 3 ingesta simulada · 4 NEWS2/MEWS con el wearable real · 5 vinculación por QR y toma manual · 6 alertas y consultas del dashboard · 7 TimescaleDB, tiempo real (SignalR, push) y despliegue.
+0 base · 1 usuarios, JWT y RBAC · 2 pacientes y sensores · 3 ingesta simulada · 4 NEWS2/MEWS con el wearable real · 5 vinculación por QR y toma manual · 6 alertas, turnos y notificaciones (SignalR y push) · 7 TimescaleDB y despliegue.
 
 Hechas:
 - Fase 1 (HU01 a HU04): registro, login JWT, RBAC y cierre de sesión.
@@ -23,8 +23,9 @@ Hechas:
 - Fase 4: motor clínico NEWS2/MEWS, adaptado al hardware real. A pedido del usuario se adelantó de la fase 7 el **receptor MQTT**, para que el backend reciba lo que publica el wearable real (proyecto `../IOT/tesis_V01`, repositorio `Kmykh/IoT-Vitalfy`).
 - Fase 5 (HU06 por QR, HU09 en los dos sentidos y HU12 con la toma manual): vinculación del wearable por QR, comandos MQTT al wearable, asistente de toma manual, `proximaTomaManualEn`, avisos y escala de SpO2 por paciente. Ver la sección de la fase 5.
 - Adelantado de la fase 6 a pedido del usuario: `GET /pacientes/{id}/signos/historial?desde=&hasta=` (`ObtenerHistorialSignos`, `IRepositorioLecturas.ListarPorHospitalizacionAsync`). Lee `lectura_signos` de la hospitalización activa, por defecto la última hora y como máximo 24 h, para los gráficos del dashboard React de prueba en `../Web`.
+- Fase 6 (HU15, HU16, HU20, HU21 en el backend y HU23): servicios y turnos, alertas clínicas con escalamiento, SignalR, push por FCM y entrega de turno; además, el rechazo de lecturas anteriores a la vinculación y la vigencia de la toma según NEWS2. Ver la sección de la fase 6.
 
-No adelantar trabajo de fases posteriores: alertas y consultas del dashboard (6); TimescaleDB, SignalR, push y despliegue (7). La preocupación clínica y los avisos de la fase 5 **no** crean alertas. **No usar datos simulados para verificar lo que ya puede verificarse con el wearable real.**
+No adelantar trabajo de la fase 7 (TimescaleDB y despliegue). Los avisos de la fase 5 **no** crean alertas; la preocupación clínica sí (fase 6). **No usar datos simulados para verificar lo que ya puede verificarse con el wearable real.**
 
 ## Comandos
 
@@ -58,9 +59,10 @@ Las migraciones se aplican solo con `dotnet ef database update`. Nunca se aplica
 
 Convenciones de la capa de aplicación:
 - Un caso de uso por clase, con `EjecutarAsync(comando, ct)`. Se inyecta en la acción con `[FromServices]` y se registra en `AddApplication()`.
-- Devuelven `Resultado<T>` con un `Error` tipado (`Validacion`, `Conflicto`, `NoAutorizado`, `NoEncontrado`); no lanzan excepciones en el flujo normal. `Error.Codigo` sale como `type` del ProblemDetails (`ResultadoHttp.Problema`), así que es estable y el cliente lo usa.
+- Devuelven `Resultado<T>` con un `Error` tipado (`Validacion`, `Conflicto`, `NoAutorizado`, `NoEncontrado`, `Prohibido` → 403); no lanzan excepciones en el flujo normal. `Error.Codigo` sale como `type` del ProblemDetails (`ResultadoHttp.Problema`), así que es estable y el cliente lo usa.
 - La validación de entrada es con FluentValidation y mensajes en español; las invariantes del dominio lanzan `ExcepcionDeDominio`.
 - La hora siempre viene de `IReloj`, nunca de `DateTime.UtcNow`.
+- Application no tiene `ILogger`: lo que falla sin cortar el flujo (un manejador, una notificación) va a `IBitacoraFallos`, solo con ids.
 
 `tests/Vitalify.Architecture.Tests` verifica estas reglas con NetArchTest, con las referencias de cada ensamblado y leyendo el `.csproj` de Domain y Application. Si una regla falla, se corrige el diseño, no la prueba. Cada capa tiene una clase `AssemblyReference` que sirve de marcador para esas pruebas.
 
@@ -72,21 +74,21 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
 
 | Contexto | Esquema | Cadena | Contenido |
 |---|---|---|---|
-| `TransaccionalDbContext` | `vitalify` | `ConnectionStrings:Transaccional` | usuarios, pacientes, alertas (desde la fase 1) |
-| `HistorialDbContext` | `vitalify_historial` | `ConnectionStrings:Historial` | `lectura_signos`, `estado_signos_actual` e `incidencia_telemetria` (fase 3); evaluaciones de riesgo en la fase 4 |
+| `TransaccionalDbContext` | `vitalify` | `ConnectionStrings:Transaccional` | usuarios, pacientes, sensores, vinculación, servicios, turnos, alertas y tokens push |
+| `HistorialDbContext` | `vitalify_historial` | `ConnectionStrings:Historial` | `lectura_signos`, `estado_signos_actual` e `incidencia_telemetria` (fase 3); `observacion_enfermeria` y `evaluacion_riesgo` (fases 4 y 5) |
 
 - Nunca usar el esquema `public`: Supabase lo expone por su API de datos.
 - Cada contexto guarda su `__EFMigrationsHistory` en su propio esquema (`OpcionesNpgsql.Configurar`) y sus migraciones en `Persistence/<Contexto>/Migrations`.
 - Las configuraciones de entidades (`IEntityTypeConfiguration`) se aplican por namespace: pon las de cada contexto bajo `Persistence.Transaccional` o `Persistence.Historial`.
 - Tablas y columnas en snake_case mediante `ConvencionSnakeCase` (propia). **No usar EFCore.NamingConventions**: también renombra las columnas de `__EFMigrationsHistory` y rompe la tabla que ya existe en Supabase. Antes de aplicar una migración, revisar el SQL con `dotnet ef migrations script`.
-- Migraciones de `TransaccionalDbContext`: `Inicial` (esquema), `Fase1_UsuariosYSesiones` (`usuario`, `sesion_refresco`, `token_revocado`, `auditoria`), `Fase2_PacientesYSensores` (`cama`, `dispositivo`, `paciente`, `hospitalizacion`, `asignacion_dispositivo`) y `Fase5_VinculacionQr` (`codigo_vinculacion`, `paciente.confusion_basal` y la escala de SpO2 en `hospitalizacion`; `escala_spo2` tiene default `'Escala1'` para las filas existentes).
+- Migraciones de `TransaccionalDbContext`: `Inicial` (esquema), `Fase1_UsuariosYSesiones` (`usuario`, `sesion_refresco`, `token_revocado`, `auditoria`), `Fase2_PacientesYSensores` (`cama`, `dispositivo`, `paciente`, `hospitalizacion`, `asignacion_dispositivo`) `Fase5_VinculacionQr` (`codigo_vinculacion`, `paciente.confusion_basal` y la escala de SpO2 en `hospitalizacion`; `escala_spo2` tiene default `'Escala1'` para las filas existentes), `Fase6_ServiciosYTurnos` (`servicio`, `programacion_turno`, `usuario.servicio_id` y `cama.servicio_id`; el SQL de movimiento de datos está escrito a mano: crea un servicio por cada texto de `cama.servicio` y su `Down` restaura la columna) y `Fase6_Alertas` (`alerta_clinica` y `dispositivo_movil`).
 - Un índice con nombre propio debe llevar `.HasDatabaseName(...)`. `HasIndex(expr, nombre)` solo nombra el índice en el modelo de EF: sin `HasDatabaseName`, la convención le pone el nombre por defecto y choca con otros índices sobre la misma columna.
 - Los filtros de `HasFilter` son SQL literal: se escriben con los nombres de columna en snake_case (`estado = 'Activa'`, `liberado_en IS NULL`).
 - Enums guardados como texto (`HasConversion<string>()`). Ninguna clave foránea borra en cascada los datos clínicos (`Restrict`).
 - **`HistorialDbContext` pasará a TimescaleDB en la fase 7.** Solo cambiará su cadena de conexión y se agregará una migración. Por eso no debe usar nada propio de Supabase y los casos de uso deben acceder al historial por sus propios puertos (`IRepositorioLecturas`, `IRepositorioEstadoSignos`, `IRepositorioIncidencias`, `IUnidadDeTrabajoHistorial`).
   - No hay claves foráneas entre esquemas: el historial guarda `hospitalizacion_id`, `paciente_id` y `codigo_dispositivo` como valores.
   - `lectura_signos` tiene la clave `(codigo_dispositivo, medido_en)`, que incluye la columna de tiempo, como exige una hypertable.
-  - Migraciones de `HistorialDbContext`: `Inicial`, `Fase3_Telemetria`, `Fase4_MotorClinico` (`observacion_enfermeria` y `evaluacion_riesgo`) y `Fase5_TomaManual` (columnas opcionales del asistente; `checklist_pa`, `lecturas_pa` y `contexto` son `jsonb` con `ConversoresJson`).
+  - Migraciones de `HistorialDbContext`: `Inicial`, `Fase3_Telemetria`, `Fase4_MotorClinico` (`observacion_enfermeria` y `evaluacion_riesgo`) `Fase5_TomaManual` (columnas opcionales del asistente; `checklist_pa`, `lecturas_pa` y `contexto` son `jsonb` con `ConversoresJson`) y `Fase6_VigenciaToma` (`observacion_enfermeria.vigente_hasta` y `evaluacion_riesgo.proxima_toma_manual_en`).
 - `CadenaDeConexion.Obtener` lee la cadena y acepta tanto el formato clave=valor de Npgsql como una URI `postgresql://`, que convierte agregando `SSL Mode=Require`. En ambos formatos usa `Maximum Pool Size=5` si la cadena no lo fija. El pool es pequeño porque el pooler gratuito de Supabase admite pocas conexiones.
 - `FabricasDeDiseno.cs` tiene los `IDesignTimeDbContextFactory` que usa `dotnet ef`. Cargan el `.env` igual que la API.
 - `IUnidadDeTrabajo.GuardarCambiosAsync` traduce cada índice único a su `Conflicto` (tabla `ConflictosPorIndice` en `UnidadDeTrabajo`):
@@ -96,6 +98,10 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
   - `ux_asignacion_dispositivo_vigente` → `dispositivo-ya-vinculado`;
   - `ux_asignacion_hospitalizacion_vigente` → `paciente-ya-tiene-dispositivo`;
   - `ux_codigo_vinculacion_activo` → `codigo-vinculacion-concurrente`;
+  - `ux_servicio_codigo` → `servicio-codigo-duplicado`;
+  - `ux_alerta_abierta` → `alerta-abierta-duplicada` (`ServicioAlertas` reintenta una vez y actualiza la que ganó);
+  - `ux_programacion_turno` → `programacion-concurrente`;
+  - `ux_dispositivo_movil_token` → `token-push-concurrente`;
   - además, los códigos únicos de cama, dispositivo y documento del paciente.
 
   Un índice único nuevo debe agregarse ahí. `DbUpdateConcurrencyException` se traduce a `conflicto-concurrencia`: `dispositivo` usa la columna de sistema `xmin` como token de concurrencia.
@@ -104,7 +110,8 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
 
 - **Nunca se escriben contraseñas ni cadenas de conexión en archivos versionados.** Van solo en `.env`, en la raíz, que está en `.gitignore` y `.dockerignore`. No usar `dotnet user-secrets` ni ponerlas en `appsettings*.json`. `.env.example` es la plantilla sin datos reales.
 - `Program.cs` llama a `DotNetEnv.Env.NoClobber().TraversePath().Load()` antes de crear el builder: una variable de entorno ya definida gana sobre el `.env`. Las pruebas de integración dependen de esto para apuntar a su contenedor. Las variables `ConnectionStrings__X` se leen como `ConnectionStrings:X`. En Docker, `docker-compose.yml` pasa el mismo archivo con `env_file`.
-- Variables del `.env`: `ConnectionStrings__Transaccional`, `ConnectionStrings__Historial`, `Jwt__Emisor`, `Jwt__Audiencia`, `Jwt__Clave` (32 o más caracteres; si no, la API no arranca), `Jwt__MinutosAccessToken`, `Jwt__MinutosInactividad`, `Jwt__HorasMaximasSesion`, `Seed__AdminCorreo`, `Seed__AdminNombre`, `Seed__AdminContrasena` y `Seed__DatosDemo` (`true` crea camas `MED-B-01` a `MED-B-06` y sensores `ESP32-001` a `ESP32-004`, solo en Development).
+- Variables del `.env`: `ConnectionStrings__Transaccional`, `ConnectionStrings__Historial`, `Jwt__Emisor`, `Jwt__Audiencia`, `Jwt__Clave` (32 o más caracteres; si no, la API no arranca), `Jwt__MinutosAccessToken`, `Jwt__MinutosInactividad`, `Jwt__HorasMaximasSesion`, `Seed__AdminCorreo`, `Seed__AdminNombre`, `Seed__AdminContrasena` y `Seed__DatosDemo` (`true` crea el servicio `MEDICINA-B`, camas `MED-B-01` a `MED-B-06` y sensores `ESP32-001` a `ESP32-004`, solo en Development). Las de la fase 6 (`Turnos__*`, `Alertas__*`, `Clinico__MinutosToleranciaToma`, `Push__*`) están en `.env.example`.
+- **El JSON de la cuenta de servicio de Firebase nunca va al repositorio**: `Push__RutaCredencialesFirebase` apunta fuera de él y el `.gitignore` excluye `*firebase*.json`, `*-firebase-adminsdk-*.json` y `credenciales/`.
 - Nunca escribir en el log contraseñas, tokens ni valores del `.env`.
 
 ## Autenticación y RBAC (fase 1)
@@ -125,7 +132,7 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
 ## Pacientes, camas y sensores (fase 2)
 
 - **Modelo:**
-  - `Cama` y `Dispositivo` forman el catálogo del administrador.
+  - `Cama` y `Dispositivo` forman el catálogo del administrador. Cada cama pertenece a un `Servicio` (`ServicioId`, fase 6).
   - `Paciente` es la persona. Se identifica por tipo y número de documento y se reutiliza en cada reingreso.
   - `Hospitalizacion` es el episodio. Queda `Activa` o `Finalizada`.
   - `AsignacionDispositivo` guarda qué sensor estuvo con qué hospitalización y cuándo.
@@ -144,7 +151,7 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
 ## Telemetría (fase 3)
 
 - **Un único puerto de entrada: `IRegistrarLectura`** (caso de uso `RegistrarLectura`).
-  - Lo llaman el endpoint `POST /api/v1/dev/telemetria` (solo Development, `SoloAdministrador`) y `SimuladorTelemetriaWorker`. En la fase 7 lo llamará el adaptador MQTT.
+  - Lo llaman el endpoint `POST /api/v1/dev/telemetria` (solo Development, `SoloAdministrador`), `SimuladorTelemetriaWorker` y `ReceptorMqtt`.
   - Los adaptadores viven en `src/Vitalify.Api/Entrada/` y nunca usan Infrastructure ni EF Core (lo verifica una prueba de arquitectura).
   - El JSON se interpreta con `MensajeTelemetria.Interpretar`, que todos los adaptadores comparten.
   - `origen` es solo trazabilidad: el núcleo no se comporta distinto según quién envió la lectura.
@@ -153,13 +160,14 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
   - `RangosFisiologicos`: rangos de plausibilidad, no clínicos.
   - `EvaluadorSignos`: descarte por variable; la presión es un par.
   - `VentanaDeRecepcion`: hasta 2 min en el futuro y 24 h de retraso.
+  - Una lectura con `medidoEn` anterior al `asignado_en` de la vinculación vigente se rechaza con `AnteriorAVinculacion` (fase 6), antes de revisar duplicados. Por eso `PacienteConSensorAsync` vincula 6 h antes en las pruebas.
   - `EstadoSignosActual.Aplicar`: cada variable solo avanza si su medición es más reciente.
   - `Vigencia`: `vigente`, `pendiente-actualizacion` o `sin-datos`, y la señal. Se calcula **al leer** con `IReloj`; no hay jobs.
 - **Duplicados:** idempotencia por `(dispositivo, ts)`. Se revisa antes de guardar y, si hay una carrera, la clave primaria lo detecta y la unidad de trabajo lo traduce a `lectura-duplicada`, que el caso de uso devuelve como `Duplicada`.
 - **Concurrencia en el estado:** `estado_signos_actual` usa `xmin` y `RegistrarLectura` reintenta hasta 3 veces si hay conflicto.
 - **Caché del dispositivo:** `IResolutorDispositivos` recuerda durante 15 s a qué hospitalización corresponde cada dispositivo. `VincularDispositivo`, `LiberarDispositivo` y `RegistrarEgreso` llaman a `Invalidar`; si no lo hicieran, tras un re-vínculo las lecturas irían al paciente anterior.
 - **Presión incompleta:** se llama a `ISolicitudNuevaLectura`, cuyo adaptador (`SolicitudNuevaLecturaPorComando`) publica `repetir-medicion` al wearable.
-- **Punto de extensión de la fase 4:** `IManejadorLecturaRegistrada` recibe el evento `LecturaRegistrada` después de guardar. Hoy no hay ninguno registrado; NEWS2/MEWS se engancha ahí, **no dentro de `RegistrarLectura`**.
+- **Punto de extensión:** `IManejadorLecturaRegistrada` recibe el evento `LecturaRegistrada` después de guardar: `EvaluarRiesgoAlRegistrarLectura` (fase 4), `AlertasAlRegistrarLectura` y `PublicarSignosEnTiempoReal` (fase 6). Todo lo nuevo se engancha ahí, **no dentro de `RegistrarLectura`**, que atrapa el fallo de cada manejador y lo manda a `IBitacoraFallos`.
 - **Configuración:**
   - `Telemetria__SegundosVigencia` (90), `Telemetria__HorasMaximasRetraso` (24), `Telemetria__MinutosToleranciaFuturo` (2), `Telemetria__SegundosCacheDispositivo` (15) y `Telemetria__Rangos__{Fc|Fr|Spo2|Temperatura|Pas|Pad}__{Minimo|Maximo}`.
   - Simulador: `Simulador__Habilitado` (**false** por defecto), `Simulador__IntervaloSegundos` (10, mínimo 5 por el límite de 500 MB de Supabase), `Simulador__Semilla`, `Simulador__MinutosDeterioro`, `Simulador__LecturasEntreCaidas` y `Simulador__Escenarios__{codigo}` (`Estable`, `Deterioro`, `Caida` o `SensorDefectuoso`).
@@ -180,12 +188,11 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
 - **Motor clínico** (`Domain/Clinica`, `Application/Clinica`, `docs/motor-clinico.md`):
   - `CalculadoraNews2` (RCP 2017) y `CalculadoraMews` (Subbe 2001) son tablas puras con pruebas en cada límite.
   - `EvaluarRiesgoAlRegistrarLectura` se engancha a `LecturaRegistrada`; las lecturas atrasadas no evalúan.
-  - `EvaluadorRiesgo` toma por parámetro el valor más reciente entre el wearable (si está vigente) y la última `ObservacionEnfermeria` (dentro de `Clinico__HorasVigenciaObservacion`, 4 h).
+  - `EvaluadorRiesgo` toma por parámetro el valor más reciente entre el wearable (si está vigente) y la última `ObservacionEnfermeria` mientras cuente (`FrecuenciaTomaManual.Cuenta`: hasta su próxima toma más `Clinico__MinutosToleranciaToma`, 30 min, con tope de 12 h; una evaluación posterior que empeora acorta el plazo).
   - Lo que falta suma 0 y queda en `faltantes`, con `completo: false`. **Un puntaje parcial es una cota inferior.**
   - `Clinico__AjusteTemperaturaSensor` (°C, 0 por defecto) corrige la temperatura de piel del DS18B20 antes de puntuar.
   - Las evaluaciones se guardan en `evaluacion_riesgo`; el desglose por parámetro se recalcula al leer.
   - Endpoints: `GET /pacientes/{id}/riesgo` y `POST /pacientes/{id}/observaciones` (`PersonalClinico`).
-  - Las alertas por nivel medio o alto son de la fase 6.
 - **Contrato con el firmware:** `ContratoFirmwareTests` usa los JSON exactos de `IOT/tesis_V01/tesis/pruebas/pruebas.cpp`. Si cambia el firmware, cambia esa prueba.
 
 ## Vinculación por QR y toma manual (fase 5)
@@ -217,6 +224,36 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
   - Cambiarla invalida la caché del resolutor.
 - **Validación:** los errores de campos anidados salen como `presion.lecturas[0].pas` (`Validacion.CamelCase` por segmento).
 
+## Alertas, turnos y notificaciones (fase 6)
+
+- **Doc:** `docs/alertas-y-turnos.md` (disparadores, escalamiento, eventos, push, entrega de turno y cómo probarlo); permisos en `docs/matriz-permisos.md`.
+- **Servicios y turnos** (`Domain/Servicios`, `Domain/Turnos`):
+  - Enfermeras y médicos nuevos llevan `servicioId` obligatorio.
+  - `CatalogoTurnos` convierte (fecha, tipo) en un intervalo UTC `[inicio, fin)` con `Turnos__ZonaHoraria` (America/Lima, con UTC−5 fijo de respaldo). Una nocturna pertenece al día en que empieza.
+  - `PlanillaMensual.Validar` devuelve los errores con claves `dias.{d}`, `dias.{d}.{letra}` y `letras.{letra}`.
+  - `ITurnoVigente` (`TurnoVigenteEnBase`) decide quién está de turno. Si nadie está programado, usa como respaldo las enfermeras activas del servicio (o todas) y escribe una advertencia en el log, solo con el id.
+- **Alertas** (`Domain/Alertas`, `Application/Alertas`):
+  - `AlertaClinica` tiene una alerta abierta por (hospitalización, tipo) (`ux_alerta_abierta`). `Actualizar` devuelve si subió, y la prioridad nunca baja.
+  - Solo `SinSenal` y `TomaPendiente` se cierran solas (`ResolverAutomaticamente`); **no cerrar solas `riesgo`, `caida` ni `preocupacion-clinica`**.
+  - `ServicioAlertas.DispararAsync` es el único que crea o actualiza alertas. `DestinatariosAlertas` decide a quién se avisa y `NotificadorAlertas` envía tiempo real y push y guarda `notificada_a`.
+  - Disparadores:
+    - `RiesgoEvaluado` (evento nuevo, lo publican `EvaluarRiesgoAlRegistrarLectura` y `ServicioObservaciones`) → `AlertaDeRiesgoAlEvaluar` y `PublicarRiesgoEnTiempoReal`;
+    - `LecturaRegistrada` → `AlertasAlRegistrarLectura` (caída y cierre de sin señal) y `PublicarSignosEnTiempoReal` (`LimitadorSignosTiempoReal`, uno cada 5 s por paciente);
+    - `VigilarAlertas` lo corre `VigilanteAlertasWorker` cada `Alertas__SegundosVigilancia` (30; 0 lo apaga) y revisa sin señal, tomas vencidas, escalamiento y cambio de turno.
+  - Un fallo al notificar nunca rompe la ingesta.
+  - `TomarAlerta`, `AtenderAlerta`, `ListarAlertas` y `ListarAlertasPaciente` exigen que el usuario sea del servicio de la alerta (`AccesoServicio`; 403 `usuario-sin-servicio` o `alerta-de-otro-servicio`).
+- **Tiempo real** (`Api/TiempoReal/HubMonitoreo.cs`):
+  - Hub `/hubs/monitoreo`, `PersonalClinico`. `AutenticacionJwt` acepta `access_token` en el query **solo** en esa ruta.
+  - Grupos `servicio:{id}`, `usuario:{id}` y `medicos:{servicioId}`. Los eventos van al grupo del servicio, con `destinatarios` y `motivo` (`nueva`, `subio`, `escalamiento`, `cambio-turno` o `estado`, que no hace sonar).
+  - `ConexionesMonitoreo` registra si cada destinatario estaba conectado.
+  - El puerto es `INotificadorTiempoReal` (Application). Domain y Application no dependen de SignalR ni de FirebaseAdmin (lo verifica `ReglasDeDependencia`).
+- **Push** (`Infrastructure/Notificaciones`):
+  - `NotificadorPushEnLog` por defecto; `NotificadorPushFcm` con `Push__Habilitado=true`.
+  - Los tokens están en `dispositivo_movil` (con un hash único) y se borran si FCM responde `no-registrado`.
+  - Los textos están en `TextosPush`.
+- **Datos personales:** SignalR, push, logs, auditoría y `detalle` de la alerta llevan solo ids, cama y puntajes. Solo `entrega-turno` (REST, personal clínico) trae el nombre.
+- **Auditoría:** `ProgramacionCargada`, `ServicioAsignado`, `AlertaTomada` y `AlertaAtendida`.
+
 ## Pruebas de integración
 
 - `tests/Vitalify.Api.IntegrationTests` usa `WebApplicationFactory` y un PostgreSQL 17 en Testcontainers. `FabricaVitalify` pasa la configuración como variables de entorno y aplica las migraciones antes de arrancar la API.
@@ -231,6 +268,12 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
   - `Fabrica.RenovarCodigosAsync()` corre el worker una vez; en las fábricas está apagado con `Vinculacion__SegundosRenovacion=0`.
   - En `FabricaVitalifyMqtt`, `SuscribirAsync(topico)` se suscribe como el wearable.
   - `escaneo` admite 10 por minuto por usuario: en una misma prueba, usa otra enfermera si escaneas más.
+- **Fase 6:**
+  - `ClienteApi.ServicioDePruebasAsync()` (servicio `PRUEBAS`, compartido), `CrearServicioAsync`, `RegistrarUsuarioAsync(rol, servicioId?)` y `CrearCamaAsync(servicioId?)`.
+  - `PruebaApi.ClienteConRolAsync(rol, servicioId?)`.
+  - `Fabrica.Push` registra cada push (`DeAlerta(id)`); los tokens de `Fabrica.Push.NoRegistrados` responden "no registrado".
+  - `Fabrica.VigilarAlertasAsync()` corre el vigilante una vez; en las fábricas está apagado con `Alertas__SegundosVigilancia=0`.
+  - Para el escalamiento y la falta de señal, adelanta el reloj **después** de iniciar sesión: el JWT se valida con el reloj real.
 - **Atajos** en `ClienteApi`: `CrearCamaAsync`, `CrearDispositivoAsync`, `IngresarPacienteAsync`, `VincularAsync`, `EgresarAsync`, `RegistrarTelemetriaAsync` (entra por `/dev/telemetria`), `Ts` y `Ms`. En `PruebaApi`: `ClienteAdministradorAsync`, `ClienteEnfermeraAsync`, `ClienteMedicoAsync` y `PacienteConSensorAsync`.
 - **Fábrica:**
   - `FabricaVitalify.ConsultarHistorialAsync` lee `HistorialDbContext`.

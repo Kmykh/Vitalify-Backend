@@ -1,6 +1,6 @@
 # Vitalify — Backend
 
-Vitalify es una plataforma IoMT hospitalaria (tesis UPC). Monitorea los signos vitales de pacientes hospitalizados con un wearable ESP32, calcula los puntajes de riesgo NEWS2 y MEWS en el backend y genera alertas para enfermería (app Flutter) y para los médicos (dashboard React).
+Vitalify es una plataforma IoMT hospitalaria (tesis UPC). Monitorea los signos vitales de pacientes hospitalizados con un wearable ESP32, calcula los puntajes de riesgo NEWS2 y MEWS en el backend y genera alertas para enfermería (app Flutter) y para los médicos (dashboard React). Las alertas llegan en tiempo real (SignalR) y por push (FCM) a quien está de turno.
 
 Este repositorio contiene el backend: **ASP.NET Core 8** con **arquitectura hexagonal** y **PostgreSQL en Supabase** (usado solo como base de datos, sin Supabase Auth ni su SDK).
 
@@ -59,7 +59,8 @@ Las cadenas de conexión, la clave JWT y los datos del primer administrador se l
    - Si faltan las variables, no crea nada y escribe una advertencia en el log. No hay valores por defecto.
    - Una vez creado, puedes borrar `Seed__AdminContrasena` del `.env`.
    - Los administradores no se crean por la API: el administrador registra médicos y enfermeras con `POST /api/v1/usuarios`.
-6. Opcional, solo en Development: `Seed__DatosDemo=true` crea al arrancar las camas `MED-B-01` a `MED-B-06` (servicio "Medicina B") y los sensores `ESP32-001` a `ESP32-004` que falten. No crea pacientes.
+6. Opcional, solo en Development: `Seed__DatosDemo=true` crea al arrancar el servicio `MEDICINA-B` ("Medicina B"), las camas `MED-B-01` a `MED-B-06` y los sensores `ESP32-001` a `ESP32-004` que falten. No crea pacientes ni personal.
+7. Opcional: push real por Firebase con `Push__Habilitado=true` y `Push__RutaCredencialesFirebase` (el JSON de la cuenta de servicio va **fuera del repositorio**). Apagado, el push solo se escribe en el log. Ver [`docs/alertas-y-turnos.md`](docs/alertas-y-turnos.md#push-fcm).
 
 ## Aplicar las migraciones
 
@@ -70,9 +71,9 @@ dotnet ef database update --context TransaccionalDbContext --project src/Vitalif
 dotnet ef database update --context HistorialDbContext     --project src/Vitalify.Infrastructure --startup-project src/Vitalify.Infrastructure
 ```
 
-El esquema `vitalify_historial` guarda la telemetría (fase 3): `lectura_signos`, `estado_signos_actual` e `incidencia_telemetria`.
+El esquema `vitalify_historial` guarda la telemetría (fase 3): `lectura_signos`, `estado_signos_actual` e `incidencia_telemetria`; y el motor clínico (fases 4 y 5): `observacion_enfermeria` y `evaluacion_riesgo`.
 
-Después, en el **Table Editor** de Supabase aparecen los esquemas `vitalify` y `vitalify_historial`, cada uno con su tabla `__EFMigrationsHistory`. El esquema `vitalify` tiene además `usuario`, `sesion_refresco`, `token_revocado` y `auditoria` (fase 1) y `cama`, `dispositivo`, `paciente`, `hospitalizacion` y `asignacion_dispositivo` (fase 2).
+Después, en el **Table Editor** de Supabase aparecen los esquemas `vitalify` y `vitalify_historial`, cada uno con su tabla `__EFMigrationsHistory`. El esquema `vitalify` tiene además `usuario`, `sesion_refresco`, `token_revocado` y `auditoria` (fase 1) y `cama`, `dispositivo`, `paciente`, `hospitalizacion` y `asignacion_dispositivo` (fase 2); `codigo_vinculacion` (fase 5); y `servicio`, `programacion_turno`, `alerta_clinica` y `dispositivo_movil` (fase 6).
 
 ## Levantar el proyecto
 
@@ -102,10 +103,18 @@ Usa el mismo `.env` (con `env_file`). La API queda en <http://localhost:8080> (`
 | POST | `/api/v1/auth/refresh` | anónimo | Entrega un nuevo par de tokens y rota el refresh token |
 | POST | `/api/v1/auth/logout` | autenticado | Invalida el access token actual y el refresh token enviado |
 | GET | `/api/v1/auth/yo` | autenticado | Datos del usuario actual |
-| POST | `/api/v1/usuarios` | Administrador | Registra un médico o una enfermera |
+| POST | `/api/v1/usuarios` | Administrador | Registra un médico o una enfermera, con su `servicioId` (obligatorio) |
+| PUT | `/api/v1/usuarios/{id}/servicio` | Administrador | Cambia el servicio de una enfermera o un médico |
 | GET | `/api/v1/usuarios?pagina=1&tamano=20` | Administrador | Lista paginada |
 | GET | `/api/v1/usuarios/{id}` | Administrador | Detalle de un usuario |
-| POST | `/api/v1/camas` | Administrador | Registra una cama (código único, por ejemplo `MED-B-05`) |
+| POST | `/api/v1/servicios` | Administrador | Registra un servicio (`codigo` único, por ejemplo `MEDICINA-B`, y `nombre`) |
+| GET | `/api/v1/servicios` | todos | Servicios del hospital |
+| PUT | `/api/v1/servicios/{id}/programacion/{anio}/{mes}` | Administrador | Carga la planilla del mes (letras y turnos por día); 400 por día y letra si hay cruces |
+| GET | `/api/v1/servicios/{id}/programacion/{anio}/{mes}` | todos | La planilla cargada, con letras y nombres |
+| GET | `/api/v1/servicios/{id}/entrega-turno` | Médico o Enfermera | Reporte de enfermería: pacientes por riesgo, tendencia en el turno, alertas, próxima toma y sensor |
+| GET | `/api/v1/turnos/actual?servicioId=` | Médico o Enfermera | Enfermeras de turno ahora (o el respaldo si no hay programación) |
+| GET | `/api/v1/turnos/mios?desde=&hasta=` | Médico o Enfermera | Turnos propios (máximo 62 días) |
+| POST | `/api/v1/camas` | Administrador | Registra una cama (código único, por ejemplo `MED-B-05`) en un servicio (`servicioId`) |
 | GET | `/api/v1/camas?soloDisponibles=true` | todos | Camas con su ocupación, sin datos del paciente |
 | POST | `/api/v1/dispositivos` | Administrador | Registra un wearable (código `^[A-Z0-9-]{3,32}$`, por ejemplo `ESP32-001`) |
 | PATCH | `/api/v1/dispositivos/{id}/estado` | Administrador | `Mantenimiento`, `DadoDeBaja` o `Disponible` (reactivar) |
@@ -120,7 +129,7 @@ Usa el mismo `.env` (con `env_file`). La API queda en <http://localhost:8080> (`
 | POST | `/api/v1/pacientes/{id}/dispositivo` | Enfermera | Vincula un sensor disponible sin QR (respaldo de la HU06); publica "vinculado" |
 | DELETE | `/api/v1/pacientes/{id}/dispositivo` | Enfermera | Libera el sensor; el wearable recibe "desvinculado" y un QR nuevo |
 | POST | `/api/v1/pacientes/{id}/egreso` | Enfermera | Egreso con motivo; libera el sensor en la misma transacción (HU08) |
-| GET | `/api/v1/pacientes/monitoreados` | Médico o Enfermera | Pacientes con sensor (HU07), con NEWS2, MEWS, nivel de riesgo, `senal` y `conexionSensor` |
+| GET | `/api/v1/pacientes/monitoreados` | Médico o Enfermera | Pacientes con sensor (HU07), con NEWS2, MEWS, nivel de riesgo, `senal`, `conexionSensor` y `alertasAbiertas` |
 | GET | `/api/v1/pacientes/{id}/signos/actual` | Médico o Enfermera | Último valor de cada signo con `vigente`, `pendiente-actualizacion` o `sin-datos` |
 | GET | `/api/v1/pacientes/{id}/signos/historial?desde=&hasta=` | Médico o Enfermera | Lecturas de la hospitalización activa en el rango (por defecto la última hora; máximo 24 h), para los gráficos del dashboard web |
 | GET | `/api/v1/telemetria/incidencias?desde=&hasta=&dispositivo=&tipo=` | Administrador | Log de incidencias técnicas de la telemetría |
@@ -128,12 +137,19 @@ Usa el mismo `.env` (con `env_file`). La API queda en <http://localhost:8080> (`
 | POST | `/api/v1/pacientes/{id}/observaciones` | Médico o Enfermera | Toma manual con el asistente (presión con 1 a 3 lecturas, conciencia ACVPU por respuestas, oxígeno, FR, contexto y preocupación clínica) y recalcula el riesgo |
 | PUT | `/api/v1/pacientes/{id}/escala-spo2` | Médico | Indica la escala de SpO2 (1 o 2) del paciente y recalcula el riesgo |
 | GET | `/api/v1/guias/toma-manual` | Médico o Enfermera | Guía versionada del asistente: preguntas, recomendaciones y fuentes |
+| GET | `/api/v1/alertas?estado=&servicioId=&tipo=&desde=&hasta=&pagina=` | Médico o Enfermera | Alertas de su servicio; por defecto las abiertas, por prioridad y antigüedad |
+| POST | `/api/v1/alertas/{id}/tomar` | Médico o Enfermera | La alerta pasa a `en-atencion` |
+| POST | `/api/v1/alertas/{id}/atender` | Médico o Enfermera | Cierra la alerta con una nota obligatoria (5 a 1000 caracteres) |
+| GET | `/api/v1/pacientes/{id}/alertas` | Médico o Enfermera | Alertas del paciente con los tiempos de respuesta |
+| POST | `/api/v1/notificaciones/dispositivos` | Médico o Enfermera | Registra el token de FCM del celular (`token`, `plataforma`) |
+| DELETE | `/api/v1/notificaciones/dispositivos` | Médico o Enfermera | Quita el token (al cerrar sesión), con el mismo cuerpo |
+| WS | `/hubs/monitoreo` | Médico o Enfermera | Hub de SignalR: `alertaCreada`, `alertaActualizada`, `riesgoActualizado` y `signosActualizados` |
 | POST | `/api/v1/dev/telemetria` | Administrador | **Solo Development:** envía una lectura como el ESP32 |
 | GET | `/api/v1/ping` | anónimo | `{ "servicio": "vitalify-api", "version": "0.1.0", "hora": <UTC> }` |
 | GET | `/health` | anónimo | Estado de las conexiones `transaccional` e `historial` (200 o 503) |
 | GET | `/swagger` | anónimo | Documentación OpenAPI (solo en Development). Botón **Authorize**: pega el `accessToken` |
 
-Los errores salen como ProblemDetails en español. Su `type` identifica el caso: `credenciales-invalidas`, `sesion-expirada`, `correo-en-uso`, `acceso-denegado`, etc. Los permisos de cada rol están en [`docs/matriz-permisos.md`](docs/matriz-permisos.md).
+Los errores salen como ProblemDetails en español. Su `type` identifica el caso: `credenciales-invalidas`, `sesion-expirada`, `correo-en-uso`, `acceso-denegado`, etc. Los permisos de cada rol están en [`docs/matriz-permisos.md`](docs/matriz-permisos.md), y las alertas, los turnos y las notificaciones, en [`docs/alertas-y-turnos.md`](docs/alertas-y-turnos.md).
 
 ### Telemetría con el wearable real (MQTT)
 
@@ -168,8 +184,27 @@ Las lecturas aparecen en `/pacientes/{id}/signos/actual` y el riesgo en `/pacien
   Simulador__Escenarios__ESP32-002=SensorDefectuoso
   ```
 
-  Envía una lectura por cada sensor vinculado a un paciente. Los escenarios son `Estable`, `Deterioro`, `Caida` y `SensorDefectuoso`.
+  Envía una lectura por cada sensor vinculado a un paciente. Los escenarios son `Estable`, `Deterioro`, `Caida`, `SensorDefectuoso` y `DeterioroRapido`.
 - Déjalo en `false` cuando no lo uses: cada lectura ocupa espacio en Supabase.
+
+### Alertas en tiempo real (sin hardware)
+
+1. En el `.env`: `Seed__DatosDemo=true`, `Simulador__Habilitado=true` y `Simulador__Escenarios__ESP32-001=DeterioroRapido` (llega a NEWS2 ≥ 7 en 5 min).
+2. Con el administrador:
+   - busca el id de `MEDICINA-B` en `GET /api/v1/servicios`;
+   - registra enfermeras y un médico con ese `servicioId`;
+   - carga la planilla del mes con `PUT /api/v1/servicios/{id}/programacion/{anio}/{mes}`.
+3. Con la enfermera de turno (`GET /api/v1/turnos/actual?servicioId=`), ingresa un paciente en `MED-B-01` y vincula `ESP32-001`.
+4. Abre el cliente de ejemplo:
+
+   ```bash
+   python3 -m http.server 5500 -d docs/ejemplos
+   # http://localhost:5500/cliente-signalr.html?api=http://localhost:5080&token=<accessToken de la enfermera>
+   ```
+
+5. Verás `alertaCreada` (media) y luego `alertaActualizada` (alta), el push en el log ("Push (solo log)") y, a los 5 min sin tomarla, el escalamiento (`escaladaEn` en `GET /api/v1/alertas`).
+
+El detalle (disparadores, escalamiento, cambio de turno, eventos y push) está en [`docs/alertas-y-turnos.md`](docs/alertas-y-turnos.md).
 
 ### Sesión
 
@@ -204,6 +239,6 @@ El CI (`.github/workflows/ci.yml`) ejecuta restore, build y todas las pruebas, i
 | 2    | Pacientes, camas y sensores                   |
 | 3    | Ingesta simulada de signos vitales            |
 | 4    | Cálculo de NEWS2 y MEWS con el wearable real por MQTT |
-| 5    | Vinculación por QR, comandos al wearable y asistente de toma manual (este estado) |
-| 6    | Alertas y consultas del dashboard             |
-| 7    | TimescaleDB, tiempo real (SignalR, push) y despliegue |
+| 5    | Vinculación por QR, comandos al wearable y asistente de toma manual |
+| 6    | Servicios y turnos, alertas clínicas con escalamiento, SignalR, push (FCM) y entrega de turno (este estado) |
+| 7    | TimescaleDB y despliegue                      |

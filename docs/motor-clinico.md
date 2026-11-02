@@ -29,7 +29,7 @@ El wearable no mide presión, conciencia ni oxígeno. Por eso el motor:
 Por cada parámetro se toma **el valor más reciente** entre dos fuentes:
 
 - **El wearable:** su valor vale mientras esté **vigente**, es decir, si se midió hace `Telemetria__SegundosVigencia` (90 s) o menos. Una FC de hace 5 minutos no se usa.
-- **La última observación:** cada valor vale durante `Clinico__HorasVigenciaObservacion` (4 h).
+- **La última observación:** cada valor vale hasta su [plazo de vigencia](#vigencia-de-la-toma-manual): la próxima toma más `Clinico__MinutosToleranciaToma` (30 min), con un tope de 12 h.
 
 Lo que no esté en ninguna de las dos queda como faltante.
 
@@ -129,7 +129,7 @@ Cada evaluación (en `GET /riesgo` y en la respuesta del POST de observaciones) 
   | Un parámetro en 3 (bajo-medio) o 5–6 | 1 h |
   | 7 o más | 1 h (y monitoreo continuo) |
 
-- **`avisos`:** textos para actuar en el momento, sin alertas. Se calculan al leer, con los valores usados y las tomas vigentes:
+- **`avisos`:** textos para actuar en el momento. No crean alertas (la preocupación clínica sí abre una, ver [alertas-y-turnos.md](alertas-y-turnos.md)). Se calculan al leer, con los valores usados y las tomas vigentes:
   - "PAS ≤ 90 mmHg: confirme con una nueva toma y avise al médico."
   - "PAS ≥ 220 mmHg: confirme con una nueva toma y avise al médico de inmediato."
   - "Preocupación clínica registrada: se notificará al médico."
@@ -138,7 +138,16 @@ Cada evaluación (en `GET /riesgo` y en la respuesta del POST de observaciones) 
 
 `GET /riesgo` agrega además `escalaSpo2` (la vigente) y `ultimoBrazoPa` (para sugerir el mismo brazo en la toma siguiente).
 
-> **Decisión pendiente.** Con NEWS2 0 la próxima toma es a las 12 h, pero cada valor manual cuenta para el puntaje solo durante `Clinico__HorasVigenciaObservacion` (4 h). Entre las 4 y las 12 h el puntaje vuelve a ser parcial aunque la toma esté al día. Hay que decidir si la vigencia de la toma debe seguir al intervalo de NEWS2.
+### Vigencia de la toma manual
+
+Desde la fase 6, la vigencia de un valor manual sigue al intervalo de NEWS2 (antes era un plazo fijo de 4 h, `Clinico__HorasVigenciaObservacion`, que ya no existe):
+
+- Al registrar una toma, su evaluación calcula `proximaTomaManualEn`. La toma vale hasta **esa próxima toma más `Clinico__MinutosToleranciaToma`** (30 min), sin pasar de **12 h** desde `observadaEn`. Se guarda en `observacion_enfermeria.vigente_hasta`, y la próxima toma de cada evaluación, en `evaluacion_riesgo.proxima_toma_manual_en`.
+- **Si el paciente empeora, el plazo se acorta.** Cada evaluación posterior a la toma recalcula `proximaTomaManualEn` con el NEWS2 nuevo. Manda la más reciente: si una lectura del wearable sube el NEWS2 a 5, la toma de las 08:00 que valía hasta las 20:30 pasa a valer hasta las 09:30. Una mejora no alarga el plazo guardado.
+- **Al vencer**, sus parámetros vuelven a `faltantes` y el puntaje es parcial otra vez. El vigilante de alertas abre una alerta `toma-pendiente` (prioridad baja) cuando pasan la próxima toma y la tolerancia; se resuelve sola al registrar la toma siguiente.
+- Las tomas anteriores a la fase 6 no guardaron su plazo: valen 4 h.
+
+Ejemplo: toma a las 08:00 con NEWS2 0 → próxima toma a las 20:00 → los valores cuentan hasta las 20:30. Con NEWS2 3 en la toma → próxima a las 12:00 → cuentan hasta las 12:30.
 
 ### Fuentes
 
@@ -165,4 +174,4 @@ Los enlaces están en la guía (`GET /api/v1/guias/toma-manual`, sección `fuent
 
 En la observación, `conciencia` puede ser un objeto con las respuestas del asistente o, como en la fase 4, un texto (`Alerta`, `ConfusionNueva`, `RespondeVoz`, `RespondeDolor` o `NoResponde`). `observadaEn` puede ser de hasta 4 h atrás.
 
-Las alertas que se disparan por un nivel `medio` o `alto` (y por la preocupación clínica) llegan en la fase 6.
+Las alertas que se disparan por el nivel de riesgo, la caída, la falta de señal, la toma vencida y la preocupación clínica están en [alertas-y-turnos.md](alertas-y-turnos.md).

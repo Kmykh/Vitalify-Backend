@@ -104,8 +104,9 @@ Las reglas se aplican en este orden:
 2. **Dispositivo.** Si el código no está registrado, se registra `DispositivoDesconocido`. Si está registrado pero no vinculado a una hospitalización activa, se registra `DispositivoSinVincular`. En ninguno de los dos casos se guarda la lectura.
    - La resolución dispositivo → hospitalización se guarda en caché durante **15 s** (`Telemetria__SegundosCacheDispositivo`).
    - Vincular, liberar o egresar invalidan esa caché en la misma instancia. Con varias instancias, un vínculo nuevo o liberado tarda como máximo 15 s en reflejarse en las demás.
-3. **Duplicados.** Si ya existe una lectura con el mismo `(dispositivo, ts)`, el resultado es `Duplicada`: no se guarda otra fila ni se registra ninguna incidencia.
-4. **Plausibilidad fisiológica.** Una variable fuera de rango se descarta sola, con la incidencia `FueraDeRango`, y las demás variables válidas de la misma lectura se guardan. Los rangos no son clínicos: sirven para detectar errores del sensor.
+3. **Anterior a la vinculación.** Si `ts` es anterior al momento en que se vinculó el sensor a la hospitalización actual (`asignado_en`), la lectura se rechaza con la incidencia `AnteriorAVinculacion`: no es de este paciente. Pasa, por ejemplo, si el wearable vacía el búfer offline del paciente anterior después de un re-vínculo. Se revisa antes que los duplicados.
+4. **Duplicados.** Si ya existe una lectura con el mismo `(dispositivo, ts)`, el resultado es `Duplicada`: no se guarda otra fila ni se registra ninguna incidencia.
+5. **Plausibilidad fisiológica.** Una variable fuera de rango se descarta sola, con la incidencia `FueraDeRango`, y las demás variables válidas de la misma lectura se guardan. Los rangos no son clínicos: sirven para detectar errores del sensor.
 
    | Variable | Rango válido (por defecto) | Configuración |
    |---|---|---|
@@ -116,19 +117,19 @@ Las reglas se aplican en este orden:
    | PAS | 50 a 260 mmHg | `Telemetria__Rangos__Pas__...` |
    | PAD | 20 a 160 mmHg, y además PAS > PAD | `Telemetria__Rangos__Pad__...` |
 
-5. **Presión.** Es un par. Si falta PAS o PAD, o si PAS ≤ PAD:
+6. **Presión.** Es un par. Si falta PAS o PAD, o si PAS ≤ PAD:
    - se descartan las dos;
    - se registra la incidencia `PresionIncompleta` con `requiere_nueva_lectura = true`;
    - se pide una nueva lectura al sensor por el puerto `ISolicitudNuevaLectura` (ver [Comando de nueva lectura](#comando-de-nueva-lectura)).
 
    Si PAS o PAD está fuera de rango, también se descarta el par, con la incidencia `FueraDeRango`.
-6. **Sin nada válido.** Si no queda ninguna variable válida y no hay `caida`, no se guarda la lectura, solo las incidencias.
-7. **Guardado.** En una transacción se guardan:
+7. **Sin nada válido.** Si no queda ninguna variable válida y no hay `caida`, no se guarda la lectura, solo las incidencias.
+8. **Guardado.** En una transacción se guardan:
    - la lectura, en `vitalify_historial.lectura_signos`;
    - las incidencias;
    - el estado actual del paciente (`estado_signos_actual`), donde cada variable **solo avanza si su medición es más reciente**. Así, una lectura atrasada del búfer queda en el historial, pero no pisa un valor más nuevo.
 
-   Después se publica el evento `LecturaRegistrada`, que la fase 4 usará para calcular NEWS2 y MEWS.
+   Después se publica el evento `LecturaRegistrada`: con él se calculan NEWS2 y MEWS (fase 4) y se disparan las alertas de caída y se cierran las de falta de señal (fase 6, ver [alertas-y-turnos.md](alertas-y-turnos.md)).
 
 ### Resultado
 
@@ -232,5 +233,6 @@ Responde `{ "estado": "Aceptada", "codigoDispositivo": "...", "medidoEn": "...",
 | `Deterioro` | Empeora gradualmente durante `Simulador__MinutosDeterioro` (30) |
 | `Caida` | Estable, con `caida=true` cada `Simulador__LecturasEntreCaidas` (18) lecturas |
 | `SensorDefectuoso` | FC 400 cada 4 lecturas, presión sin diastólica cada 5 y sin temperatura en las lecturas 6 a 17 de cada 24 |
+| `DeterioroRapido` | Como `Deterioro`, pero llega a NEWS2 ≥ 7 en 5 min: sirve para ver una alerta alta y su escalamiento sin hardware |
 
 La semilla (`Simulador__Semilla`) hace que las secuencias sean reproducibles.
