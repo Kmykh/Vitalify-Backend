@@ -1,7 +1,9 @@
 using FluentValidation;
+using Vitalify.Application.Alertas;
 using Vitalify.Application.Comun;
 using Vitalify.Application.Pacientes;
 using Vitalify.Application.Puertos;
+using Vitalify.Domain.Alertas;
 using Vitalify.Domain.Auditoria;
 using Vitalify.Domain.Clinica;
 using Vitalify.Domain.Hospitalizaciones;
@@ -10,13 +12,14 @@ using Vitalify.Domain.Telemetria;
 namespace Vitalify.Application.Clinica;
 
 /// <summary>Arma la evaluación para la respuesta: recomendación, próxima toma manual y avisos.</summary>
-public sealed class PresentadorRiesgo(IRepositorioObservaciones observaciones, OpcionesClinicas opciones)
+public sealed class PresentadorRiesgo(IRepositorioObservaciones observaciones)
 {
     public async Task<EvaluacionRiesgoDto> PresentarAsync(EvaluacionRiesgo evaluacion, CancellationToken ct = default)
     {
-        var recientes = (await observaciones.ListarDesdeAsync(
-                evaluacion.HospitalizacionId, evaluacion.EvaluadaEn - opciones.VigenciaObservaciones, ct))
-            .Where(o => o.RegistradaEn <= evaluacion.EvaluadaEn)
+        // Las tomas que contaban en esa evaluación (las anteriores a la fase 6, sin plazo guardado, valían 4 h).
+        var recientes = (await observaciones.ListarDesdeAsync(evaluacion.HospitalizacionId, evaluacion.EvaluadaEn - FrecuenciaTomaManual.TopeVigencia, ct))
+            .Where(o => o.RegistradaEn <= evaluacion.EvaluadaEn
+                        && (o.VigenteHasta ?? o.ObservadaEn + FrecuenciaTomaManual.VigenciaAnterior) >= evaluacion.EvaluadaEn)
             .ToList();
 
         var ultimaToma = recientes.FirstOrDefault()?.ObservadaEn
@@ -35,6 +38,10 @@ public sealed class ServicioObservaciones(
     EvaluadorRiesgo evaluador,
     IUnidadDeTrabajoHistorial unidadHistorial,
     PresentadorRiesgo presentador,
+    PublicadorRiesgoEvaluado publicador,
+    ServicioAlertas alertas,
+    IBitacoraFallos bitacora,
+    OpcionesClinicas opciones,
     RangosFisiologicos rangos)
 {
     /// <summary>Construye la observación en el dominio (lanza <c>ExcepcionDeDominio</c> si es inválida). No guarda.</summary>
@@ -53,13 +60,37 @@ public sealed class ServicioObservaciones(
         var evaluacion = await evaluador.EvaluarAsync(
             hospitalizacion.Id, hospitalizacion.PacienteId, OrigenEvaluacion.Observacion, hospitalizacion.EscalaSpo2, ct);
 
+        // Los valores de esta toma cuentan hasta la próxima toma calculada en su evaluación, más la tolerancia (tope 12 h).
+        observacion.FijarVigencia(FrecuenciaTomaManual.VigenteHasta(observacion.ObservadaEn, evaluacion.ProximaTomaManualEn!.Value, opciones.ToleranciaToma));
+
         var guardado = await unidadHistorial.GuardarCambiosAsync(ct);
         if (!guardado.EsExito)
         {
             return guardado.Error;
         }
 
+        await publicador.PublicarAsync(evaluacion, ct);
+        await AlertasDeLaTomaAsync(hospitalizacion, observacion, ct);
         return await presentador.PresentarAsync(evaluacion, ct);
+    }
+
+    /// <summary>Llegó la toma: se resuelve la de toma pendiente y, si hay preocupación clínica, se avisa a los médicos.</summary>
+    private async Task AlertasDeLaTomaAsync(Hospitalizacion hospitalizacion, ObservacionEnfermeria observacion, CancellationToken ct)
+    {
+        try
+        {
+            await alertas.ResolverAsync(hospitalizacion.Id, TipoAlerta.TomaPendiente, ct);
+            if (observacion.PreocupacionClinica == true)
+            {
+                await alertas.DispararAsync(new DisparoAlerta(
+                    hospitalizacion.Id, TipoAlerta.PreocupacionClinica, PrioridadAlerta.Media,
+                    Detalle: new Dictionary<string, string> { ["observacionId"] = observacion.Id.ToString() }), ct);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            bitacora.Registrar($"Alertas de la observación {observacion.Id}", ex);
+        }
     }
 }
 
@@ -183,6 +214,7 @@ public sealed class CambiarEscalaSpo2(
     EvaluadorRiesgo evaluador,
     IUnidadDeTrabajoHistorial unidadHistorial,
     ObtenerRiesgoPaciente obtenerRiesgo,
+    PublicadorRiesgoEvaluado publicador,
     IReloj reloj)
 {
     public async Task<Resultado<RiesgoPacienteDto>> EjecutarAsync(CambiarEscalaSpo2Comando comando, CancellationToken ct = default)
@@ -222,12 +254,14 @@ public sealed class CambiarEscalaSpo2(
             resolutorDispositivos.Invalidar(dispositivo.Codigo);
         }
 
-        await evaluador.EvaluarAsync(hospitalizacion.Id, hospitalizacion.PacienteId, OrigenEvaluacion.CambioEscala, escala, ct);
+        var evaluacion = await evaluador.EvaluarAsync(hospitalizacion.Id, hospitalizacion.PacienteId, OrigenEvaluacion.CambioEscala, escala, ct);
         var evaluado = await unidadHistorial.GuardarCambiosAsync(ct);
         if (!evaluado.EsExito)
         {
             return evaluado.Error;
         }
+
+        await publicador.PublicarAsync(evaluacion, ct);
 
         return await obtenerRiesgo.DtoAsync(hospitalizacion, ct);
     }

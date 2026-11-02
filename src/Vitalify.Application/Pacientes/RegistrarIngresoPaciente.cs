@@ -51,6 +51,7 @@ public sealed class RegistrarIngresoPaciente(
     IValidator<RegistrarIngresoPacienteComando> validador,
     IRepositorioPacientes pacientes,
     IRepositorioCamas camas,
+    IRepositorioServicios servicios,
     IRepositorioHospitalizaciones hospitalizaciones,
     IRepositorioAuditoria auditoria,
     IUnidadDeTrabajo unidadDeTrabajo,
@@ -119,15 +120,16 @@ public sealed class RegistrarIngresoPaciente(
             AccionAuditoria.PacienteIngresado, ahora, comando.UsuarioId, comando.Ip,
             $"Paciente {paciente.Id}, hospitalización {hospitalizacion.Id}, cama {cama.Id}."));
 
-        return new IngresoPreparado(paciente, hospitalizacion, cama);
+        var servicio = await servicios.ObtenerPorIdAsync(cama.ServicioId, ct);
+        return new IngresoPreparado(paciente, hospitalizacion, cama, servicio?.Nombre ?? string.Empty);
     }
 }
 
 /// <summary>Ingreso listo para guardar.</summary>
-internal sealed record IngresoPreparado(Paciente Paciente, Hospitalizacion Hospitalizacion, Cama Cama)
+internal sealed record IngresoPreparado(Paciente Paciente, Hospitalizacion Hospitalizacion, Cama Cama, string NombreServicio)
 {
     public HospitalizacionActivaLectura Lectura(Guid? dispositivoId = null, string? codigoDispositivo = null, DateTime? asignadoEn = null) =>
         new(Paciente.Id, Paciente.NombreCompleto, Paciente.TipoDocumento, Paciente.NumeroDocumento, Paciente.FechaNacimiento,
             Paciente.FechaNacimientoEstimada, Hospitalizacion.Id, Hospitalizacion.DiagnosticoIngreso, Hospitalizacion.IngresoEn,
-            Cama.Id, Cama.Codigo, Cama.Servicio, dispositivoId, codigoDispositivo, asignadoEn);
+            Cama.Id, Cama.Codigo, NombreServicio, Cama.ServicioId, dispositivoId, codigoDispositivo, asignadoEn);
 }

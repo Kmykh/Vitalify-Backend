@@ -118,7 +118,7 @@ public sealed class ConfirmarVinculacion(
             return preparado.Error;
         }
 
-        var (paciente, hospitalizacion, cama) = preparado.Valor;
+        var (paciente, hospitalizacion, cama, _) = preparado.Valor;
         if (comando.Paciente.ConfusionBasal is { } confusionBasal)
         {
             paciente.CambiarConfusionBasal(confusionBasal, ahora);

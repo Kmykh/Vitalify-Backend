@@ -17,11 +17,15 @@ public sealed record HospitalizacionActivaLectura(
     Guid CamaId,
     string CodigoCama,
     string Servicio,
+    Guid ServicioId,
     Guid? DispositivoId,
     string? CodigoDispositivo,
     DateTime? DispositivoAsignadoEn);
 
-public sealed record CamaAsignadaDto(Guid Id, string Codigo, string Servicio);
+public sealed record CamaAsignadaDto(Guid Id, string Codigo, string Servicio, Guid ServicioId);
+
+/// <summary>Lo que necesitan las alertas y los eventos de una hospitalización: sin nombre ni documento del paciente.</summary>
+public sealed record ContextoHospitalizacion(Guid HospitalizacionId, Guid PacienteId, Guid ServicioId, string CodigoCama, bool Activa);
 
 public sealed record DispositivoVinculadoDto(Guid Id, string Codigo, DateTime AsignadoEn);
 
@@ -45,7 +49,7 @@ public sealed record FichaPacienteDto(
             paciente.FechaNacimiento, paciente.FechaNacimientoEstimada, paciente.Edad(hoy), paciente.ConfusionBasal,
             lectura is null ? null : new HospitalizacionActivaDto(
                 lectura.HospitalizacionId, lectura.DiagnosticoIngreso, lectura.IngresoEn,
-                new CamaAsignadaDto(lectura.CamaId, lectura.CodigoCama, lectura.Servicio),
+                new CamaAsignadaDto(lectura.CamaId, lectura.CodigoCama, lectura.Servicio, lectura.ServicioId),
                 lectura.DispositivoId is { } dispositivoId
                     ? new DispositivoVinculadoDto(dispositivoId, lectura.CodigoDispositivo!, lectura.DispositivoAsignadoEn!.Value)
                     : null));
@@ -65,10 +69,13 @@ public sealed record PacienteHospitalizadoDto(
 /// <param name="EvaluacionCompleta">false si faltaron parámetros (el puntaje es parcial); null sin evaluación.</param>
 /// <param name="Senal"><c>con-datos</c>, <c>sin-datos</c> (nunca llegó una lectura) o <c>sin-senal</c> (nada en 2 × la vigencia).</param>
 /// <param name="ConexionSensor"><c>en-linea</c>, <c>fuera-de-linea</c> o <c>desconocida</c> (tópico MQTT de estado).</param>
+/// <param name="AlertasAbiertas">Cantidad de alertas pendientes o en atención y la prioridad más alta (null si no hay).</param>
 public sealed record PacienteMonitoreadoDto(
     Guid PacienteId, string NombreCompleto, int Edad, string Cama, string Servicio, string CodigoDispositivo,
     DateTime IngresoEn, int? UltimoNews2, int? UltimoMews, string NivelRiesgo, bool? EvaluacionCompleta,
-    DateTime? UltimaLecturaEn, string Senal, string ConexionSensor);
+    DateTime? UltimaLecturaEn, string Senal, string ConexionSensor, AlertasAbiertasDto AlertasAbiertas);
+
+public sealed record AlertasAbiertasDto(int Cantidad, string? PrioridadMaxima);
 
 public sealed record PacientesMonitoreadosDto(IReadOnlyList<PacienteMonitoreadoDto> Items, string? Mensaje);
 

@@ -1,11 +1,15 @@
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
+using Vitalify.Application.Alertas;
 using Vitalify.Application.Camas;
 using Vitalify.Application.Clinica;
 using Vitalify.Application.Dispositivos;
+using Vitalify.Application.Notificaciones;
 using Vitalify.Application.Pacientes;
+using Vitalify.Application.Servicios;
 using Vitalify.Application.Sesiones;
 using Vitalify.Application.Telemetria;
+using Vitalify.Application.Turnos;
 using Vitalify.Application.Usuarios;
 using Vitalify.Application.Vinculacion;
 
@@ -87,6 +91,39 @@ public static class DependencyInjection
         services.AddScoped<EscanearQr>();
         services.AddScoped<ConfirmarVinculacion>();
         services.AddScoped<RenovarCodigosVinculacion>();
+
+        // Servicios, turnos de enfermería y entrega de turno (fase 6).
+        services.AddSingleton<IValidator<RegistrarServicioComando>, RegistrarServicioValidador>();
+        services.AddScoped<RegistrarServicio>();
+        services.AddScoped<ListarServicios>();
+        services.AddScoped<AsignarServicio>();
+        services.AddScoped<ObtenerProgramacion>();
+        services.AddScoped<CargarProgramacion>();
+        services.AddScoped<ObtenerTurnoActual>();
+        services.AddScoped<ListarMisTurnos>();
+        services.AddScoped<ObtenerEntregaTurno>();
+
+        // Alertas clínicas y notificaciones (fase 6). Los manejadores se enganchan a LecturaRegistrada y RiesgoEvaluado.
+        services.AddSingleton<IValidator<ListarAlertasConsulta>, ListarAlertasValidador>();
+        services.AddSingleton<IValidator<AtenderAlertaComando>, AtenderAlertaValidador>();
+        services.AddSingleton<LimitadorSignosTiempoReal>();
+        services.AddScoped<ContextoHospitalizaciones>();
+        services.AddScoped<AccesoServicio>();
+        services.AddScoped<DestinatariosAlertas>();
+        services.AddScoped<NotificadorAlertas>();
+        services.AddScoped<ServicioAlertas>();
+        services.AddScoped<PublicadorRiesgoEvaluado>();
+        services.AddScoped<IManejadorRiesgoEvaluado, AlertaDeRiesgoAlEvaluar>();
+        services.AddScoped<IManejadorRiesgoEvaluado, PublicarRiesgoEnTiempoReal>();
+        services.AddScoped<IManejadorLecturaRegistrada, AlertasAlRegistrarLectura>();
+        services.AddScoped<IManejadorLecturaRegistrada, PublicarSignosEnTiempoReal>();
+        services.AddScoped<VigilarAlertas>();
+        services.AddScoped<TomarAlerta>();
+        services.AddScoped<AtenderAlerta>();
+        services.AddScoped<ListarAlertas>();
+        services.AddScoped<ListarAlertasPaciente>();
+        services.AddScoped<RegistrarDispositivoMovil>();
+        services.AddScoped<QuitarDispositivoMovil>();
 
         return services;
     }

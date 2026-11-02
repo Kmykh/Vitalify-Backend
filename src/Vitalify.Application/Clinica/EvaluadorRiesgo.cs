@@ -1,3 +1,4 @@
+using Vitalify.Application.Alertas;
 using Vitalify.Application.Puertos;
 using Vitalify.Application.Telemetria;
 using Vitalify.Domain.Clinica;
@@ -10,10 +11,12 @@ namespace Vitalify.Application.Clinica;
 /// más reciente entre:
 /// <list type="bullet">
 /// <item>el del wearable, si está vigente (no más antiguo que la vigencia de la telemetría, 90 s por defecto);</item>
-/// <item>el de la última observación del personal clínico dentro de <see cref="OpcionesClinicas.VigenciaObservaciones"/>.</item>
+/// <item>el de la última toma manual que todavía cuenta: vale hasta su próxima toma más la tolerancia (con un tope de
+/// 12 h), y si una evaluación posterior acortó el plazo porque el paciente empeoró, hasta ese plazo.</item>
 /// </list>
-/// Lo que no está en ninguna de las dos fuentes queda como faltante y el puntaje se marca parcial. No guarda: el
-/// llamador confirma con <see cref="IUnidadDeTrabajoHistorial"/>.
+/// Lo que no está en ninguna de las dos fuentes queda como faltante y el puntaje se marca parcial. Cada evaluación
+/// guarda su <see cref="EvaluacionRiesgo.ProximaTomaManualEn"/>. No guarda: el llamador confirma con
+/// <see cref="IUnidadDeTrabajoHistorial"/> y publica <c>RiesgoEvaluado</c>.
 /// </summary>
 public sealed class EvaluadorRiesgo(
     IRepositorioEstadoSignos estados,
@@ -29,9 +32,20 @@ public sealed class EvaluadorRiesgo(
     {
         var ahora = reloj.AhoraUtc;
         var estado = await estados.ObtenerAsync(hospitalizacionId, ct);
-        var manuales = await observaciones.ListarDesdeAsync(hospitalizacionId, ahora - opcionesClinicas.VigenciaObservaciones, ct);
+        var anterior = await evaluaciones.ObtenerUltimaAsync(hospitalizacionId, ct);
+        var tomas = await observaciones.ListarDesdeAsync(
+            hospitalizacionId, ahora - FrecuenciaTomaManual.TopeVigencia - opcionesClinicas.ToleranciaToma, ct);
+        var vigentes = tomas.Where(o => FrecuenciaTomaManual.Cuenta(o, ahora, anterior, opcionesClinicas.ToleranciaToma)).ToList();
 
-        var evaluacion = EvaluacionRiesgo.Calcular(hospitalizacionId, pacienteId, ahora, origen, Combinar(estado, manuales, ahora), escala);
+        var evaluacion = EvaluacionRiesgo.Calcular(hospitalizacionId, pacienteId, ahora, origen, Combinar(estado, vigentes, ahora), escala);
+
+        // El plazo sale de la última toma (aunque ya no cuente) y del NEWS2 de ahora: si empeora, se acorta. Sin ninguna
+        // toma, el plazo queda fijo desde la primera evaluación (si avanzara con cada lectura, nunca vencería).
+        var ultimaToma = tomas.FirstOrDefault()?.ObservadaEn ?? (await observaciones.ObtenerUltimaTomaAsync(hospitalizacionId, ct))?.ObservadaEn;
+        evaluacion.FijarProximaTomaManual(ultimaToma is { } toma
+            ? FrecuenciaTomaManual.Proxima(toma, ahora, evaluacion.News2())
+            : anterior?.ProximaTomaManualEn ?? ahora);
+
         evaluaciones.Agregar(evaluacion);
         return evaluacion;
     }
@@ -75,7 +89,8 @@ public sealed class EvaluadorRiesgo(
 /// disparan, para que una ráfaga de reenvíos no genere cientos de evaluaciones.
 /// </summary>
 public sealed class EvaluarRiesgoAlRegistrarLectura(
-    EvaluadorRiesgo evaluador, IRepositorioEstadoSignos estados, IUnidadDeTrabajoHistorial unidadDeTrabajo) : IManejadorLecturaRegistrada
+    EvaluadorRiesgo evaluador, IRepositorioEstadoSignos estados, IUnidadDeTrabajoHistorial unidadDeTrabajo, PublicadorRiesgoEvaluado publicador)
+    : IManejadorLecturaRegistrada
 {
     public async Task ManejarAsync(LecturaRegistrada lectura, CancellationToken ct = default)
     {
@@ -85,7 +100,10 @@ public sealed class EvaluarRiesgoAlRegistrarLectura(
             return;
         }
 
-        await evaluador.EvaluarAsync(lectura.HospitalizacionId, lectura.PacienteId, OrigenEvaluacion.Lectura, lectura.EscalaSpo2, ct);
-        await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        var evaluacion = await evaluador.EvaluarAsync(lectura.HospitalizacionId, lectura.PacienteId, OrigenEvaluacion.Lectura, lectura.EscalaSpo2, ct);
+        if ((await unidadDeTrabajo.GuardarCambiosAsync(ct)).EsExito)
+        {
+            await publicador.PublicarAsync(evaluacion, ct);
+        }
     }
 }

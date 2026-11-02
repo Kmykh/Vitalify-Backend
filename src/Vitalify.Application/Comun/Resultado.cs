@@ -6,6 +6,9 @@ public enum TipoError
     Conflicto,
     NoAutorizado,
     NoEncontrado,
+
+    /// <summary>Autenticado y con el rol correcto, pero sin acceso a ese recurso (por ejemplo, de otro servicio): 403.</summary>
+    Prohibido,
 }
 
 /// <summary>
@@ -25,6 +28,8 @@ public sealed record Error(TipoError Tipo, string Codigo, string Mensaje)
     public static Error NoAutorizado(string codigo, string mensaje) => new(TipoError.NoAutorizado, codigo, mensaje);
 
     public static Error NoEncontrado(string codigo, string mensaje) => new(TipoError.NoEncontrado, codigo, mensaje);
+
+    public static Error Prohibido(string codigo, string mensaje) => new(TipoError.Prohibido, codigo, mensaje);
 }
 
 /// <summary>Valor vacío para los casos de uso que no devuelven nada.</summary>

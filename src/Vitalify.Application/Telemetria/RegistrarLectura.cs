@@ -29,6 +29,7 @@ public sealed class RegistrarLectura(
     IEnumerable<IManejadorLecturaRegistrada> manejadores,
     RangosFisiologicos rangos,
     OpcionesTelemetria opciones,
+    IBitacoraFallos bitacora,
     IReloj reloj) : IRegistrarLectura
 {
     private const int IntentosMaximos = 3;
@@ -50,6 +51,15 @@ public sealed class RegistrarLectura(
                 ? (TipoIncidencia.DispositivoDesconocido, $"El dispositivo {codigo} no está registrado.")
                 : (TipoIncidencia.DispositivoSinVincular, $"El dispositivo {codigo} no está vinculado a una hospitalización activa.");
             return await RechazarAsync(lectura, [IncidenciaTelemetria.Registrar(ahora, codigo, null, tipo, detalle)], ct);
+        }
+
+        // Lo medido antes de la vinculación vigente no es de este paciente (por ejemplo, el búfer offline del anterior).
+        if (lectura.MedidoEn < hospitalizacion.AsignadoEn)
+        {
+            return await RechazarAsync(lectura, [IncidenciaTelemetria.Registrar(
+                ahora, codigo, hospitalizacion.HospitalizacionId, TipoIncidencia.AnteriorAVinculacion,
+                FormattableString.Invariant($"Medida el {lectura.MedidoEn:O}, antes de la vinculación vigente ({hospitalizacion.AsignadoEn:O}).")
+            )], ct);
         }
 
         if (await lecturas.ExisteAsync(codigo, lectura.MedidoEn, ct))
@@ -111,7 +121,15 @@ public sealed class RegistrarLectura(
             hospitalizacion.EscalaSpo2);
         foreach (var manejador in manejadores)
         {
-            await manejador.ManejarAsync(evento, ct);
+            // La lectura ya está guardada: un manejador que falla (alertas, notificaciones) no la rechaza.
+            try
+            {
+                await manejador.ManejarAsync(evento, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                bitacora.Registrar($"{manejador.GetType().Name} de la lectura de {codigo} ({lectura.MedidoEn:O})", ex);
+            }
         }
 
         var estadoIngesta = incidenciasLectura.Count == 0 ? EstadoIngesta.Aceptada : EstadoIngesta.AceptadaParcial;

@@ -25,6 +25,12 @@ public interface IRepositorioHospitalizaciones
 
     Task<HospitalizacionActivaLectura?> ObtenerLecturaActivaAsync(Guid pacienteId, CancellationToken ct = default);
 
+    /// <summary>Paciente, servicio y cama de una hospitalización (para las alertas y los eventos), o null.</summary>
+    Task<ContextoHospitalizacion?> ObtenerContextoAsync(Guid hospitalizacionId, CancellationToken ct = default);
+
+    /// <summary>Hospitalizaciones activas (con o sin sensor); con <paramref name="servicioId"/>, solo las de ese servicio.</summary>
+    Task<IReadOnlyList<HospitalizacionActivaLectura>> ListarActivasDeServicioAsync(Guid? servicioId, CancellationToken ct = default);
+
     Task<Pagina<HospitalizacionActivaLectura>> ListarActivasAsync(int pagina, int tamano, string? buscar, CancellationToken ct = default);
 
     Task<IReadOnlyList<HospitalizacionActivaLectura>> ListarActivasConDispositivoAsync(CancellationToken ct = default);
