@@ -42,6 +42,27 @@ public sealed class FabricaVitalifyMqtt : FabricaVitalify
         await cliente.DisconnectAsync();
     }
 
+    /// <summary>Se suscribe como lo haría el wearable y guarda lo que recibe (tópico, texto y si llegó como retenido).</summary>
+    public async Task<SuscripcionPrueba> SuscribirAsync(string topico)
+    {
+        var cliente = new MqttFactory().CreateMqttClient();
+        var suscripcion = new SuscripcionPrueba(cliente);
+        cliente.ApplicationMessageReceivedAsync += e =>
+        {
+            suscripcion.Mensajes.Enqueue(new MensajeRecibido(
+                e.ApplicationMessage.Topic, Encoding.UTF8.GetString(e.ApplicationMessage.PayloadSegment), e.ApplicationMessage.Retain));
+            return Task.CompletedTask;
+        };
+        await cliente.ConnectAsync(new MqttClientOptionsBuilder()
+            .WithTcpServer(HostBroker, PuertoBroker)
+            .WithClientId($"pantalla-{Guid.NewGuid():N}")
+            .Build());
+        await cliente.SubscribeAsync(new MqttFactory().CreateSubscribeOptionsBuilder()
+            .WithTopicFilter(t => t.WithTopic(topico).WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce))
+            .Build());
+        return suscripcion;
+    }
+
     /// <summary>Espera hasta que la condición se cumpla (la ingesta por MQTT es asíncrona).</summary>
     public static async Task EsperarAsync(Func<Task<bool>> condicion, string descripcion, int segundos = 15)
     {
@@ -74,6 +95,24 @@ public sealed class FabricaVitalifyMqtt : FabricaVitalify
     }
 
     protected override async Task LiberarAdicionalAsync() => await _mosquitto.DisposeAsync();
+}
+
+public sealed record MensajeRecibido(string Topico, string Payload, bool Retenido);
+
+/// <summary>Cliente MQTT de prueba suscrito a un tópico.</summary>
+public sealed class SuscripcionPrueba(IMqttClient cliente) : IAsyncDisposable
+{
+    public System.Collections.Concurrent.ConcurrentQueue<MensajeRecibido> Mensajes { get; } = new();
+
+    public async ValueTask DisposeAsync()
+    {
+        if (cliente.IsConnected)
+        {
+            await cliente.DisconnectAsync();
+        }
+
+        cliente.Dispose();
+    }
 }
 
 [CollectionDefinition(Nombre)]

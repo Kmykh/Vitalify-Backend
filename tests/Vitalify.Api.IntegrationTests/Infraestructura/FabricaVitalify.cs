@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Testcontainers.PostgreSql;
 using Vitalify.Application.Puertos;
+using Vitalify.Application.Vinculacion;
 using Vitalify.Infrastructure.Persistence;
 using Vitalify.Infrastructure.Persistence.Historial;
 using Vitalify.Infrastructure.Persistence.Transaccional;
@@ -30,8 +31,11 @@ public class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
 
     public RelojAjustable Reloj { get; } = new();
 
-    /// <summary>Solicitudes de nueva lectura que recibió el puerto <see cref="ISolicitudNuevaLectura"/>.</summary>
-    public SolicitudesRegistradas SolicitudesNuevaLectura { get; } = new();
+    /// <summary>
+    /// Comandos que el backend publicó al wearable (tópico, JSON y si va retenido). Envuelve al adaptador real: en las
+    /// fábricas sin MQTT solo los registra; en <see cref="FabricaVitalifyMqtt"/>, además los publica en el broker.
+    /// </summary>
+    public ComandosRegistrados Comandos { get; } = new();
 
     /// <summary>Entorno de ASP.NET Core con el que arranca la API.</summary>
     protected virtual string Entorno => "Development";
@@ -59,6 +63,7 @@ public class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
             ["Seed__DatosDemo"] = "false",
             ["Mqtt__Habilitado"] = "false",
             ["Clinico__AjusteTemperaturaSensor"] = "0",
+            ["Vinculacion__SegundosRenovacion"] = "0", // el worker de renovación se prueba llamando al caso de uso
         };
         foreach (var (clave, valor) in await ConfiguracionAdicionalAsync())
         {
@@ -108,6 +113,20 @@ public class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
         return await consulta(scope.ServiceProvider.GetRequiredService<HistorialDbContext>());
     }
 
+    /// <summary>Lo que hace el receptor MQTT cuando llega <c>online</c>/<c>offline</c> en <c>device/{codigo}/estado</c>.</summary>
+    public async Task SimularEstadoAsync(string codigoDispositivo, string estado = "online")
+    {
+        await using var scope = Services.CreateAsyncScope();
+        Assert.True(await scope.ServiceProvider.GetRequiredService<RegistrarPresenciaDispositivo>().EjecutarAsync(codigoDispositivo, estado));
+    }
+
+    /// <summary>Corre una vez lo que hace el worker de renovación de códigos.</summary>
+    public async Task<int> RenovarCodigosAsync()
+    {
+        await using var scope = Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<RenovarCodigosVinculacion>().EjecutarAsync();
+    }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment(Entorno);
@@ -115,8 +134,15 @@ public class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
         {
             services.RemoveAll<IReloj>();
             services.AddSingleton<IReloj>(Reloj);
-            services.RemoveAll<ISolicitudNuevaLectura>();
-            services.AddSingleton<ISolicitudNuevaLectura>(SolicitudesNuevaLectura);
+
+            var publicador = services.Last(d => d.ServiceType == typeof(IPublicadorComandosDispositivo));
+            services.RemoveAll<IPublicadorComandosDispositivo>();
+            services.AddSingleton<IPublicadorComandosDispositivo>(sp =>
+            {
+                Comandos.Interno = (IPublicadorComandosDispositivo)ActivatorUtilities.CreateInstance(sp, publicador.ImplementationType!);
+                return Comandos;
+            });
+
             services.AddSingleton<IStartupFilter, FiltroIpDePrueba>();
         });
     }
@@ -178,15 +204,30 @@ public sealed class ColeccionApiProduccion : ICollectionFixture<FabricaVitalifyP
     public const string Nombre = "api-produccion";
 }
 
-public sealed class SolicitudesRegistradas : ISolicitudNuevaLectura
+public sealed record ComandoRegistrado(string Dispositivo, string Topico, ComandoDispositivo Comando, string Json, bool Retenido);
+
+/// <summary>Registra cada comando al wearable (con el tópico y el JSON del contrato) y lo pasa al adaptador real.</summary>
+public sealed class ComandosRegistrados : IPublicadorComandosDispositivo
 {
-    private readonly System.Collections.Concurrent.ConcurrentQueue<SolicitudNuevaLectura> _solicitudes = new();
+    private readonly System.Collections.Concurrent.ConcurrentQueue<ComandoRegistrado> _comandos = new();
 
-    public IReadOnlyCollection<SolicitudNuevaLectura> Todas => _solicitudes;
+    internal IPublicadorComandosDispositivo? Interno { get; set; }
 
-    public Task SolicitarAsync(SolicitudNuevaLectura solicitud, CancellationToken ct = default)
+    /// <summary>Comandos al dispositivo, en el orden en que se publicaron.</summary>
+    public IReadOnlyList<ComandoRegistrado> De(string dispositivo) => _comandos.Where(c => c.Dispositivo == dispositivo).ToList();
+
+    public IReadOnlyList<string> AccionesDe(string dispositivo) => De(dispositivo).Select(c => c.Comando.Accion).ToList();
+
+    /// <summary>Lo que dibujaría la OLED: el contenido del último <c>mostrar-qr</c>.</summary>
+    public string UltimoQr(string dispositivo) => De(dispositivo).Select(c => c.Comando).OfType<MostrarQr>().Last().Qr;
+
+    public async Task PublicarAsync(string codigoDispositivo, ComandoDispositivo comando, bool retenido, CancellationToken ct = default)
     {
-        _solicitudes.Enqueue(solicitud);
-        return Task.CompletedTask;
+        _comandos.Enqueue(new ComandoRegistrado(
+            codigoDispositivo, ContratoComandos.Topico(codigoDispositivo), comando, ContratoComandos.SerializarTexto(comando), retenido));
+        if (Interno is not null)
+        {
+            await Interno.PublicarAsync(codigoDispositivo, comando, retenido, ct);
+        }
     }
 }

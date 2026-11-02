@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Vitalify.Api.Contratos;
 using Vitalify.Api.IntegrationTests.Infraestructura;
+using Vitalify.Application.Vinculacion;
 using Vitalify.Application.Telemetria;
 using Vitalify.Domain.Telemetria;
 using static Vitalify.Api.IntegrationTests.Infraestructura.ClienteApi;
@@ -116,7 +117,10 @@ public class HU12CapturaPresionTests(FabricaVitalify fabrica) : PruebaApi(fabric
         Assert.Equal("AceptadaParcial", resultado.Estado);
         var incidencia = Assert.Single(resultado.Incidencias);
         Assert.Equal(("PresionIncompleta", true), (incidencia.Tipo, incidencia.RequiereNuevaLectura));
-        Assert.Contains(Fabrica.SolicitudesNuevaLectura.Todas, s => s.CodigoDispositivo == sensor.Codigo);
+        // La solicitud de nueva lectura sale al wearable como comando MQTT (no retenido).
+        var repetir = Fabrica.Comandos.De(sensor.Codigo).Last(c => c.Comando is RepetirMedicion);
+        Assert.Equal(($"device/{sensor.Codigo}/comandos", false), (repetir.Topico, repetir.Retenido));
+        Assert.StartsWith("""{"accion":"repetir-medicion","variable":"presion","motivo":""", repetir.Json);
 
         var signos = (await enfermera.GetFromJsonAsync<SignosActualesDto>($"/api/v1/pacientes/{ficha.Id}/signos/actual"))!;
         Assert.Equal(("sin-datos", "sin-datos", "vigente"), (signos.Pas.Estado, signos.Pad.Estado, signos.Fc.Estado));

@@ -112,6 +112,21 @@ public class ReglasDeDependenciaTests
         Assert.True(resultado.IsSuccessful, Describir(resultado));
     }
 
+    [Fact]
+    public void La_guia_de_toma_manual_es_un_recurso_de_Application_y_se_carga_sin_la_infraestructura()
+    {
+        // Es contenido clínico versionado del núcleo: vive en Application (no en la base ni en Infrastructure).
+        var application = typeof(Vitalify.Application.AssemblyReference).Assembly;
+        Assert.Contains(Vitalify.Application.Clinica.GuiaTomaManual.Recurso, application.GetManifestResourceNames());
+        Assert.Matches(@"^\d{4}\.\d{1,2}\.\d+$", Vitalify.Application.Clinica.GuiaTomaManual.Actual.Version);
+
+        var resultado = Types.InAssembly(application)
+            .That().HaveName(nameof(Vitalify.Application.Clinica.GuiaTomaManual), nameof(Vitalify.Application.Clinica.ObtenerGuiaTomaManual))
+            .ShouldNot().HaveDependencyOnAny([InfrastructureNs, "Microsoft.EntityFrameworkCore", "Npgsql"])
+            .GetResult();
+        Assert.True(resultado.IsSuccessful, Describir(resultado));
+    }
+
     private static string Describir(TestResult resultado) =>
         resultado.IsSuccessful
             ? string.Empty
