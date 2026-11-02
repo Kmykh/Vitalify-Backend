@@ -70,6 +70,12 @@ public sealed class RepositorioUsuariosEnMemoria : IRepositorioUsuarios
         return Task.FromResult(new Pagina<Usuario>(elementos, pagina, tamano, ordenados.Count));
     }
 
+    public Task<IReadOnlyList<Usuario>> ListarActivosAsync(Rol rol, Guid? servicioId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<Usuario>>(Usuarios.Where(u => u.Rol == rol && u.Activo && (servicioId is null || u.ServicioId == servicioId)).ToList());
+
+    public Task<IReadOnlyList<Usuario>> ObtenerVariosAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<Usuario>>(Usuarios.Where(u => ids.Contains(u.Id)).ToList());
+
     public void Agregar(Usuario usuario) => Usuarios.Add(usuario);
 }
 

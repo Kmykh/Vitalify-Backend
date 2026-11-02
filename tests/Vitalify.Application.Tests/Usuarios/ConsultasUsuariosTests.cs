@@ -45,7 +45,7 @@ public class ConsultasUsuariosTests
 
         var resultado = await _e.ObtenerUsuarioActual().EjecutarAsync(usuario.Id);
 
-        Assert.Equal(new UsuarioDto(usuario.Id, "Dr. Luis Soto", "medico@hospital.pe", "Medico"), resultado.Valor);
+        Assert.Equal(new UsuarioDto(usuario.Id, "Dr. Luis Soto", "medico@hospital.pe", "Medico", _e.Servicio.Id), resultado.Valor);
     }
 
     [Fact]

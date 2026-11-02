@@ -127,6 +127,23 @@ public class ReglasDeDependenciaTests
         Assert.True(resultado.IsSuccessful, Describir(resultado));
     }
 
+    [Fact]
+    public void Domain_y_Application_no_dependen_de_SignalR_ni_de_FirebaseAdmin()
+    {
+        // SignalR es un adaptador de la API y FCM uno de la infraestructura: el núcleo solo conoce sus puertos.
+        foreach (var ensamblado in new[] { typeof(Domain.AssemblyReference).Assembly, typeof(Vitalify.Application.AssemblyReference).Assembly })
+        {
+            var resultado = Types.InAssembly(ensamblado)
+                .ShouldNot()
+                .HaveDependencyOnAny(["Microsoft.AspNetCore.SignalR", "FirebaseAdmin", "Google.Apis"])
+                .GetResult();
+            Assert.True(resultado.IsSuccessful, Describir(resultado));
+
+            var referencias = ensamblado.GetReferencedAssemblies().Select(r => r.Name ?? string.Empty).ToList();
+            Assert.DoesNotContain(referencias, r => r.StartsWith("Microsoft.AspNetCore.SignalR", StringComparison.Ordinal) || r.StartsWith("FirebaseAdmin", StringComparison.Ordinal));
+        }
+    }
+
     private static string Describir(TestResult resultado) =>
         resultado.IsSuccessful
             ? string.Empty

@@ -11,8 +11,8 @@ public class CamasYDispositivosTests
     [Fact]
     public async Task Registrar_cama_normaliza_y_rechaza_codigos_repetidos()
     {
-        var creada = await _e.RegistrarCama().EjecutarAsync(new(" med-b-07 ", "Medicina B"));
-        var repetida = await _e.RegistrarCama().EjecutarAsync(new("MED-B-07", "Medicina B"));
+        var creada = await _e.RegistrarCama().EjecutarAsync(new(" med-b-07 ", _e.Servicio.Id));
+        var repetida = await _e.RegistrarCama().EjecutarAsync(new("MED-B-07", _e.Servicio.Id));
 
         Assert.Equal("MED-B-07", creada.Valor.Codigo);
         Assert.Equal("cama-codigo-duplicado", repetida.Error.Codigo);

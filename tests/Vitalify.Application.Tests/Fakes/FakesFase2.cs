@@ -3,6 +3,7 @@ using Vitalify.Application.Comun;
 using Vitalify.Application.Dispositivos;
 using Vitalify.Application.Pacientes;
 using Vitalify.Application.Puertos;
+using Vitalify.Application.Tests.Fakes;
 using Vitalify.Domain.Camas;
 using Vitalify.Domain.Dispositivos;
 using Vitalify.Domain.Hospitalizaciones;
@@ -10,7 +11,7 @@ using Vitalify.Domain.Pacientes;
 
 namespace Vitalify.Application.Tests.Fakes;
 
-public sealed class RepositorioCamasEnMemoria(Func<Guid, bool> ocupada) : IRepositorioCamas
+public sealed class RepositorioCamasEnMemoria(Func<Guid, bool> ocupada, RepositorioServiciosEnMemoria servicios) : IRepositorioCamas
 {
     public List<Cama> Camas { get; } = [];
 
@@ -20,7 +21,7 @@ public sealed class RepositorioCamasEnMemoria(Func<Guid, bool> ocupada) : IRepos
 
     public Task<IReadOnlyList<CamaDto>> ListarAsync(bool soloDisponibles, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<CamaDto>>(Camas
-            .Select(c => new CamaDto(c.Id, c.Codigo, c.Servicio, c.Activa, ocupada(c.Id)))
+            .Select(c => new CamaDto(c.Id, c.Codigo, servicios.Servicios.Single(s => s.Id == c.ServicioId).Nombre, c.ServicioId, c.Activa, ocupada(c.Id)))
             .Where(c => !soloDisponibles || (c.Activa && !c.Ocupada))
             .OrderBy(c => c.Codigo)
             .ToList());
@@ -73,6 +74,16 @@ public sealed class RepositorioHospitalizacionesEnMemoria : IRepositorioHospital
     public RepositorioPacientesEnMemoria Pacientes { get; set; } = null!;
     public RepositorioCamasEnMemoria Camas { get; set; } = null!;
     public RepositorioDispositivosEnMemoria Dispositivos { get; set; } = null!;
+    public RepositorioServiciosEnMemoria Servicios { get; set; } = null!;
+
+    public Task<ContextoHospitalizacion?> ObtenerContextoAsync(Guid hospitalizacionId, CancellationToken ct = default) =>
+        Task.FromResult(Hospitalizaciones.Where(h => h.Id == hospitalizacionId)
+            .Select(h => (h, c: Camas.Camas.Single(c => c.Id == h.CamaId)))
+            .Select(x => new ContextoHospitalizacion(x.h.Id, x.h.PacienteId, x.c.ServicioId, x.c.Codigo, x.h.EstaActiva))
+            .SingleOrDefault());
+
+    public Task<IReadOnlyList<HospitalizacionActivaLectura>> ListarActivasDeServicioAsync(Guid? servicioId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<HospitalizacionActivaLectura>>(Lecturas().Where(l => servicioId is null || l.ServicioId == servicioId).ToList());
 
     public Task<Hospitalizacion?> ObtenerActivaDePacienteAsync(Guid pacienteId, CancellationToken ct = default) =>
         Task.FromResult(Hospitalizaciones.SingleOrDefault(h => h.PacienteId == pacienteId && h.EstaActiva));
@@ -143,5 +154,6 @@ public sealed class RepositorioHospitalizacionesEnMemoria : IRepositorioHospital
         let d = a is null ? null : Dispositivos.Dispositivos.Single(d => d.Id == a.DispositivoId)
         select new HospitalizacionActivaLectura(
             p.Id, p.NombreCompleto, p.TipoDocumento, p.NumeroDocumento, p.FechaNacimiento, p.FechaNacimientoEstimada,
-            h.Id, h.DiagnosticoIngreso, h.IngresoEn, c.Id, c.Codigo, c.Servicio, d?.Id, d?.Codigo, a?.AsignadoEn);
+            h.Id, h.DiagnosticoIngreso, h.IngresoEn, c.Id, c.Codigo, Servicios.Servicios.Single(s => s.Id == c.ServicioId).Nombre, c.ServicioId,
+            d?.Id, d?.Codigo, a?.AsignadoEn);
 }

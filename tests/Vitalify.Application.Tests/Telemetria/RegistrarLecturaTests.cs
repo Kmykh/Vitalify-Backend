@@ -119,7 +119,7 @@ public class RegistrarLecturaTests
     [Fact]
     public async Task Una_lectura_del_bufer_dentro_de_las_24_horas_se_acepta()
     {
-        await PacienteConSensorAsync();
+        await _e.HaceAsync(TimeSpan.FromHours(24), () => PacienteConSensorAsync());
 
         var resultado = await Registrar(_e.Lectura(new(Fc: 80), segundos: -23 * 3600));
 

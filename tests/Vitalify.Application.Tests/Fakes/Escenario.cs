@@ -1,13 +1,17 @@
+using Vitalify.Application.Alertas;
 using Vitalify.Application.Camas;
 using Vitalify.Application.Clinica;
 using Vitalify.Application.Dispositivos;
 using Vitalify.Application.Pacientes;
 using Vitalify.Application.Sesiones;
 using Vitalify.Application.Telemetria;
+using Vitalify.Application.Turnos;
 using Vitalify.Application.Usuarios;
 using Vitalify.Application.Vinculacion;
 using Vitalify.Domain.Camas;
 using Vitalify.Domain.Dispositivos;
+using Vitalify.Domain.Servicios;
+using Vitalify.Domain.Turnos;
 using Vitalify.Domain.Usuarios;
 
 namespace Vitalify.Application.Tests.Fakes;
@@ -43,18 +47,37 @@ public sealed class Escenario
     public PublicadorComandosFalso Comandos { get; } = new();
     public OpcionesVinculacion Vinculacion { get; set; } = OpcionesVinculacion.PorDefecto;
 
+    public RepositorioServiciosEnMemoria Servicios { get; } = new();
+    public RepositorioProgramacionEnMemoria Programacion { get; } = new();
+    public RepositorioAlertasEnMemoria Alertas { get; }
+    public RepositorioMovilesEnMemoria Moviles { get; } = new();
+    public PushFalso Push { get; } = new();
+    public TiempoRealFalso TiempoReal { get; } = new();
+    public BitacoraFalsa Bitacora { get; } = new();
+    public OpcionesAlertas OpcionesAlertas { get; set; } = OpcionesAlertas.PorDefecto;
+    public CatalogoTurnos Catalogo { get; } = new(CatalogoTurnos.HorariosPorDefecto, TimeZoneInfo.FindSystemTimeZoneById("America/Lima"));
+    public LimitadorSignosTiempoReal Limitador { get; } = new();
+
+    public bool TiempoRealFalla { get => TiempoReal.Falla; set => TiempoReal.Falla = value; }
+
+    /// <summary>Servicio de las camas y del personal que crea el escenario.</summary>
+    public Servicio Servicio { get; } = Servicio.Registrar("MEDICINA-B", "Medicina B");
+
     public Escenario()
     {
-        Camas = new RepositorioCamasEnMemoria(Hospitalizaciones.Ocupada);
+        Servicios.Agregar(Servicio);
+        Camas = new RepositorioCamasEnMemoria(Hospitalizaciones.Ocupada, Servicios);
         Dispositivos = new RepositorioDispositivosEnMemoria(Hospitalizaciones.CamaDe);
         Hospitalizaciones.Pacientes = Pacientes;
         Hospitalizaciones.Camas = Camas;
         Hospitalizaciones.Dispositivos = Dispositivos;
+        Hospitalizaciones.Servicios = Servicios;
         Resolutor = new ResolutorDispositivosFalso(Hospitalizaciones, Dispositivos);
+        Alertas = new RepositorioAlertasEnMemoria(Hospitalizaciones);
     }
 
     public RegistrarUsuario RegistrarUsuario() =>
-        new(new RegistrarUsuarioValidador(), Usuarios, Auditoria, UnidadDeTrabajo, Hasher, Reloj);
+        new(new RegistrarUsuarioValidador(), Usuarios, Auditoria, UnidadDeTrabajo, Hasher, Servicios, Reloj);
 
     public IniciarSesion IniciarSesion() =>
         new(new IniciarSesionValidador(), Usuarios, Sesiones, Auditoria, UnidadDeTrabajo, Hasher, Generador, Reloj, Opciones);
@@ -69,7 +92,7 @@ public sealed class Escenario
 
     public ObtenerUsuarioActual ObtenerUsuarioActual() => new(Usuarios);
 
-    public RegistrarCama RegistrarCama() => new(new RegistrarCamaValidador(), Camas, UnidadDeTrabajo);
+    public RegistrarCama RegistrarCama() => new(new RegistrarCamaValidador(), Camas, Servicios, UnidadDeTrabajo);
 
     public ListarCamas ListarCamas() => new(Camas);
 
@@ -81,7 +104,7 @@ public sealed class Escenario
     public ListarDispositivos ListarDispositivos() => new(Dispositivos);
 
     public RegistrarIngresoPaciente RegistrarIngresoPaciente() =>
-        new(new RegistrarIngresoPacienteValidador(Reloj), Pacientes, Camas, Hospitalizaciones, Auditoria, UnidadDeTrabajo, Reloj);
+        new(new RegistrarIngresoPacienteValidador(Reloj), Pacientes, Camas, Servicios, Hospitalizaciones, Auditoria, UnidadDeTrabajo, Reloj);
 
     public ActualizarDatosPaciente ActualizarDatosPaciente() =>
         new(new ActualizarDatosPacienteValidador(Reloj), Pacientes, Hospitalizaciones, Auditoria, UnidadDeTrabajo, Reloj);
@@ -116,13 +139,18 @@ public sealed class Escenario
             Auditoria, UnidadDeTrabajo, Resolutor, Reloj);
 
     public ListarPacientesMonitoreados ListarPacientesMonitoreados() =>
-        new(Hospitalizaciones, Historial, Historial, Presencia, OpcionesTelemetria.PorDefecto, Reloj);
+        new(Hospitalizaciones, Historial, Historial, Alertas, Presencia, OpcionesTelemetria.PorDefecto, Reloj);
 
     /// <summary>Con el motor clínico enganchado, como en la API.</summary>
     public RegistrarLectura RegistrarLectura() =>
         new(Resolutor, Historial, Historial, Historial, Historial, SolicitudNuevaLectura,
-            [Manejador, new EvaluarRiesgoAlRegistrarLectura(Evaluador(), Historial, Historial)],
-            Domain.Telemetria.RangosFisiologicos.PorDefecto, OpcionesTelemetria.PorDefecto, Reloj);
+            [
+                Manejador,
+                new EvaluarRiesgoAlRegistrarLectura(Evaluador(), Historial, Historial, PublicadorRiesgo()),
+                new AlertasAlRegistrarLectura(ServicioAlertas()),
+                new PublicarSignosEnTiempoReal(Contextos(), TiempoReal, Limitador, Reloj),
+            ],
+            Domain.Telemetria.RangosFisiologicos.PorDefecto, OpcionesTelemetria.PorDefecto, Bitacora, Reloj);
 
     public ObtenerSignosActuales ObtenerSignosActuales() =>
         new(Pacientes, Hospitalizaciones, Historial, Presencia, OpcionesTelemetria.PorDefecto, Reloj);
@@ -131,10 +159,11 @@ public sealed class Escenario
 
     public EvaluadorRiesgo Evaluador() => new(Historial, Historial, Historial, OpcionesTelemetria.PorDefecto, Clinicas, Reloj);
 
-    public PresentadorRiesgo PresentadorRiesgo() => new(Historial, Clinicas);
+    public PresentadorRiesgo PresentadorRiesgo() => new(Historial);
 
     public ServicioObservaciones ServicioObservaciones() =>
-        new(Historial, Evaluador(), Historial, PresentadorRiesgo(), Domain.Telemetria.RangosFisiologicos.PorDefecto);
+        new(Historial, Evaluador(), Historial, PresentadorRiesgo(), PublicadorRiesgo(), ServicioAlertas(), Bitacora, Clinicas,
+            Domain.Telemetria.RangosFisiologicos.PorDefecto);
 
     public RegistrarObservacion RegistrarObservacion() =>
         new(new TomaManualValidador(Domain.Telemetria.RangosFisiologicos.PorDefecto, Clinicas, Reloj),
@@ -144,9 +173,47 @@ public sealed class Escenario
 
     public CambiarEscalaSpo2 CambiarEscalaSpo2() =>
         new(new CambiarEscalaSpo2Validador(), Pacientes, Hospitalizaciones, Dispositivos, Auditoria, UnidadDeTrabajo, Resolutor,
-            Evaluador(), Historial, ObtenerRiesgoPaciente(), Reloj);
+            Evaluador(), Historial, ObtenerRiesgoPaciente(), PublicadorRiesgo(), Reloj);
 
     public RegistrarPresenciaDispositivo RegistrarPresencia() => new(Presencia, SincronizarPantalla(), Reloj);
+
+    // ---- Fase 6: alertas, turnos y notificaciones.
+    public ContextoHospitalizaciones Contextos() => new(Hospitalizaciones);
+
+    public TurnoVigenteEnMemoria TurnoVigente() => new(Programacion, Usuarios, Catalogo);
+
+    public DestinatariosAlertas Destinatarios() => new(TurnoVigente(), Usuarios, Reloj);
+
+    public NotificadorAlertas Notificador() => new(TiempoReal, Push, Moviles, UnidadDeTrabajo, Bitacora, Reloj);
+
+    public ServicioAlertas ServicioAlertas() => new(Alertas, Contextos(), Destinatarios(), Notificador(), UnidadDeTrabajo, Bitacora, Reloj);
+
+    public PublicadorRiesgoEvaluado PublicadorRiesgo() =>
+        new([new AlertaDeRiesgoAlEvaluar(ServicioAlertas()), new PublicarRiesgoEnTiempoReal(Contextos(), TiempoReal)], Bitacora);
+
+    public AccesoServicio Acceso() => new(Usuarios);
+
+    public VigilarAlertas VigilarAlertas() =>
+        new(Hospitalizaciones, Historial, Historial, Alertas, Servicios, Programacion, Presencia, ServicioAlertas(), Notificador(), Contextos(),
+            Catalogo, OpcionesAlertas, Clinicas, Reloj);
+
+    public TomarAlerta TomarAlerta() => new(Alertas, Acceso(), Contextos(), Notificador(), Auditoria, UnidadDeTrabajo, Reloj);
+
+    public AtenderAlerta AtenderAlerta() =>
+        new(new AtenderAlertaValidador(), Alertas, Acceso(), Contextos(), Notificador(), Auditoria, UnidadDeTrabajo, Reloj);
+
+    public ListarAlertas ListarAlertas() => new(new ListarAlertasValidador(), Alertas, Acceso());
+
+    public ObtenerProgramacion ObtenerProgramacion() => new(Servicios, Usuarios, Programacion);
+
+    public CargarProgramacion CargarProgramacion() =>
+        new(Servicios, Usuarios, Programacion, Auditoria, UnidadDeTrabajo, ObtenerProgramacion(), Catalogo, Reloj);
+
+    public ObtenerTurnoActual ObtenerTurnoActual() => new(Servicios, Usuarios, Programacion, TurnoVigente(), Catalogo, Reloj);
+
+    public ObtenerEntregaTurno ObtenerEntregaTurno() =>
+        new(Servicios, Hospitalizaciones, Historial, Historial, Historial, Alertas, Presencia, Acceso(), Catalogo,
+            OpcionesTelemetria.PorDefecto, Clinicas, Reloj);
 
     public ListarIncidencias ListarIncidencias() => new(new ListarIncidenciasValidador(), Historial);
 
@@ -163,7 +230,7 @@ public sealed class Escenario
 
     public Cama AgregarCama(string codigo = "MED-B-01")
     {
-        var cama = Cama.Registrar(codigo, "Medicina B");
+        var cama = Cama.Registrar(codigo, Servicio.Id);
         Camas.Agregar(cama);
         return cama;
     }
@@ -179,6 +246,23 @@ public sealed class Escenario
         Guid? camaId, string documento = "12345678", string nombre = "Rosa Huamán Quispe",
         string? fechaNacimiento = "1958-03-14", int? edad = null) =>
         new(nombre, "Dni", documento, fechaNacimiento, edad, camaId, "Neumonía adquirida en la comunidad", EnfermeraId, "10.0.0.7");
+
+    /// <summary>
+    /// Corre el arrange como si fuera hace <paramref name="hace"/> (por ejemplo, vincular el sensor antes de enviar lecturas
+    /// del búfer: la ingesta rechaza lo medido antes de la vinculación vigente).
+    /// </summary>
+    public async Task<T> HaceAsync<T>(TimeSpan hace, Func<Task<T>> accion)
+    {
+        Reloj.Avanzar(-hace);
+        try
+        {
+            return await accion();
+        }
+        finally
+        {
+            Reloj.Avanzar(hace);
+        }
+    }
 
     /// <summary>Ingresa un paciente en una cama nueva y devuelve su ficha.</summary>
     public async Task<FichaPacienteDto> IngresarAsync(string codigoCama = "MED-B-01", string documento = "12345678")
@@ -196,9 +280,10 @@ public sealed class Escenario
         return resultado.Valor;
     }
 
-    public Usuario AgregarUsuario(string correo, string contrasena, Rol rol = Rol.Enfermera, string nombre = "Usuario de prueba")
+    public Usuario AgregarUsuario(string correo, string contrasena, Rol rol = Rol.Enfermera, string nombre = "Usuario de prueba", Guid? servicioId = null)
     {
-        var usuario = Domain.Usuarios.Usuario.Crear(nombre, Correo.Crear(correo), Hasher.Calcular(contrasena), rol, Reloj.AhoraUtc);
+        var usuario = Domain.Usuarios.Usuario.Crear(nombre, Correo.Crear(correo), Hasher.Calcular(contrasena), rol, Reloj.AhoraUtc,
+            rol == Rol.Administrador ? null : servicioId ?? Servicio.Id);
         Usuarios.Agregar(usuario);
         return usuario;
     }

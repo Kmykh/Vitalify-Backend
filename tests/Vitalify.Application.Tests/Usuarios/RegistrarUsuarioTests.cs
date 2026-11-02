@@ -13,7 +13,7 @@ public class RegistrarUsuarioTests
 
     private RegistrarUsuarioComando Comando(
         string correo = "Enfermera@Hospital.pe", string contrasena = "Segura123", string rol = "Enfermera", string nombre = "Lucía Ramos") =>
-        new(nombre, correo, contrasena, rol, _adminId, "10.0.0.5");
+        new(nombre, correo, contrasena, rol, _adminId, "10.0.0.5", _e.Servicio.Id);
 
     [Fact]
     public async Task Registra_al_usuario_con_hash_correo_normalizado_y_auditoria()
