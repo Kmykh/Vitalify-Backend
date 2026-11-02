@@ -9,21 +9,22 @@ namespace Vitalify.Domain.Camas;
 public sealed partial class Cama
 {
     public const int LargoMaximoCodigo = 20;
-    public const int LargoMaximoServicio = 100;
 
     public Guid Id { get; private set; }
 
     /// <summary>Código único, normalizado en mayúsculas (por ejemplo <c>MED-B-05</c>).</summary>
     public string Codigo { get; private set; } = null!;
 
-    public string Servicio { get; private set; } = null!;
+    /// <summary>Servicio al que pertenece: sus alertas van al personal de ese servicio.</summary>
+    public Guid ServicioId { get; private set; }
+
     public bool Activa { get; private set; }
 
     private Cama()
     {
     }
 
-    public static Cama Registrar(string codigo, string servicio)
+    public static Cama Registrar(string codigo, Guid servicioId)
     {
         var codigoNormalizado = NormalizarCodigo(codigo);
         if (!CodigoValido(codigoNormalizado))
@@ -31,13 +32,12 @@ public sealed partial class Cama
             throw new ExcepcionDeDominio("El código de la cama no es válido.");
         }
 
-        var servicioLimpio = servicio?.Trim() ?? string.Empty;
-        if (servicioLimpio.Length is 0 or > LargoMaximoServicio)
+        if (servicioId == Guid.Empty)
         {
             throw new ExcepcionDeDominio("El servicio de la cama es obligatorio.");
         }
 
-        return new Cama { Id = Guid.NewGuid(), Codigo = codigoNormalizado, Servicio = servicioLimpio, Activa = true };
+        return new Cama { Id = Guid.NewGuid(), Codigo = codigoNormalizado, ServicioId = servicioId, Activa = true };
     }
 
     public static string NormalizarCodigo(string? codigo) => (codigo ?? string.Empty).Trim().ToUpperInvariant();

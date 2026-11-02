@@ -15,6 +15,10 @@ public sealed class Usuario
     public string HashContrasena { get; private set; } = null!;
     public Rol Rol { get; private set; }
     public bool Activo { get; private set; }
+
+    /// <summary>Servicio donde trabaja (obligatorio para enfermeras y médicos nuevos): define sus turnos y alertas.</summary>
+    public Guid? ServicioId { get; private set; }
+
     public DateTime CreadoEn { get; private set; }
     public DateTime ActualizadoEn { get; private set; }
 
@@ -22,7 +26,7 @@ public sealed class Usuario
     {
     }
 
-    public static Usuario Crear(string nombre, Correo correo, string hashContrasena, Rol rol, DateTime ahora)
+    public static Usuario Crear(string nombre, Correo correo, string hashContrasena, Rol rol, DateTime ahora, Guid? servicioId = null)
     {
         var nombreLimpio = nombre?.Trim() ?? string.Empty;
         if (nombreLimpio.Length == 0)
@@ -55,9 +59,21 @@ public sealed class Usuario
             HashContrasena = hashContrasena,
             Rol = rol,
             Activo = true,
+            ServicioId = servicioId,
             CreadoEn = ahora,
             ActualizadoEn = ahora,
         };
+    }
+
+    public void AsignarServicio(Guid servicioId, DateTime ahora)
+    {
+        if (Rol == Rol.Administrador)
+        {
+            throw new ExcepcionDeDominio("El administrador no pertenece a un servicio clínico.");
+        }
+
+        ServicioId = servicioId;
+        ActualizadoEn = ahora;
     }
 
     public void Desactivar(DateTime ahora)

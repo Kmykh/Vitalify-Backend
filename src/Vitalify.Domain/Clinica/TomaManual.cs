@@ -251,10 +251,42 @@ public static class FrecuenciaTomaManual
         };
     }
 
+    /// <summary>Ningún valor manual cuenta más de 12 h, aunque el plazo con la tolerancia sea mayor.</summary>
+    public static readonly TimeSpan TopeVigencia = TimeSpan.FromHours(12);
+
+    /// <summary>Vigencia de las tomas anteriores a la fase 6, que no guardaron su plazo.</summary>
+    public static readonly TimeSpan VigenciaAnterior = TimeSpan.FromHours(4);
+
     /// <summary>
     /// Próxima toma: la última toma manual más el intervalo. Sin ninguna toma manual, la toma está pendiente desde ya
     /// (<paramref name="evaluadaEn"/>).
     /// </summary>
     public static DateTime Proxima(DateTime? ultimaTomaManual, DateTime evaluadaEn, ResultadoNews2 news2) =>
         ultimaTomaManual is { } ultima ? ultima + Intervalo(news2) : evaluadaEn;
+
+    /// <summary>Hasta cuándo cuentan los valores de una toma: su próxima toma más la tolerancia, sin pasar de 12 h.</summary>
+    public static DateTime VigenteHasta(DateTime observadaEn, DateTime proximaToma, TimeSpan tolerancia)
+    {
+        var plazo = proximaToma + tolerancia;
+        var tope = observadaEn + TopeVigencia;
+        return plazo < tope ? plazo : tope;
+    }
+
+    /// <summary>
+    /// ¿Cuenta todavía la toma en <paramref name="ahora"/>? Vale hasta su <see cref="ObservacionEnfermeria.VigenteHasta"/>,
+    /// pero si una evaluación posterior a su registro acortó el plazo (el paciente empeoró), vale ese plazo más la
+    /// tolerancia. Las tomas sin plazo guardado (anteriores a la fase 6) valen 4 h.
+    /// </summary>
+    public static bool Cuenta(ObservacionEnfermeria toma, DateTime ahora, EvaluacionRiesgo? ultimaEvaluacion, TimeSpan tolerancia)
+    {
+        ArgumentNullException.ThrowIfNull(toma);
+        var limite = toma.VigenteHasta ?? toma.ObservadaEn + VigenciaAnterior;
+        if (ultimaEvaluacion?.ProximaTomaManualEn is { } plazo && ultimaEvaluacion.EvaluadaEn >= toma.RegistradaEn)
+        {
+            var acortado = plazo + tolerancia;
+            limite = acortado < limite ? acortado : limite;
+        }
+
+        return ahora <= limite;
+    }
 }

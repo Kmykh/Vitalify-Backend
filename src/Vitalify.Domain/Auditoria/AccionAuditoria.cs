@@ -20,4 +20,8 @@ public enum AccionAuditoria
     QrRechazado = 16,
     VinculacionPorQr = 17,
     EscalaSpo2Cambiada = 18,
+    ProgramacionCargada = 19,
+    AlertaTomada = 20,
+    AlertaAtendida = 21,
+    ServicioAsignado = 22,
 }

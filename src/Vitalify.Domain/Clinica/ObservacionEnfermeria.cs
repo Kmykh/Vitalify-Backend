@@ -77,6 +77,12 @@ public sealed class ObservacionEnfermeria
     /// <summary>Versión de la guía de toma manual con la que la app armó el asistente.</summary>
     public string? VersionGuia { get; private set; }
 
+    /// <summary>
+    /// Hasta cuándo cuentan sus valores para el puntaje: la próxima toma calculada en su evaluación más la tolerancia,
+    /// con un tope de 12 h. Null en las tomas anteriores a la fase 6 (valían 4 h).
+    /// </summary>
+    public DateTime? VigenteHasta { get; private set; }
+
     private ObservacionEnfermeria()
     {
     }
@@ -169,6 +175,8 @@ public sealed class ObservacionEnfermeria
             VersionGuia = version,
         };
     }
+
+    public void FijarVigencia(DateTime vigenteHasta) => VigenteHasta = vigenteHasta;
 
     private static void Validar(VariableSigno variable, decimal? valor, RangosFisiologicos rangos)
     {

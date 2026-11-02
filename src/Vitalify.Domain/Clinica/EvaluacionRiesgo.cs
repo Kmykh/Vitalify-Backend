@@ -40,6 +40,12 @@ public sealed class EvaluacionRiesgo
     public NivelRiesgoMews MewsNivel { get; private set; }
     public bool MewsCompleto { get; private set; }
 
+    /// <summary>
+    /// Plazo de la toma manual calculado en esta evaluación (última toma + intervalo de NEWS2). Si el paciente empeora,
+    /// la evaluación siguiente lo acorta. Null en las evaluaciones anteriores a la fase 6.
+    /// </summary>
+    public DateTime? ProximaTomaManualEn { get; private set; }
+
     private EvaluacionRiesgo()
     {
     }
@@ -77,6 +83,8 @@ public sealed class EvaluacionRiesgo
             MewsCompleto = mews.Completo,
         };
     }
+
+    public void FijarProximaTomaManual(DateTime proxima) => ProximaTomaManualEn = proxima;
 
     public ResultadoNews2 News2() => CalculadoraNews2.Calcular(Parametros, EscalaSpo2);
 

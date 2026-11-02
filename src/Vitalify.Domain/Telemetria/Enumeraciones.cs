@@ -26,6 +26,9 @@ public enum TipoIncidencia
     DispositivoDesconocido = 3,
     DispositivoSinVincular = 4,
     MarcaDeTiempoInvalida = 5,
+
+    /// <summary>Medida antes de la vinculación vigente: es del búfer de otro paciente (o de antes de vincular).</summary>
+    AnteriorAVinculacion = 6,
 }
 
 /// <summary>Estado de una variable al leerla: se calcula con la hora actual, no se guarda.</summary>
