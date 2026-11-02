@@ -283,4 +283,20 @@ public class PacientesController : ControllerBase
             id, solicitud.Motivo ?? string.Empty, solicitud.Observacion, User.IdUsuario() ?? Guid.Empty, HttpContext.Ip()), ct);
         return resultado.EsExito ? Ok(resultado.Valor) : this.Problema(resultado.Error);
     }
+
+    /// <summary>Alertas del paciente en el servicio de quien consulta, con los tiempos de respuesta.</summary>
+    /// <remarks><c>segundosHastaTomada</c> y <c>segundosHastaAtendida</c> se miden desde que se creó la alerta.</remarks>
+    /// <response code="200">Alertas, la más reciente primero.</response>
+    /// <response code="403">El usuario no tiene servicio asignado.</response>
+    /// <response code="404">El paciente no existe.</response>
+    [HttpGet("{id:guid}/alertas")]
+    [Authorize(Policy = Politicas.PersonalClinico)]
+    [ProducesResponseType<IReadOnlyList<Application.Alertas.AlertaDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<Application.Alertas.AlertaDto>>> Alertas(
+        Guid id, [FromServices] Application.Alertas.ListarAlertasPaciente listar, CancellationToken ct)
+    {
+        var resultado = await listar.EjecutarAsync(id, User.IdUsuario() ?? Guid.Empty, ct);
+        return resultado.EsExito ? Ok(resultado.Valor) : this.Problema(resultado.Error);
+    }
 }

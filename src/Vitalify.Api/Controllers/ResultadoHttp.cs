@@ -29,6 +29,7 @@ internal static class ResultadoHttp
             TipoError.Conflicto => (StatusCodes.Status409Conflict, "Conflicto"),
             TipoError.NoAutorizado => (StatusCodes.Status401Unauthorized, "No autorizado"),
             TipoError.NoEncontrado => (StatusCodes.Status404NotFound, "No encontrado"),
+            TipoError.Prohibido => (StatusCodes.Status403Forbidden, "Acceso denegado"),
             _ => (StatusCodes.Status400BadRequest, "Solicitud inválida"),
         };
 

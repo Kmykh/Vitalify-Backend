@@ -37,12 +37,28 @@ internal static class AutenticacionJwt
             };
             o.Events = new JwtBearerEvents
             {
+                OnMessageReceived = TokenDelHubDesdeElQuery,
                 OnTokenValidated = RechazarSiFueRevocadoAsync,
                 OnChallenge = ResponderNoAutenticadoAsync,
             };
         });
 
         return services;
+    }
+
+    /// <summary>
+    /// Los WebSockets del navegador no pueden mandar el encabezado Authorization: solo para el hub de monitoreo se acepta
+    /// el token en <c>?access_token=</c>. En el resto de la API, el query string nunca autentica.
+    /// </summary>
+    private static Task TokenDelHubDesdeElQuery(MessageReceivedContext context)
+    {
+        if (context.HttpContext.Request.Path.StartsWithSegments(TiempoReal.HubMonitoreo.Ruta)
+            && context.Request.Query.TryGetValue("access_token", out var token) && !string.IsNullOrEmpty(token))
+        {
+            context.Token = token;
+        }
+
+        return Task.CompletedTask;
     }
 
     private static async Task RechazarSiFueRevocadoAsync(TokenValidatedContext context)

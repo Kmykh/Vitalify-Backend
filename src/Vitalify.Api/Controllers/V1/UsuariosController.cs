@@ -29,7 +29,7 @@ public class UsuariosController : ControllerBase
         var resultado = await registrarUsuario.EjecutarAsync(
             new RegistrarUsuarioComando(
                 solicitud.Nombre ?? string.Empty, solicitud.Correo ?? string.Empty, solicitud.Contrasena ?? string.Empty,
-                solicitud.Rol ?? string.Empty, User.IdUsuario() ?? Guid.Empty, HttpContext.Ip()),
+                solicitud.Rol ?? string.Empty, User.IdUsuario() ?? Guid.Empty, HttpContext.Ip(), solicitud.ServicioId),
             ct);
 
         return resultado.EsExito
@@ -63,6 +63,22 @@ public class UsuariosController : ControllerBase
     public async Task<ActionResult<UsuarioDetalleDto>> ObtenerPorId(Guid id, [FromServices] ObtenerUsuarioPorId obtenerUsuario, CancellationToken ct)
     {
         var resultado = await obtenerUsuario.EjecutarAsync(id, ct);
+        return resultado.EsExito ? Ok(resultado.Valor) : this.Problema(resultado.Error);
+    }
+
+    /// <summary>Asigna el servicio de una enfermera o un médico (define sus turnos y qué alertas ve).</summary>
+    /// <response code="200">Servicio asignado.</response>
+    /// <response code="400">El servicio no existe o el usuario es administrador.</response>
+    /// <response code="404">El usuario no existe.</response>
+    [HttpPut("{id:guid}/servicio")]
+    [ProducesResponseType<UsuarioDetalleDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<UsuarioDetalleDto>> AsignarServicio(
+        Guid id, AsignarServicioSolicitud solicitud, [FromServices] Application.Servicios.AsignarServicio asignar, CancellationToken ct)
+    {
+        var resultado = await asignar.EjecutarAsync(
+            new Application.Servicios.AsignarServicioComando(id, solicitud.ServicioId, User.IdUsuario() ?? Guid.Empty, HttpContext.Ip()), ct);
         return resultado.EsExito ? Ok(resultado.Valor) : this.Problema(resultado.Error);
     }
 }

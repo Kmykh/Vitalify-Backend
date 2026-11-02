@@ -24,7 +24,7 @@ public class CamasController : ControllerBase
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<CamaDto>> Registrar(RegistrarCamaSolicitud solicitud, [FromServices] RegistrarCama registrarCama, CancellationToken ct)
     {
-        var resultado = await registrarCama.EjecutarAsync(new RegistrarCamaComando(solicitud.Codigo ?? string.Empty, solicitud.Servicio ?? string.Empty), ct);
+        var resultado = await registrarCama.EjecutarAsync(new RegistrarCamaComando(solicitud.Codigo ?? string.Empty, solicitud.ServicioId), ct);
         return resultado.EsExito ? StatusCode(StatusCodes.Status201Created, resultado.Valor) : this.Problema(resultado.Error);
     }
 
