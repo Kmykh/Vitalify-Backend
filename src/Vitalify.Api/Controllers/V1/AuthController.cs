@@ -25,7 +25,7 @@ public class AuthController : ControllerBase
     /// <response code="429">Se superó el límite de intentos.</response>
     [HttpPost("login")]
     [AllowAnonymous]
-    [EnableRateLimiting(LimiteDeLogin.Politica)]
+    [EnableRateLimiting(LimitesDeSolicitudes.Login)]
     [ProducesResponseType<SesionIniciada>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
