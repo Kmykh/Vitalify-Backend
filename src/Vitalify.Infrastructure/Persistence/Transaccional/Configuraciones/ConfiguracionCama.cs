@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Vitalify.Domain.Camas;
+using Vitalify.Domain.Servicios;
 
 namespace Vitalify.Infrastructure.Persistence.Transaccional.Configuraciones;
 
@@ -14,7 +15,8 @@ internal sealed class ConfiguracionCama : IEntityTypeConfiguration<Cama>
         builder.HasKey(c => c.Id);
         builder.Property(c => c.Id).ValueGeneratedNever();
         builder.Property(c => c.Codigo).HasMaxLength(Cama.LargoMaximoCodigo).IsRequired();
-        builder.Property(c => c.Servicio).HasMaxLength(Cama.LargoMaximoServicio).IsRequired();
         builder.HasIndex(c => c.Codigo).IsUnique().HasDatabaseName(IndiceCodigo);
+        builder.HasIndex(c => c.ServicioId);
+        builder.HasOne<Servicio>().WithMany().HasForeignKey(c => c.ServicioId).OnDelete(DeleteBehavior.Restrict);
     }
 }

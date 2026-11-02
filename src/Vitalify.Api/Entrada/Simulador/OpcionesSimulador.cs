@@ -15,6 +15,12 @@ public enum EscenarioSimulacion
 
     /// <summary>Valores imposibles, presión sin diastólica y periodos sin temperatura.</summary>
     SensorDefectuoso = 4,
+
+    /// <summary>
+    /// Como <see cref="Deterioro"/>, pero en 5 minutos: llega a NEWS2 ≥ 7 (alerta alta) para probar las alertas y su
+    /// escalamiento sin hardware.
+    /// </summary>
+    DeterioroRapido = 5,
 }
 
 /// <summary>

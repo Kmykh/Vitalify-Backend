@@ -102,6 +102,10 @@ namespace Vitalify.Infrastructure.Persistence.Historial.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("pas");
 
+                    b.Property<DateTime?>("ProximaTomaManualEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("proxima_toma_manual_en");
+
                     b.Property<int?>("Spo2")
                         .HasColumnType("integer")
                         .HasColumnName("spo2");
@@ -226,6 +230,10 @@ namespace Vitalify.Infrastructure.Persistence.Historial.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("version_guia");
+
+                    b.Property<DateTime?>("VigenteHasta")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("vigente_hasta");
 
                     b.HasKey("Id")
                         .HasName("pk_observacion_enfermeria");

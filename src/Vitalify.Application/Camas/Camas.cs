@@ -6,7 +6,7 @@ using Vitalify.Domain.Camas;
 namespace Vitalify.Application.Camas;
 
 /// <summary>Cama con su ocupación. No incluye quién la ocupa: el administrador no ve datos de pacientes.</summary>
-public sealed record CamaDto(Guid Id, string Codigo, string Servicio, bool Activa, bool Ocupada);
+public sealed record CamaDto(Guid Id, string Codigo, string Servicio, Guid ServicioId, bool Activa, bool Ocupada);
 
 public static class ErroresCama
 {
@@ -16,7 +16,7 @@ public static class ErroresCama
         Error.Conflicto("cama-ocupada", "La cama ya está ocupada por otra hospitalización activa.");
 }
 
-public sealed record RegistrarCamaComando(string Codigo, string Servicio);
+public sealed record RegistrarCamaComando(string Codigo, Guid? ServicioId);
 
 public sealed class RegistrarCamaValidador : AbstractValidator<RegistrarCamaComando>
 {
@@ -28,15 +28,13 @@ public sealed class RegistrarCamaValidador : AbstractValidator<RegistrarCamaComa
             .Must(c => !string.IsNullOrWhiteSpace(c)).WithMessage("El código de la cama es obligatorio.")
             .Must(Cama.CodigoValido).WithMessage("El código debe tener de 2 a 20 letras, números o guiones (por ejemplo MED-B-05).");
 
-        RuleFor(c => c.Servicio)
-            .Must(s => !string.IsNullOrWhiteSpace(s)).WithMessage("El servicio es obligatorio.")
-            .Must(s => s.Trim().Length <= Cama.LargoMaximoServicio)
-            .WithMessage($"El servicio no puede superar {Cama.LargoMaximoServicio} caracteres.");
+        RuleFor(c => c.ServicioId)
+            .Must(s => s is not null && s != Guid.Empty).WithMessage("El servicio es obligatorio (ver GET /servicios).");
     }
 }
 
 public sealed class RegistrarCama(
-    IValidator<RegistrarCamaComando> validador, IRepositorioCamas camas, IUnidadDeTrabajo unidadDeTrabajo)
+    IValidator<RegistrarCamaComando> validador, IRepositorioCamas camas, IRepositorioServicios servicios, IUnidadDeTrabajo unidadDeTrabajo)
 {
     public async Task<Resultado<CamaDto>> EjecutarAsync(RegistrarCamaComando comando, CancellationToken ct = default)
     {
@@ -45,7 +43,13 @@ public sealed class RegistrarCama(
             return errorValidacion;
         }
 
-        var cama = Cama.Registrar(comando.Codigo, comando.Servicio);
+        var servicio = await servicios.ObtenerPorIdAsync(comando.ServicioId!.Value, ct);
+        if (servicio is not { Activo: true })
+        {
+            return ErroresComunes.ValidacionDeCampo("servicioId", "El servicio no existe o no está activo.");
+        }
+
+        var cama = Cama.Registrar(comando.Codigo, servicio.Id);
         if (await camas.ExisteCodigoAsync(cama.Codigo, ct))
         {
             return ErroresCama.CodigoDuplicado;
@@ -53,7 +57,7 @@ public sealed class RegistrarCama(
 
         camas.Agregar(cama);
         var guardado = await unidadDeTrabajo.GuardarCambiosAsync(ct);
-        return guardado.EsExito ? new CamaDto(cama.Id, cama.Codigo, cama.Servicio, cama.Activa, Ocupada: false) : guardado.Error;
+        return guardado.EsExito ? new CamaDto(cama.Id, cama.Codigo, servicio.Nombre, servicio.Id, cama.Activa, Ocupada: false) : guardado.Error;
     }
 }
 

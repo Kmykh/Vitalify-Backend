@@ -20,10 +20,11 @@ internal sealed class RepositorioCamas(TransaccionalDbContext db) : IRepositorio
             camas = camas.Where(c => c.Activa && !db.Hospitalizaciones.Any(h => h.CamaId == c.Id && h.Estado == EstadoHospitalizacion.Activa));
         }
 
-        return await camas
-            .OrderBy(c => c.Codigo)
-            .Select(c => new CamaDto(c.Id, c.Codigo, c.Servicio, c.Activa,
-                db.Hospitalizaciones.Any(h => h.CamaId == c.Id && h.Estado == EstadoHospitalizacion.Activa)))
+        return await (from c in camas
+                      join s in db.Servicios on c.ServicioId equals s.Id
+                      orderby c.Codigo
+                      select new CamaDto(c.Id, c.Codigo, s.Nombre, s.Id, c.Activa,
+                          db.Hospitalizaciones.Any(h => h.CamaId == c.Id && h.Estado == EstadoHospitalizacion.Activa)))
             .ToListAsync(ct);
     }
 

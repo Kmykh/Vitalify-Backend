@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vitalify · Cliente SignalR</title>
+  <!-- Cliente oficial de SignalR para el navegador. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js"></script>
+  <style>
+    :root { color-scheme: light dark; --borde: #8884; --fondo: #fff; --texto: #1d1d1f; --alta: #c62828; --media: #ef6c00; --baja: #2e7d32; }
+    @media (prefers-color-scheme: dark) { :root { --fondo: #121212; --texto: #eee; } }
+    body { margin: 0; padding: 16px; font: 15px/1.4 system-ui, sans-serif; background: var(--fondo); color: var(--texto); }
+    form { display: grid; gap: 8px; max-width: 760px; }
+    input, button { font: inherit; padding: 6px 8px; border: 1px solid var(--borde); border-radius: 6px; background: transparent; color: inherit; }
+    button { cursor: pointer; }
+    #estado { font-weight: 600; }
+    ol { padding-left: 20px; }
+    li { margin: 6px 0; padding: 6px 8px; border: 1px solid var(--borde); border-radius: 6px; overflow-wrap: anywhere; }
+    .alta { border-left: 6px solid var(--alta); } .media { border-left: 6px solid var(--media); } .baja { border-left: 6px solid var(--baja); }
+    code { font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>Vitalify · eventos en tiempo real</h1>
+  <p>
+    Se conecta al hub <code>/hubs/monitoreo</code> con el <code>accessToken</code> de una enfermera o un médico
+    (<code>POST /api/v1/auth/login</code>) y muestra <code>alertaCreada</code>, <code>alertaActualizada</code>,
+    <code>riesgoActualizado</code> y <code>signosActualizados</code>. Los eventos no traen nombres: solo el paciente (id) y la cama.
+    También se pueden pasar en la URL: <code>?api=http://localhost:5080&amp;token=...</code>.
+  </p>
+  <form id="formulario">
+    <label>API <input id="api" value="http://localhost:5080" required></label>
+    <label>Access token <input id="token" required placeholder="eyJhbGciOi..."></label>
+    <button type="submit">Conectar</button>
+  </form>
+  <p>Estado: <span id="estado">desconectado</span> · eventos: <span id="contador">0</span></p>
+  <ol id="eventos" reversed></ol>
+
+  <script>
+    const parametros = new URLSearchParams(location.search);
+    const campoApi = document.getElementById('api');
+    const campoToken = document.getElementById('token');
+    const estado = document.getElementById('estado');
+    const lista = document.getElementById('eventos');
+    const contador = document.getElementById('contador');
+    if (parametros.get('api')) campoApi.value = parametros.get('api');
+    if (parametros.get('token')) campoToken.value = parametros.get('token');
+
+    let conexion;
+
+    function mostrar(evento, datos) {
+      const item = document.createElement('li');
+      item.className = datos.prioridad || '';
+      const hora = new Date().toLocaleTimeString();
+      let resumen = '';
+      if (evento.startsWith('alerta')) resumen = `${datos.tipo} · ${datos.prioridad} · ${datos.estado} · cama ${datos.cama} · motivo ${datos.motivo}`;
+      else if (evento === 'riesgoActualizado') resumen = `cama ${datos.cama} · NEWS2 ${datos.news2} · MEWS ${datos.mews} · ${datos.nivel}`;
+      else resumen = `cama ${datos.cama} · FC ${datos.fc ?? '—'} · FR ${datos.fr ?? '—'} · SpO2 ${datos.spo2 ?? '—'} · T ${datos.temperatura ?? '—'}`;
+      item.innerHTML = `<strong>${hora} · ${evento}</strong><br>${resumen}<br><code></code>`;
+      item.querySelector('code').textContent = JSON.stringify(datos);
+      lista.prepend(item);
+      contador.textContent = String(lista.children.length);
+    }
+
+    async function conectar(api, token) {
+      if (conexion) await conexion.stop();
+      conexion = new signalR.HubConnectionBuilder()
+        .withUrl(`${api.replace(/\/$/, '')}/hubs/monitoreo`, { accessTokenFactory: () => token, withCredentials: false })
+        .withAutomaticReconnect()
+        .build();
+      for (const evento of ['alertaCreada', 'alertaActualizada', 'riesgoActualizado', 'signosActualizados']) {
+        conexion.on(evento, datos => mostrar(evento, datos));
+      }
+      conexion.onreconnecting(() => estado.textContent = 'reconectando…');
+      conexion.onreconnected(() => estado.textContent = 'conectado');
+      conexion.onclose(e => estado.textContent = e ? `cerrado (${e.message})` : 'cerrado');
+      estado.textContent = 'conectando…';
+      try {
+        await conexion.start();
+        estado.textContent = 'conectado';
+      } catch (e) {
+        estado.textContent = `error: ${e.message}`;
+      }
+    }
+
+    document.getElementById('formulario').addEventListener('submit', e => {
+      e.preventDefault();
+      conectar(campoApi.value, campoToken.value.trim());
+    });
+
+    if (campoToken.value) conectar(campoApi.value, campoToken.value.trim());
+  </script>
+</body>
+</html>

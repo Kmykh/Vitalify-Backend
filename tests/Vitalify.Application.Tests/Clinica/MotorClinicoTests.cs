@@ -120,7 +120,7 @@ public class MotorClinicoTests
     [Fact]
     public async Task Una_lectura_atrasada_del_bufer_no_dispara_una_evaluacion()
     {
-        await PacienteConSensorAsync();
+        await _e.HaceAsync(TimeSpan.FromMinutes(10), PacienteConSensorAsync);
         await RegistrarLecturaDelWearableAsync();
 
         await RegistrarLecturaDelWearableAsync(segundos: -120);
@@ -147,8 +147,8 @@ public class MotorClinicoTests
 
     [Theory]
     [InlineData(5)]
-    [InlineData(-5 * 60)]
-    public async Task Una_observacion_futura_o_de_mas_de_4_horas_se_rechaza(int minutos)
+    [InlineData(-13 * 60)]
+    public async Task Una_observacion_futura_o_de_mas_de_12_horas_se_rechaza(int minutos)
     {
         var pacienteId = await PacienteConSensorAsync();
 

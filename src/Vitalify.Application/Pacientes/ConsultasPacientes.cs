@@ -47,6 +47,7 @@ public sealed class ListarPacientesMonitoreados(
     IRepositorioHospitalizaciones hospitalizaciones,
     IRepositorioEstadoSignos estados,
     IRepositorioEvaluaciones evaluaciones,
+    IRepositorioAlertas alertas,
     IPresenciaDispositivos presencia,
     OpcionesTelemetria opciones,
     IReloj reloj)
@@ -62,6 +63,7 @@ public sealed class ListarPacientesMonitoreados(
         var ids = activas.Select(l => l.HospitalizacionId).ToList();
         var estadosSignos = await estados.ObtenerVariosAsync(ids, ct);
         var ultimasEvaluaciones = await evaluaciones.ObtenerUltimasAsync(ids, ct);
+        var abiertas = await alertas.ResumirAbiertasAsync(ids, ct);
 
         var items = activas
             .Select(l =>
@@ -77,7 +79,10 @@ public sealed class ListarPacientesMonitoreados(
                     EvaluacionCompleta: evaluacion is null ? null : evaluacion.News2Completo && evaluacion.MewsCompleto,
                     UltimaLecturaEn: ultimaLectura,
                     Senal: TextosEstado.De(Vigencia.SenalDe(ultimaLectura, ahora, opciones.Vigencia)),
-                    ConexionSensor: RegistrarPresenciaDispositivo.Texto(presencia.Obtener(l.CodigoDispositivo!)));
+                    ConexionSensor: RegistrarPresenciaDispositivo.Texto(presencia.Obtener(l.CodigoDispositivo!)),
+                    AlertasAbiertas: abiertas.TryGetValue(l.HospitalizacionId, out var resumen)
+                        ? new AlertasAbiertasDto(resumen.Cantidad, Alertas.TextosAlerta.De(resumen.Maxima))
+                        : new AlertasAbiertasDto(0, null));
             })
             .ToList();
 

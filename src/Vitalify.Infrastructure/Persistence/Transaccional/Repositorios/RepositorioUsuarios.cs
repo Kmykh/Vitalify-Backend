@@ -30,5 +30,14 @@ internal sealed class RepositorioUsuarios(TransaccionalDbContext db) : IReposito
         return new Pagina<Usuario>(elementos, pagina, tamano, total);
     }
 
+    public async Task<IReadOnlyList<Usuario>> ListarActivosAsync(Rol rol, Guid? servicioId, CancellationToken ct = default) =>
+        await db.Usuarios.AsNoTracking()
+            .Where(u => u.Rol == rol && u.Activo && (servicioId == null || u.ServicioId == servicioId))
+            .OrderBy(u => u.Nombre)
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<Usuario>> ObtenerVariosAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default) =>
+        ids.Count == 0 ? [] : await db.Usuarios.AsNoTracking().Where(u => ids.Contains(u.Id)).ToListAsync(ct);
+
     public void Agregar(Usuario usuario) => db.Usuarios.Add(usuario);
 }

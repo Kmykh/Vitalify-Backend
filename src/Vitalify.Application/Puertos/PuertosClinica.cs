@@ -10,7 +10,15 @@ public interface IRepositorioEvaluaciones
     Task<EvaluacionRiesgo?> ObtenerUltimaAsync(Guid hospitalizacionId, CancellationToken ct = default);
 
     Task<IReadOnlyDictionary<Guid, EvaluacionRiesgo>> ObtenerUltimasAsync(IReadOnlyCollection<Guid> hospitalizaciones, CancellationToken ct = default);
+
+    /// <summary>Primero, máximo y último NEWS2 y MEWS de cada hospitalización entre ambos instantes (entrega de turno).</summary>
+    Task<IReadOnlyDictionary<Guid, TendenciaRiesgo>> ObtenerTendenciasAsync(
+        IReadOnlyCollection<Guid> hospitalizaciones, DateTime desde, DateTime hasta, CancellationToken ct = default);
 }
+
+public sealed record TendenciaPuntaje(int Primero, int Maximo, int Ultimo);
+
+public sealed record TendenciaRiesgo(TendenciaPuntaje News2, TendenciaPuntaje Mews, int Evaluaciones);
 
 /// <summary>Observaciones del personal clínico (historial). Se guardan con <see cref="IUnidadDeTrabajoHistorial"/>.</summary>
 public interface IRepositorioObservaciones
@@ -25,6 +33,10 @@ public interface IRepositorioObservaciones
 
     /// <summary>Brazo de la última toma de presión que lo registró, para sugerirlo en la siguiente.</summary>
     Task<BrazoPresion?> ObtenerUltimoBrazoPresionAsync(Guid hospitalizacionId, CancellationToken ct = default);
+
+    /// <summary>Por hospitalización, la última toma con preocupación clínica.</summary>
+    Task<IReadOnlyDictionary<Guid, ObservacionEnfermeria>> ObtenerUltimasPreocupacionesAsync(
+        IReadOnlyCollection<Guid> hospitalizaciones, CancellationToken ct = default);
 }
 
 public sealed record PresenciaDispositivo(bool EnLinea, DateTime Desde);

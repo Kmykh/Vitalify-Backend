@@ -8,8 +8,9 @@ namespace Vitalify.Application.Usuarios;
 
 /// <param name="Rol">Solo <c>Medico</c> o <c>Enfermera</c>: los administradores no se crean por la API.</param>
 /// <param name="AdministradorId">Quien registra, para la auditoría.</param>
+/// <param name="ServicioId">Servicio donde trabaja: obligatorio para enfermeras y médicos.</param>
 public sealed record RegistrarUsuarioComando(
-    string Nombre, string Correo, string Contrasena, string Rol, Guid AdministradorId, string? Ip);
+    string Nombre, string Correo, string Contrasena, string Rol, Guid AdministradorId, string? Ip, Guid? ServicioId = null);
 
 public sealed class RegistrarUsuarioValidador : AbstractValidator<RegistrarUsuarioComando>
 {
@@ -33,6 +34,9 @@ public sealed class RegistrarUsuarioValidador : AbstractValidator<RegistrarUsuar
 
         RuleFor(c => c.Rol)
             .Must(r => TryParseRol(r, out _)).WithMessage("El rol debe ser Medico o Enfermera.");
+
+        RuleFor(c => c.ServicioId)
+            .Must(s => s is not null && s != Guid.Empty).WithMessage("El servicio es obligatorio para enfermeras y médicos (ver GET /servicios).");
     }
 
     /// <summary>Acepta solo los nombres de los roles registrables, sin distinguir mayúsculas (no números).</summary>
@@ -50,6 +54,7 @@ public sealed class RegistrarUsuario(
     IRepositorioAuditoria auditoria,
     IUnidadDeTrabajo unidadDeTrabajo,
     IHasherContrasenas hasher,
+    IRepositorioServicios servicios,
     IReloj reloj)
 {
     public async Task<Resultado<UsuarioDetalleDto>> EjecutarAsync(RegistrarUsuarioComando comando, CancellationToken ct = default)
@@ -65,9 +70,14 @@ public sealed class RegistrarUsuario(
             return ErroresUsuario.CorreoEnUso;
         }
 
+        if (await servicios.ObtenerPorIdAsync(comando.ServicioId!.Value, ct) is not { Activo: true })
+        {
+            return ErroresComunes.ValidacionDeCampo("servicioId", "El servicio no existe o no está activo.");
+        }
+
         RegistrarUsuarioValidador.TryParseRol(comando.Rol, out var rol);
         var ahora = reloj.AhoraUtc;
-        var usuario = Usuario.Crear(comando.Nombre, correo, hasher.Calcular(comando.Contrasena), rol, ahora);
+        var usuario = Usuario.Crear(comando.Nombre, correo, hasher.Calcular(comando.Contrasena), rol, ahora, comando.ServicioId);
 
         usuarios.Agregar(usuario);
         auditoria.Agregar(RegistroAuditoria.Registrar(

@@ -1,10 +1,12 @@
 using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Vitalify.Api.Configuracion;
+using Vitalify.Api.Entrada.Alertas;
 using Vitalify.Api.Entrada.Desarrollo;
 using Vitalify.Api.Entrada.Mqtt;
 using Vitalify.Api.Entrada.Simulador;
 using Vitalify.Api.Seguridad;
+using Vitalify.Api.TiempoReal;
 using Vitalify.Application;
 using Vitalify.Infrastructure;
 
@@ -45,6 +47,8 @@ builder.Services.AddAutorizacionVitalify();
 builder.Services.AddLimitesDeSolicitudes(builder.Configuration);
 builder.Services.AddSimuladorTelemetria(builder.Configuration);
 builder.Services.AddReceptorMqtt(builder.Configuration);
+builder.Services.AddTiempoReal();
+builder.Services.AddHostedService<VigilanteAlertasWorker>();
 
 var app = builder.Build();
 
@@ -67,6 +71,7 @@ app.UseAuthorization();
 app.UseRateLimiter();
 
 app.MapControllers();
+app.MapHub<HubMonitoreo>(HubMonitoreo.Ruta);
 
 // Adaptador de entrada temporal de la telemetría: la ruta no existe fuera de Development.
 if (app.Environment.IsDevelopment())

@@ -20,7 +20,7 @@ public class HU01RegistroDeUsuarioTests(FabricaVitalify fabrica) : PruebaApi(fab
         var correo = $"medico.{Guid.NewGuid():N}@vitalify.test";
 
         var respuesta = await administrador.PostAsJsonAsync("/api/v1/usuarios",
-            new { nombre = "Dra. Ana Pérez", correo, contrasena = "Clinica2026", rol = "Medico" });
+            new { nombre = "Dra. Ana Pérez", correo, contrasena = "Clinica2026", rol = "Medico", servicioId = await administrador.ServicioDePruebasAsync() });
 
         Assert.Equal(HttpStatusCode.Created, respuesta.StatusCode);
         var creado = await respuesta.LeerUsuarioAsync();
@@ -43,7 +43,7 @@ public class HU01RegistroDeUsuarioTests(FabricaVitalify fabrica) : PruebaApi(fab
         var correo = await administrador.RegistrarUsuarioAsync("Enfermera");
 
         var respuesta = await administrador.PostAsJsonAsync("/api/v1/usuarios",
-            new { nombre = "Otra persona", correo = correo.ToUpperInvariant(), contrasena = "Clinica2026", rol = "Medico" });
+            new { nombre = "Otra persona", correo = correo.ToUpperInvariant(), contrasena = "Clinica2026", rol = "Medico", servicioId = await administrador.ServicioDePruebasAsync() });
 
         Assert.Equal(HttpStatusCode.Conflict, respuesta.StatusCode);
         var problema = await respuesta.LeerProblemaAsync();
@@ -56,10 +56,11 @@ public class HU01RegistroDeUsuarioTests(FabricaVitalify fabrica) : PruebaApi(fab
     {
         var administrador = await ClienteAdministradorAsync();
         var correo = $"simultaneo.{Guid.NewGuid():N}@vitalify.test";
+        var servicioId = await administrador.ServicioDePruebasAsync();
 
         var respuestas = await Task.WhenAll(Enumerable.Range(0, 5).Select(_ =>
             administrador.PostAsJsonAsync("/api/v1/usuarios",
-                new { nombre = "Simultáneo", correo, contrasena = "Clinica2026", rol = "Enfermera" })));
+                new { nombre = "Simultáneo", correo, contrasena = "Clinica2026", rol = "Enfermera", servicioId })));
 
         Assert.Single(respuestas, r => r.StatusCode == HttpStatusCode.Created);
         Assert.All(respuestas.Where(r => r.StatusCode != HttpStatusCode.Created), r => Assert.Equal(HttpStatusCode.Conflict, r.StatusCode));

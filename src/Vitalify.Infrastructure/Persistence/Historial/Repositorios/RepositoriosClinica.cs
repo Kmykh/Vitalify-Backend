@@ -35,6 +35,22 @@ internal sealed class RepositorioObservaciones(HistorialDbContext db) : IReposit
             .OrderByDescending(o => o.ObservadaEn)
             .Select(o => o.BrazoPa)
             .FirstOrDefaultAsync(ct);
+
+    public async Task<IReadOnlyDictionary<Guid, ObservacionEnfermeria>> ObtenerUltimasPreocupacionesAsync(
+        IReadOnlyCollection<Guid> hospitalizaciones, CancellationToken ct = default)
+    {
+        if (hospitalizaciones.Count == 0)
+        {
+            return new Dictionary<Guid, ObservacionEnfermeria>();
+        }
+
+        var ultimas = await db.Observaciones.AsNoTracking()
+            .Where(o => hospitalizaciones.Contains(o.HospitalizacionId) && o.PreocupacionClinica == true)
+            .GroupBy(o => o.HospitalizacionId)
+            .Select(g => g.OrderByDescending(o => o.ObservadaEn).First())
+            .ToListAsync(ct);
+        return ultimas.ToDictionary(o => o.HospitalizacionId);
+    }
 }
 
 internal sealed class RepositorioEvaluaciones(HistorialDbContext db) : IRepositorioEvaluaciones
@@ -62,5 +78,34 @@ internal sealed class RepositorioEvaluaciones(HistorialDbContext db) : IReposito
             .ToListAsync(ct);
 
         return ultimas.ToDictionary(e => e.HospitalizacionId);
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, TendenciaRiesgo>> ObtenerTendenciasAsync(
+        IReadOnlyCollection<Guid> hospitalizaciones, DateTime desde, DateTime hasta, CancellationToken ct = default)
+    {
+        if (hospitalizaciones.Count == 0)
+        {
+            return new Dictionary<Guid, TendenciaRiesgo>();
+        }
+
+        // Todo se agrega en SQL: en una guardia de 12 h hay hasta ~4300 evaluaciones por paciente.
+        var filas = await db.Evaluaciones.AsNoTracking()
+            .Where(e => hospitalizaciones.Contains(e.HospitalizacionId) && e.EvaluadaEn >= desde && e.EvaluadaEn <= hasta)
+            .GroupBy(e => e.HospitalizacionId)
+            .Select(g => new
+            {
+                Hospitalizacion = g.Key,
+                Cantidad = g.Count(),
+                News2Maximo = g.Max(e => e.News2Total),
+                MewsMaximo = g.Max(e => e.MewsTotal),
+                Primera = g.OrderBy(e => e.EvaluadaEn).Select(e => new { e.News2Total, e.MewsTotal }).First(),
+                Ultima = g.OrderByDescending(e => e.EvaluadaEn).Select(e => new { e.News2Total, e.MewsTotal }).First(),
+            })
+            .ToListAsync(ct);
+
+        return filas.ToDictionary(f => f.Hospitalizacion, f => new TendenciaRiesgo(
+            new TendenciaPuntaje(f.Primera.News2Total, f.News2Maximo, f.Ultima.News2Total),
+            new TendenciaPuntaje(f.Primera.MewsTotal, f.MewsMaximo, f.Ultima.MewsTotal),
+            f.Cantidad));
     }
 }

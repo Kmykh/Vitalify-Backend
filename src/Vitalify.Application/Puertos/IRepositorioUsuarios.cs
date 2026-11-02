@@ -15,5 +15,10 @@ public interface IRepositorioUsuarios
 
     Task<Pagina<Usuario>> ListarAsync(int pagina, int tamano, CancellationToken ct = default);
 
+    /// <summary>Usuarios activos con ese rol; con <paramref name="servicioId"/>, solo los de ese servicio.</summary>
+    Task<IReadOnlyList<Usuario>> ListarActivosAsync(Rol rol, Guid? servicioId, CancellationToken ct = default);
+
+    Task<IReadOnlyList<Usuario>> ObtenerVariosAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default);
+
     void Agregar(Usuario usuario);
 }

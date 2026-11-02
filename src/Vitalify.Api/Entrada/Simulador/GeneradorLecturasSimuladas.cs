@@ -10,6 +10,9 @@ namespace Vitalify.Api.Entrada.Simulador;
 /// </summary>
 public sealed class GeneradorLecturasSimuladas(OpcionesSimulador opciones)
 {
+    /// <summary>Con <see cref="EscenarioSimulacion.DeterioroRapido"/>, el deterioro completo llega a los 5 minutos.</summary>
+    public const double MinutosDeterioroRapido = 5;
+
     private readonly Dictionary<string, EstadoSimulado> _estados = new(StringComparer.Ordinal);
 
     public LecturaTelemetria Generar(string codigoDispositivo, DateTime ahora)
@@ -31,6 +34,7 @@ public sealed class GeneradorLecturasSimuladas(OpcionesSimulador opciones)
         var (signos, caida) = opciones.EscenarioDe(codigoDispositivo) switch
         {
             EscenarioSimulacion.Deterioro => (Deteriorar(estable, Progreso(estado.Inicio, ahora)), false),
+            EscenarioSimulacion.DeterioroRapido => (Deteriorar(estable, Math.Clamp((ahora - estado.Inicio).TotalMinutes / MinutosDeterioroRapido, 0, 1)), false),
             EscenarioSimulacion.Caida => (estable, seq % opciones.LecturasEntreCaidas == 0),
             EscenarioSimulacion.SensorDefectuoso => (Defectuoso(estable, seq), false),
             _ => (estable, false),

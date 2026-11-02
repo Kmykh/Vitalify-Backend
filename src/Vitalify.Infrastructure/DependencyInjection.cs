@@ -9,7 +9,9 @@ using Vitalify.Infrastructure.Persistence.Transaccional;
 using Vitalify.Infrastructure.Persistence.Transaccional.Repositorios;
 using Vitalify.Infrastructure.Seguridad;
 using Vitalify.Infrastructure.Semillas;
+using Vitalify.Infrastructure.Notificaciones;
 using Vitalify.Infrastructure.Telemetria;
+using Vitalify.Infrastructure.Turnos;
 using Vitalify.Infrastructure.Vinculacion;
 
 namespace Vitalify.Infrastructure;
@@ -79,6 +81,27 @@ public static class DependencyInjection
         services.AddSingleton(ConfiguracionTelemetria.CargarOpcionesVinculacion(configuration));
         services.AddScoped<IRepositorioCodigosVinculacion, RepositorioCodigosVinculacion>();
         services.AddSingleton<IPublicadorComandosDispositivo, PublicadorComandosEnLog>();
+
+        // Fase 6: servicios, turnos, alertas y notificaciones. El push por FCM solo con Push__Habilitado=true; el de
+        // tiempo real (SignalR) lo registra la API.
+        services.AddSingleton(ConfiguracionTelemetria.CargarCatalogoTurnos(configuration));
+        services.AddSingleton(ConfiguracionTelemetria.CargarOpcionesAlertas(configuration));
+        var push = ConfiguracionTelemetria.CargarOpcionesPush(configuration);
+        services.AddSingleton(push);
+        services.AddScoped<IRepositorioServicios, RepositorioServicios>();
+        services.AddScoped<IRepositorioProgramacion, RepositorioProgramacion>();
+        services.AddScoped<IRepositorioAlertas, RepositorioAlertas>();
+        services.AddScoped<IRepositorioDispositivosMoviles, RepositorioDispositivosMoviles>();
+        services.AddScoped<ITurnoVigente, TurnoVigenteEnBase>();
+        services.AddSingleton<IBitacoraFallos, BitacoraFallosEnLog>();
+        if (push.Habilitado)
+        {
+            services.AddSingleton<INotificadorPush, NotificadorPushFcm>();
+        }
+        else
+        {
+            services.AddSingleton<INotificadorPush, NotificadorPushEnLog>();
+        }
 
         services.AddHostedService<SemillaAdministrador>();
         services.AddHostedService<SemillaDatosDemo>();

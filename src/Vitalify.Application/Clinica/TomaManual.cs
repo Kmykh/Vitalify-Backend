@@ -118,8 +118,8 @@ public class TomaManualValidador : AbstractValidator<TomaManualComando>
         RuleFor(c => c.ObservadaEn)
             .Must(v => v is null || v.Value.ToUniversalTime() <= reloj.AhoraUtc.AddMinutes(1))
             .WithMessage("observadaEn no puede estar en el futuro.")
-            .Must(v => v is null || v.Value.ToUniversalTime() >= reloj.AhoraUtc - opciones.VigenciaObservaciones)
-            .WithMessage($"observadaEn no puede tener más de {opciones.VigenciaObservaciones.TotalHours:0} horas: ya no contaría para el puntaje.");
+            .Must(v => v is null || v.Value.ToUniversalTime() >= reloj.AhoraUtc - FrecuenciaTomaManual.TopeVigencia)
+            .WithMessage($"observadaEn no puede tener más de {FrecuenciaTomaManual.TopeVigencia.TotalHours:0} horas: ya no contaría para el puntaje.");
 
         if (tomaInicial)
         {
@@ -159,8 +159,8 @@ public class TomaManualValidador : AbstractValidator<TomaManualComando>
                 l.RuleFor(x => x.MedidaEn)
                     .Must(v => v is null || v.Value.ToUniversalTime() <= reloj.AhoraUtc.AddMinutes(1))
                     .WithMessage("medidaEn no puede estar en el futuro.")
-                    .Must(v => v is null || v.Value.ToUniversalTime() >= reloj.AhoraUtc - opciones.VigenciaObservaciones)
-                    .WithMessage($"medidaEn no puede tener más de {opciones.VigenciaObservaciones.TotalHours:0} horas.");
+                    .Must(v => v is null || v.Value.ToUniversalTime() >= reloj.AhoraUtc - FrecuenciaTomaManual.TopeVigencia)
+                    .WithMessage($"medidaEn no puede tener más de {FrecuenciaTomaManual.TopeVigencia.TotalHours:0} horas.");
             });
 
         RuleFor(c => c.Presion!.Posicion).Must(v => string.IsNullOrWhiteSpace(v) || Enumeraciones.TryParseNombre<PosicionPresion>(v, out _))

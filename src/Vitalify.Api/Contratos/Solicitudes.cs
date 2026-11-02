@@ -20,12 +20,13 @@ public sealed record CerrarSesionSolicitud(string? RefreshToken);
 /// <param name="Correo">Correo, único en el sistema.</param>
 /// <param name="Contrasena">Al menos 8 caracteres, con al menos una letra y un número.</param>
 /// <param name="Rol"><c>Medico</c> o <c>Enfermera</c>.</param>
-public sealed record RegistrarUsuarioSolicitud(string Nombre, string Correo, string Contrasena, string Rol);
+/// <param name="ServicioId">Servicio donde trabaja (obligatorio; ver <c>GET /servicios</c>).</param>
+public sealed record RegistrarUsuarioSolicitud(string Nombre, string Correo, string Contrasena, string Rol, Guid? ServicioId = null);
 
 /// <summary>Cama del catálogo.</summary>
 /// <param name="Codigo">Código único, por ejemplo <c>MED-B-05</c>.</param>
-/// <param name="Servicio">Servicio hospitalario, por ejemplo "Medicina B".</param>
-public sealed record RegistrarCamaSolicitud(string Codigo, string Servicio);
+/// <param name="ServicioId">Servicio de la cama (ver <c>GET /servicios</c>): sus alertas van al personal de ese servicio.</param>
+public sealed record RegistrarCamaSolicitud(string Codigo, Guid? ServicioId);
 
 /// <summary>Wearable ESP32.</summary>
 /// <param name="Codigo">Código único del tópico MQTT <c>device/{codigo}/telemetria</c>, por ejemplo <c>ESP32-001</c>.</param>
@@ -179,3 +180,47 @@ public sealed class ConvertidorConciencia : JsonConverter<ConcienciaSolicitud>
     private sealed record RespuestasConcienciaJson(
         string? Nivel, bool? DespiertoCoherente, bool? ConfusionNueva, bool? RespondeVoz, bool? RespondeDolor);
 }
+
+/// <summary>Servicio hospitalario.</summary>
+/// <param name="Codigo">Por ejemplo <c>EMERGENCIA</c>, <c>UVI</c> o <c>MEDICINA</c> (2 a 30 letras, números o guiones).</param>
+/// <param name="Nombre">Por ejemplo "Emergencia".</param>
+public sealed record RegistrarServicioSolicitud(string Codigo, string Nombre);
+
+/// <param name="ServicioId">Servicio de la enfermera o del médico.</param>
+public sealed record AsignarServicioSolicitud(Guid? ServicioId);
+
+/// <summary>
+/// Un día de la planilla: <c>dia</c> y, por cada turno (<c>GuardiaDiurna</c>, <c>GuardiaNocturna</c>, <c>Manana</c>,
+/// <c>Tarde</c>), las letras que lo cubren. Por ejemplo <c>{ "dia": 1, "GuardiaDiurna": ["C"], "GuardiaNocturna": ["A"] }</c>.
+/// </summary>
+public sealed class DiaPlanillaSolicitud
+{
+    public int Dia { get; init; }
+
+    /// <summary>Los turnos del día (cada propiedad que no es <c>dia</c>).</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? Turnos { get; init; }
+
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> TurnosComoLetras() =>
+        (Turnos ?? []).ToDictionary(
+            t => t.Key,
+            t => (IReadOnlyList<string>)(t.Value.ValueKind == JsonValueKind.Array
+                ? t.Value.EnumerateArray().Select(l => l.ValueKind == JsonValueKind.String ? l.GetString() ?? string.Empty : l.ToString()).ToList()
+                : [t.Value.ToString()]));
+}
+
+/// <summary>
+/// La planilla del mes, con el formato del papel: cada enfermera tiene una letra y cada día dice qué letra cubre cada
+/// turno. Reemplaza la programación del mes completo.
+/// </summary>
+/// <param name="Letras">Letra → id de la enfermera, por ejemplo <c>{ "A": "…", "B": "…" }</c>.</param>
+/// <param name="Dias">Los días del mes con sus turnos.</param>
+public sealed record CargarProgramacionSolicitud(Dictionary<string, Guid>? Letras, List<DiaPlanillaSolicitud>? Dias);
+
+/// <param name="Nota">Qué se hizo (obligatoria, de 5 a 1000 caracteres).</param>
+public sealed record AtenderAlertaSolicitud(string? Nota);
+
+/// <summary>Token de notificaciones push de la app.</summary>
+/// <param name="Token">Token de registro de FCM (<c>FirebaseMessaging.instance.getToken()</c>).</param>
+/// <param name="Plataforma"><c>Android</c>, <c>Ios</c> o <c>Web</c>.</param>
+public sealed record DispositivoMovilSolicitud(string? Token, string? Plataforma);

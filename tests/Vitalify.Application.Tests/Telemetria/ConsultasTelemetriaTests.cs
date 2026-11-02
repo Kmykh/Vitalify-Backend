@@ -56,7 +56,7 @@ public class ConsultasTelemetriaTests
     [Fact]
     public async Task El_historial_por_defecto_trae_la_ultima_hora_en_orden_cronologico()
     {
-        var pacienteId = await PacienteConSensorAsync();
+        var pacienteId = await _e.HaceAsync(TimeSpan.FromHours(2), PacienteConSensorAsync);
         await _e.RegistrarLectura().EjecutarAsync(_e.Lectura(new(Fc: 70), segundos: -90 * 60));
         await _e.RegistrarLectura().EjecutarAsync(_e.Lectura(new(Fc: 82, Spo2: 97), segundos: -10));
         await _e.RegistrarLectura().EjecutarAsync(_e.Lectura(new(Fc: 78), segundos: -20 * 60, caida: true));

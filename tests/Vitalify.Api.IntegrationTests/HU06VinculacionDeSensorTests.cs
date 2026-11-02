@@ -12,6 +12,7 @@ using Vitalify.Domain.Camas;
 using Vitalify.Domain.Dispositivos;
 using Vitalify.Domain.Hospitalizaciones;
 using Vitalify.Domain.Pacientes;
+using Vitalify.Domain.Servicios;
 using Vitalify.Domain.Usuarios;
 
 namespace Vitalify.Api.IntegrationTests;
@@ -141,14 +142,15 @@ public class HU06VinculacionDeSensorTests(FabricaVitalify fabrica) : PruebaApi(f
         var paciente1 = NuevoPaciente(ahora);
         var paciente2 = NuevoPaciente(ahora);
         var paciente3 = NuevoPaciente(ahora);
-        var (cama1, cama2, cama3) = (NuevaCama(), NuevaCama(), NuevaCama());
+        var servicio = Servicio.Registrar($"IX-{Guid.NewGuid():N}"[..12], "Pruebas de índices");
+        var (cama1, cama2, cama3) = (NuevaCama(servicio), NuevaCama(servicio), NuevaCama(servicio));
         var (sensor1, sensor2) = (NuevoSensor(), NuevoSensor());
         var hospitalizacion1 = Hospitalizacion.Abrir(paciente1.Id, cama1.Id, "Diagnóstico", ahora, usuarioId);
         var hospitalizacion2 = Hospitalizacion.Abrir(paciente2.Id, cama2.Id, "Diagnóstico", ahora, usuarioId);
         var asignacion1 = AsignacionDispositivo.Vincular(sensor1, hospitalizacion1, ahora, usuarioId);
 
         Assert.True((await GuardarAsync(db => db.AddRange(
-            paciente1, paciente2, paciente3, cama1, cama2, cama3, sensor1, sensor2, hospitalizacion1, hospitalizacion2, asignacion1))).EsExito);
+            servicio, paciente1, paciente2, paciente3, cama1, cama2, cama3, sensor1, sensor2, hospitalizacion1, hospitalizacion2, asignacion1))).EsExito);
 
         // Otra hospitalización activa en la misma cama.
         Assert.Equal("cama-ocupada", (await GuardarAsync(db =>
@@ -170,7 +172,7 @@ public class HU06VinculacionDeSensorTests(FabricaVitalify fabrica) : PruebaApi(f
     private static Paciente NuevoPaciente(DateTime ahora) =>
         Paciente.Registrar("Paciente de índice", TipoDocumento.Dni, ClienteApi.NuevoDni(), new DateOnly(1980, 1, 1), false, ahora);
 
-    private static Cama NuevaCama() => Cama.Registrar($"IX-{Guid.NewGuid():N}"[..12], "Pruebas");
+    private static Cama NuevaCama(Servicio servicio) => Cama.Registrar($"IX-{Guid.NewGuid():N}"[..12], servicio.Id);
 
     private static Dispositivo NuevoSensor() => Dispositivo.Registrar($"IX-{Guid.NewGuid():N}"[..16], null);
 

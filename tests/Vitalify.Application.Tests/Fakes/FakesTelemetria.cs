@@ -106,6 +106,25 @@ public sealed class HistorialEnMemoria
         Task.FromResult(Observaciones.Where(o => o.HospitalizacionId == hospitalizacionId && o.BrazoPa is not null)
             .OrderByDescending(o => o.ObservadaEn).Select(o => o.BrazoPa).FirstOrDefault());
 
+    public Task<IReadOnlyDictionary<Guid, ObservacionEnfermeria>> ObtenerUltimasPreocupacionesAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyDictionary<Guid, ObservacionEnfermeria>>(Observaciones
+            .Where(o => ids.Contains(o.HospitalizacionId) && o.PreocupacionClinica == true)
+            .GroupBy(o => o.HospitalizacionId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(o => o.ObservadaEn).First()));
+
+    public Task<IReadOnlyDictionary<Guid, TendenciaRiesgo>> ObtenerTendenciasAsync(IReadOnlyCollection<Guid> ids, DateTime desde, DateTime hasta, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyDictionary<Guid, TendenciaRiesgo>>(Evaluaciones
+            .Where(e => ids.Contains(e.HospitalizacionId) && e.EvaluadaEn >= desde && e.EvaluadaEn <= hasta)
+            .GroupBy(e => e.HospitalizacionId)
+            .ToDictionary(g => g.Key, g =>
+            {
+                var orden = g.OrderBy(e => e.EvaluadaEn).ToList();
+                return new TendenciaRiesgo(
+                    new TendenciaPuntaje(orden[0].News2Total, orden.Max(e => e.News2Total), orden[^1].News2Total),
+                    new TendenciaPuntaje(orden[0].MewsTotal, orden.Max(e => e.MewsTotal), orden[^1].MewsTotal),
+                    orden.Count);
+            }));
+
     public Task<Resultado<Unidad>> GuardarCambiosAsync(CancellationToken ct = default)
     {
         Guardados++;

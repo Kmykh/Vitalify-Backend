@@ -29,7 +29,7 @@ public class HU07PacientesMonitoreadosTests(FabricaVitalify fabrica) : PruebaApi
         Assert.Equal(monitoreado.NombreCompleto, item.GetProperty("nombreCompleto").GetString());
         Assert.Equal(monitoreado.Edad, item.GetProperty("edad").GetInt32());
         Assert.Equal(cama1.Codigo, item.GetProperty("cama").GetString());
-        Assert.Equal("Medicina B", item.GetProperty("servicio").GetString());
+        Assert.Equal("Servicio de pruebas", item.GetProperty("servicio").GetString());
         Assert.Equal(sensor.Codigo, item.GetProperty("codigoDispositivo").GetString());
         Assert.NotEqual(default, item.GetProperty("ingresoEn").GetDateTime());
         Assert.Equal(JsonValueKind.Null, item.GetProperty("ultimoNews2").ValueKind);

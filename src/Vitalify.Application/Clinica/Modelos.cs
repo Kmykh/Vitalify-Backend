@@ -3,14 +3,17 @@ using Vitalify.Domain.Clinica;
 namespace Vitalify.Application.Clinica;
 
 /// <summary>Parámetros del motor clínico (sección <c>Clinico</c>).</summary>
-/// <param name="VigenciaObservaciones">Cuánto tiempo vale una observación manual para el puntaje (4 h por defecto).</param>
+/// <param name="ToleranciaToma">
+/// Margen después de la próxima toma manual durante el que sus valores siguen contando (30 min por defecto). Una toma
+/// vale hasta su próxima toma más este margen, con un tope de 12 h (<see cref="FrecuenciaTomaManual.TopeVigencia"/>).
+/// </param>
 /// <param name="AjusteTemperaturaSensor">
 /// °C que se suman a la temperatura del wearable antes de puntuar. El DS18B20 mide la piel, que está por debajo de
 /// la temperatura central: este desfase se calibra midiendo con un termómetro clínico. Por defecto 0.
 /// </param>
-public sealed record OpcionesClinicas(TimeSpan VigenciaObservaciones, decimal AjusteTemperaturaSensor)
+public sealed record OpcionesClinicas(TimeSpan ToleranciaToma, decimal AjusteTemperaturaSensor)
 {
-    public static readonly OpcionesClinicas PorDefecto = new(TimeSpan.FromHours(4), 0m);
+    public static readonly OpcionesClinicas PorDefecto = new(TimeSpan.FromMinutes(30), 0m);
 }
 
 public static class TextosClinicos
@@ -88,7 +91,7 @@ public sealed record EvaluacionRiesgoDto(
             recomendacion,
             new ParametrosUsadosDto(e.Fc, e.Spo2, e.Temperatura, e.Fr, e.Pas, e.Conciencia?.ToString(), e.OxigenoSuplementario, e.EscalaSpo2.ToString()),
             recomendacion,
-            FrecuenciaTomaManual.Proxima(ultimaTomaManual, e.EvaluadaEn, news2),
+            e.ProximaTomaManualEn ?? FrecuenciaTomaManual.Proxima(ultimaTomaManual, e.EvaluadaEn, news2),
             avisos);
     }
 }

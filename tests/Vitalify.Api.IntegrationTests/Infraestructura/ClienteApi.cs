@@ -34,14 +34,45 @@ public static class ClienteApi
     public static void UsarToken(this HttpClient cliente, string accessToken) =>
         cliente.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
+    public const string CodigoServicioDePruebas = "PRUEBAS";
+
     /// <summary>Con un cliente de administrador, registra una cuenta con correo único y devuelve su correo.</summary>
-    public static async Task<string> RegistrarUsuarioAsync(this HttpClient administrador, string rol)
+    /// <param name="servicioId">Servicio de la cuenta; por defecto, el servicio <c>PRUEBAS</c> (se crea si no existe).</param>
+    public static async Task<string> RegistrarUsuarioAsync(this HttpClient administrador, string rol, Guid? servicioId = null)
     {
         var correo = $"{rol.ToLowerInvariant()}.{Guid.NewGuid():N}@vitalify.test";
         var respuesta = await administrador.PostAsJsonAsync("/api/v1/usuarios",
-            new { nombre = $"{rol} de prueba", correo, contrasena = ContrasenaDePrueba, rol });
+            new { nombre = $"{rol} de prueba", correo, contrasena = ContrasenaDePrueba, rol, servicioId = servicioId ?? await administrador.ServicioDePruebasAsync() });
         Assert.Equal(HttpStatusCode.Created, respuesta.StatusCode);
         return correo;
+    }
+
+    /// <summary>El servicio <c>PRUEBAS</c>, que usan por defecto las camas y las cuentas de las pruebas.</summary>
+    public static async Task<Guid> ServicioDePruebasAsync(this HttpClient administrador)
+    {
+        var servicios = (await administrador.GetFromJsonAsync<List<Application.Servicios.ServicioDto>>("/api/v1/servicios"))!;
+        if (servicios.FirstOrDefault(s => s.Codigo == CodigoServicioDePruebas) is { } existente)
+        {
+            return existente.Id;
+        }
+
+        var respuesta = await administrador.PostAsJsonAsync("/api/v1/servicios", new { codigo = CodigoServicioDePruebas, nombre = "Servicio de pruebas" });
+        if (respuesta.StatusCode == HttpStatusCode.Conflict)
+        {
+            return await administrador.ServicioDePruebasAsync();
+        }
+
+        Assert.Equal(HttpStatusCode.Created, respuesta.StatusCode);
+        return (await respuesta.Content.ReadFromJsonAsync<Application.Servicios.ServicioDto>())!.Id;
+    }
+
+    /// <summary>Un servicio nuevo (código único), para las pruebas que necesitan su propio personal y programación.</summary>
+    public static async Task<Application.Servicios.ServicioDto> CrearServicioAsync(this HttpClient administrador, string nombre = "Servicio aislado")
+    {
+        var respuesta = await administrador.PostAsJsonAsync("/api/v1/servicios",
+            new { codigo = $"S-{Guid.NewGuid().ToString("N")[..12].ToUpperInvariant()}", nombre });
+        Assert.Equal(HttpStatusCode.Created, respuesta.StatusCode);
+        return (await respuesta.Content.ReadFromJsonAsync<Application.Servicios.ServicioDto>())!;
     }
 
     private static int _ultimoDni = Random.Shared.Next(10_000_000, 80_000_000);
@@ -49,10 +80,10 @@ public static class ClienteApi
     /// <summary>DNI único dentro de la ejecución.</summary>
     public static string NuevoDni() => Interlocked.Increment(ref _ultimoDni).ToString(System.Globalization.CultureInfo.InvariantCulture);
 
-    public static async Task<CamaDto> CrearCamaAsync(this HttpClient administrador)
+    public static async Task<CamaDto> CrearCamaAsync(this HttpClient administrador, Guid? servicioId = null)
     {
         var respuesta = await administrador.PostAsJsonAsync("/api/v1/camas",
-            new { codigo = $"T-{Guid.NewGuid().ToString("N")[..10].ToUpperInvariant()}", servicio = "Medicina B" });
+            new { codigo = $"T-{Guid.NewGuid().ToString("N")[..10].ToUpperInvariant()}", servicioId = servicioId ?? await administrador.ServicioDePruebasAsync() });
         Assert.Equal(HttpStatusCode.Created, respuesta.StatusCode);
         return (await respuesta.Content.ReadFromJsonAsync<CamaDto>())!;
     }
@@ -133,7 +164,10 @@ public abstract class PruebaApi(FabricaVitalify fabrica)
 
     protected async Task<HttpClient> ClienteEnfermeraAsync() => (await ClienteConRolAsync("Enfermera")).Cliente;
 
-    /// <summary>Paciente ingresado con un sensor recién creado y vinculado.</summary>
+    /// <summary>
+    /// Paciente ingresado con un sensor recién creado y vinculado hace 6 h (según el reloj de la API): la ingesta rechaza
+    /// lo medido antes de la vinculación vigente, y así las pruebas pueden enviar lecturas atrasadas del búfer.
+    /// </summary>
     protected async Task<(HttpClient Enfermera, FichaPacienteDto Ficha, DispositivoDto Sensor, CamaDto Cama)> PacienteConSensorAsync()
     {
         var administrador = await ClienteAdministradorAsync();
@@ -141,16 +175,20 @@ public abstract class PruebaApi(FabricaVitalify fabrica)
         var sensor = await administrador.CrearDispositivoAsync();
         var enfermera = await ClienteEnfermeraAsync();
         var ficha = await enfermera.IngresarPacienteAsync(cama.Id);
-        Assert.Equal(HttpStatusCode.OK, (await enfermera.VincularAsync(ficha.Id, sensor.Id)).StatusCode);
+        using (Fabrica.Reloj.Adelantar(-TimeSpan.FromHours(6)))
+        {
+            Assert.Equal(HttpStatusCode.OK, (await enfermera.VincularAsync(ficha.Id, sensor.Id)).StatusCode);
+        }
+
         return (enfermera, ficha, sensor, cama);
     }
 
     protected async Task<HttpClient> ClienteMedicoAsync() => (await ClienteConRolAsync("Medico")).Cliente;
 
-    /// <summary>Crea una cuenta con el rol indicado y devuelve un cliente con su sesión iniciada.</summary>
-    protected async Task<(HttpClient Cliente, SesionIniciada Sesion)> ClienteConRolAsync(string rol)
+    /// <summary>Crea una cuenta con el rol indicado (en el servicio indicado o en <c>PRUEBAS</c>) y devuelve un cliente con su sesión iniciada.</summary>
+    protected async Task<(HttpClient Cliente, SesionIniciada Sesion)> ClienteConRolAsync(string rol, Guid? servicioId = null)
     {
-        var correo = await (await ClienteAdministradorAsync()).RegistrarUsuarioAsync(rol);
+        var correo = await (await ClienteAdministradorAsync()).RegistrarUsuarioAsync(rol, servicioId);
         var cliente = Fabrica.CrearCliente();
         var sesion = await cliente.IniciarSesionAsync(correo, ClienteApi.ContrasenaDePrueba);
         return (cliente, sesion);

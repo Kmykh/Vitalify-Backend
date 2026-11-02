@@ -4,7 +4,7 @@ Control de acceso basado en roles (RBAC) de Vitalify. Cada rol tiene permisos di
 
 - **Roles:** `Administrador`, `Medico` y `Enfermera` (van en el claim `role` del JWT).
 - **Principio de mínimo privilegio (Ley 29733, Protección de Datos Personales):**
-  - El administrador gestiona cuentas y catálogos (camas y dispositivos), pero **no accede a datos de pacientes**. En el catálogo de camas ve si una cama está ocupada, pero no quién la ocupa.
+  - El administrador gestiona cuentas y catálogos (servicios, camas y dispositivos) y carga la programación de turnos, pero **no accede a datos de pacientes ni a las alertas**. En el catálogo de camas ve si una cama está ocupada, pero no quién la ocupa.
   - El personal clínico no administra cuentas ni el inventario.
   - Según el backlog (HU05, HU06 y HU08), la **enfermera** registra el ingreso, vincula el sensor y registra el egreso.
 
@@ -23,7 +23,10 @@ Control de acceso basado en roles (RBAC) de Vitalify. Cada rol tiene permisos di
 |---|---|:---:|:---:|:---:|---|
 | Inicio de sesión y renovación | `POST /auth/login`, `POST /auth/refresh` | ✓ | ✓ | ✓ | Anónimo (`[AllowAnonymous]`) |
 | Sesión propia | `POST /auth/logout`, `GET /auth/yo` | ✓ | ✓ | ✓ | Autenticado (`FallbackPolicy`) |
-| Gestión de usuarios | `POST /usuarios`, `GET /usuarios`, `GET /usuarios/{id}` | **G** | — | — | `SoloAdministrador` |
+| Gestión de usuarios (las enfermeras y los médicos nuevos llevan `servicioId`) | `POST /usuarios`, `GET /usuarios`, `GET /usuarios/{id}`, `PUT /usuarios/{id}/servicio` | **G** | — | — | `SoloAdministrador` |
+| Servicios hospitalarios (fase 6) | `POST /servicios` · `GET /servicios` | **G** | L | L | `SoloAdministrador` para escribir · `AdministradorOPersonalClinico` para leer |
+| Programación mensual de turnos (planilla) | `PUT /servicios/{id}/programacion/{anio}/{mes}` · `GET` de la misma ruta | **G** | L | L | `SoloAdministrador` para cargar · `AdministradorOPersonalClinico` para leer |
+| Turno vigente y turnos propios | `GET /turnos/actual?servicioId=`, `GET /turnos/mios?desde=&hasta=` | — | L | L | `PersonalClinico` |
 | Camas (catálogo) | `POST /camas` · `GET /camas?soloDisponibles=` | **G** | L | L | `SoloAdministrador` para escribir · `AdministradorOPersonalClinico` para leer |
 | Dispositivos (inventario y estado) | `POST /dispositivos`, `PATCH /dispositivos/{id}/estado` · `GET /dispositivos?estado=` | **G** | L | L | `SoloAdministrador` para escribir · `AdministradorOPersonalClinico` para leer |
 | Pacientes: ingreso, edición de datos básicos y egreso (HU05, HU08) | `POST /pacientes`, `PUT /pacientes/{id}`, `POST /pacientes/{id}/egreso` · `GET /pacientes`, `GET /pacientes/{id}` | — | L | **G** | `SoloEnfermera` para escribir · `PersonalClinico` para leer |
@@ -37,6 +40,10 @@ Control de acceso basado en roles (RBAC) de Vitalify. Cada rol tiene permisos di
 | Toma manual (asistente: presión, conciencia, oxígeno, FR, contexto, preocupación) | `POST /pacientes/{id}/observaciones` | — | **G** | **G** | `PersonalClinico` |
 | Guía de toma manual | `GET /guias/toma-manual` | — | L | L | `PersonalClinico` |
 | Escala de SpO2 del paciente | `PUT /pacientes/{id}/escala-spo2` | — | **G** | — | `SoloMedico` |
+| Alertas clínicas de su servicio (fase 6) | `GET /alertas`, `GET /pacientes/{id}/alertas` · `POST /alertas/{id}/tomar`, `POST /alertas/{id}/atender` | — | **A** | **A** | `PersonalClinico`, y solo las del servicio del usuario (si no, 403 `alerta-de-otro-servicio`) |
+| Entrega de turno (reporte de enfermería) | `GET /servicios/{id}/entrega-turno` | — | L | L | `PersonalClinico`, solo de su servicio |
+| Eventos en tiempo real (SignalR) | `/hubs/monitoreo` | — | L | L | `PersonalClinico` (el administrador no puede conectarse) |
+| Token push del celular | `POST /notificaciones/dispositivos`, `DELETE /notificaciones/dispositivos` | — | **G** | **G** | `PersonalClinico`, cada uno solo los suyos |
 | Incidencias de telemetría (datos técnicos, sin datos del paciente) | `GET /telemetria/incidencias` | L | — | — | `SoloAdministrador` |
 | Ingesta de telemetría de desarrollo (solo Development) | `POST /dev/telemetria` | **G** | — | — | `SoloAdministrador` |
 | Estado del servicio | `GET /ping`, `GET /health` | ✓ | ✓ | ✓ | Anónimo |
@@ -57,6 +64,13 @@ Notas:
   - Al wearable solo van la cama y las iniciales del paciente.
   - Los comandos MQTT al wearable los autentica el broker: el backend escribe en `device/+/comandos` y cada wearable lee solo el suyo.
 - **Escala de SpO2:** la indica solo el médico. Queda auditada como `EscalaSpo2Cambiada`, sin el motivo (texto libre).
+- **Servicios y turnos (fase 6):**
+  - Cada enfermera y cada médico pertenece a un servicio (`usuario.servicio_id`). Sin servicio, las alertas y la entrega de turno responden 403 `usuario-sin-servicio`.
+  - El administrador carga la planilla, que solo contiene ids de usuarios y letras. Se audita como `ProgramacionCargada` y la asignación de servicio como `ServicioAsignado`.
+- **Alertas (fase 6):**
+  - Una enfermera o un médico toma y atiende las alertas de **su** servicio. Si otra persona ya la tomó, tomarla da 409 `alerta-tomada-por-otro`; atenderla sí se permite a cualquiera del servicio.
+  - Se audita `AlertaTomada` y `AlertaAtendida` con el id de la alerta. La nota de atención queda en la alerta, no en la auditoría.
+  - Los eventos de SignalR y los push llevan el id del paciente, la cama y los puntajes; **nunca** el nombre, el DNI ni el diagnóstico. El nombre lo pide el cliente por la API, con su permiso.
 
 ### Cambio respecto de la versión anterior
 
@@ -68,11 +82,9 @@ Se confirmarán al implementar cada fase.
 
 | Módulo | Fase | Administrador | Médico | Enfermera | Política prevista |
 |---|:---:|:---:|:---:|:---:|---|
-| Signos vitales en tiempo real (actualización en vivo con SignalR) | 6 y 7 | — | L | L | `PersonalClinico` |
-| Alertas NEWS2/MEWS (y preocupación clínica) | 6 | — | **A** | **A** | `PersonalClinico` |
-| Historial de puntajes de riesgo | 6 | — | L | L | `PersonalClinico` |
-| Observaciones clínicas (notas) | 6 | — | **G** | **G** | `PersonalClinico`. Cada uno edita solo sus propias notas |
-| Configuración de umbrales de alerta por paciente (la escala de SpO2 ya está en la fase 5) | 6 | — | **G** | L | `SoloMedico` para escribir, `PersonalClinico` para leer |
+| Historial de puntajes de riesgo | 7 | — | L | L | `PersonalClinico` |
+| Observaciones clínicas (notas) | 7 | — | **G** | **G** | `PersonalClinico`. Cada uno edita solo sus propias notas |
+| Configuración de umbrales de alerta por paciente (la escala de SpO2 ya está en la fase 5) | 7 | — | **G** | L | `SoloMedico` para escribir, `PersonalClinico` para leer |
 | Consulta de la auditoría de seguridad | — | L | — | — | `SoloAdministrador` |
 
 ## Cómo se aplica
@@ -86,6 +98,7 @@ Se confirmarán al implementar cada fase.
 - **Trazabilidad:**
   - Cada 403 queda en `vitalify.auditoria` como `AccesoDenegado`, con el usuario, la ruta y la IP.
   - Las operaciones sobre pacientes se auditan con ids, **sin nombres ni números de documento**: `PacienteIngresado`, `PacienteActualizado`, `PacienteEgresado`, `DispositivoVinculado`, `DispositivoLiberado` y `ConsultaFichaPaciente`.
+  - Desde la fase 6 también `ProgramacionCargada`, `ServicioAsignado`, `AlertaTomada` y `AlertaAtendida`.
 
 ## Evidencia (pruebas de integración)
 
@@ -107,5 +120,10 @@ Se confirmarán al implementar cada fase.
 | El administrador ve la ocupación de las camas sin datos del paciente | `ElAdministradorVeLaOcupacionDeLaCamaPeroNoQuienLaOcupa` |
 | La auditoría del ingreso no contiene el nombre ni el documento | `HU05_E1_EnfermeraCompletaNombreEdadCamaYDiagnostico_PacienteRegistradoYHabilitadoParaSensor` |
 | Un token con la firma alterada (rol cambiado a Administrador) es rechazado | `UnTokenConLaFirmaAlterada_Devuelve401` |
+| El administrador no ve alertas, la entrega de turno ni el turno vigente, pero sí la programación | `ElAdministradorNoVeAlertasNiLaEntregaDeTurno_PeroSiLaProgramacion` |
+| Solo el administrador crea servicios y asigna el servicio de un usuario | `ElAdministradorAsignaElServicioDeUnaEnfermeraYCreaServicios` |
+| Una enfermera de otro servicio recibe 403 al ver o tomar una alerta | `AL_E8_UnaEnfermeraDeOtroServicioRecibe403` |
+| Atender exige una nota y queda auditado | `AL_E7_AtenderSinNotaDa400_YConNotaQuedaAtendidaYAuditada` |
+| Sin token o con el del administrador no se puede conectar al hub | `SignalR_SinTokenOConElTokenDelAdministradorNoSePuedeConectar` |
 
-Las pruebas están en `tests/Vitalify.Api.IntegrationTests/` (`HU03ControlDeAccesoTests.cs`, `PermisosFase2Tests.cs`, `HU05RegistroDePacienteTests.cs`, `TelemetriaExtrasTests.cs`, `HU06VinculacionPorQrTests.cs` y `TomaManualTests.cs`).
+Las pruebas están en `tests/Vitalify.Api.IntegrationTests/` (`HU03ControlDeAccesoTests.cs`, `PermisosFase2Tests.cs`, `HU05RegistroDePacienteTests.cs`, `TelemetriaExtrasTests.cs`, `HU06VinculacionPorQrTests.cs`, `TomaManualTests.cs`, `Fase6AlertasTests.cs` y `Fase6TurnosTests.cs`).

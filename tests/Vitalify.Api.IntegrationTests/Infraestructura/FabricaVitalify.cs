@@ -37,6 +37,9 @@ public class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
     /// </summary>
     public ComandosRegistrados Comandos { get; } = new();
 
+    /// <summary>Push enviados (envuelve al adaptador real, que solo escribe en el log).</summary>
+    public PushRegistrado Push { get; } = new();
+
     /// <summary>Entorno de ASP.NET Core con el que arranca la API.</summary>
     protected virtual string Entorno => "Development";
 
@@ -64,6 +67,8 @@ public class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
             ["Mqtt__Habilitado"] = "false",
             ["Clinico__AjusteTemperaturaSensor"] = "0",
             ["Vinculacion__SegundosRenovacion"] = "0", // el worker de renovación se prueba llamando al caso de uso
+            ["Alertas__SegundosVigilancia"] = "0", // el vigilante también: Fabrica.VigilarAlertasAsync()
+            ["Push__Habilitado"] = "false",
         };
         foreach (var (clave, valor) in await ConfiguracionAdicionalAsync())
         {
@@ -120,6 +125,13 @@ public class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
         Assert.True(await scope.ServiceProvider.GetRequiredService<RegistrarPresenciaDispositivo>().EjecutarAsync(codigoDispositivo, estado));
     }
 
+    /// <summary>Corre una vez lo que hace el vigilante de alertas.</summary>
+    public async Task<Application.Alertas.VigilarAlertas.Resumen> VigilarAlertasAsync(DateTime? ultimaRevision = null)
+    {
+        await using var scope = Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<Application.Alertas.VigilarAlertas>().EjecutarAsync(ultimaRevision);
+    }
+
     /// <summary>Corre una vez lo que hace el worker de renovación de códigos.</summary>
     public async Task<int> RenovarCodigosAsync()
     {
@@ -141,6 +153,14 @@ public class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
             {
                 Comandos.Interno = (IPublicadorComandosDispositivo)ActivatorUtilities.CreateInstance(sp, publicador.ImplementationType!);
                 return Comandos;
+            });
+
+            var push = services.Last(d => d.ServiceType == typeof(INotificadorPush));
+            services.RemoveAll<INotificadorPush>();
+            services.AddSingleton<INotificadorPush>(sp =>
+            {
+                Push.Interno = (INotificadorPush)ActivatorUtilities.CreateInstance(sp, push.ImplementationType!);
+                return Push;
             });
 
             services.AddSingleton<IStartupFilter, FiltroIpDePrueba>();
@@ -229,5 +249,31 @@ public sealed class ComandosRegistrados : IPublicadorComandosDispositivo
         {
             await Interno.PublicarAsync(codigoDispositivo, comando, retenido, ct);
         }
+    }
+}
+
+/// <summary>
+/// Registra cada push (tokens y mensaje) y lo pasa al adaptador real. Los tokens de <see cref="NoRegistrados"/> responden
+/// "no registrado", como FCM con una app desinstalada.
+/// </summary>
+public sealed class PushRegistrado : INotificadorPush
+{
+    private readonly System.Collections.Concurrent.ConcurrentQueue<(IReadOnlyList<string> Tokens, MensajePush Mensaje)> _enviados = new();
+
+    public System.Collections.Concurrent.ConcurrentDictionary<string, bool> NoRegistrados { get; } = new();
+
+    internal INotificadorPush? Interno { get; set; }
+
+    public IReadOnlyList<(IReadOnlyList<string> Tokens, MensajePush Mensaje)> Enviados => _enviados.ToList();
+
+    /// <summary>Los push de una alerta, en orden.</summary>
+    public IReadOnlyList<(IReadOnlyList<string> Tokens, MensajePush Mensaje)> DeAlerta(Guid alertaId) =>
+        _enviados.Where(e => e.Mensaje.Datos.GetValueOrDefault("alertaId") == alertaId.ToString()).ToList();
+
+    public async Task<IReadOnlyList<ResultadoEnvioPush>> EnviarAsync(IReadOnlyList<string> tokens, MensajePush mensaje, CancellationToken ct = default)
+    {
+        _enviados.Enqueue((tokens, mensaje));
+        var resultados = Interno is null ? tokens.Select(_ => ResultadoEnvioPush.Enviado).ToList() : await Interno.EnviarAsync(tokens, mensaje, ct);
+        return tokens.Select((token, i) => NoRegistrados.ContainsKey(token) ? ResultadoEnvioPush.NoRegistrado : resultados[i]).ToList();
     }
 }
