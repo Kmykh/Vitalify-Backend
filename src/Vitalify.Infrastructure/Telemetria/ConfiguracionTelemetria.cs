@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.Extensions.Configuration;
 using Vitalify.Application.Clinica;
 using Vitalify.Application.Telemetria;
+using Vitalify.Application.Vinculacion;
 using Vitalify.Domain.Comun;
 using Vitalify.Domain.Telemetria;
 
@@ -43,6 +44,21 @@ internal static class ConfiguracionTelemetria
         }
 
         return new OpcionesClinicas(TimeSpan.FromHours((double)Numero(s, "HorasVigenciaObservacion", 4, minimo: 0.25m)), ajuste);
+    }
+
+    /// <summary>
+    /// Sección <c>Vinculacion</c>: <c>Vinculacion__MinutosVigenciaCodigo</c> (10), <c>Vinculacion__MinutosVigenciaToken</c>
+    /// (5), <c>Vinculacion__IntentosMaximos</c> (5) y <c>Vinculacion__SegundosRenovacion</c> (60; 0 apaga el worker).
+    /// </summary>
+    public static OpcionesVinculacion CargarOpcionesVinculacion(IConfiguration configuration)
+    {
+        var s = configuration.GetSection("Vinculacion");
+        var d = OpcionesVinculacion.PorDefecto;
+        return new OpcionesVinculacion(
+            TimeSpan.FromMinutes((double)Numero(s, "MinutosVigenciaCodigo", (decimal)d.VigenciaCodigo.TotalMinutes, minimo: 1)),
+            TimeSpan.FromMinutes((double)Numero(s, "MinutosVigenciaToken", (decimal)d.VigenciaToken.TotalMinutes, minimo: 1)),
+            (int)Numero(s, "IntentosMaximos", d.IntentosMaximos, minimo: 1),
+            TimeSpan.FromSeconds((double)Numero(s, "SegundosRenovacion", (decimal)d.IntervaloRenovacion.TotalSeconds, minimo: 0)));
     }
 
     public static RangosFisiologicos CargarRangos(IConfiguration configuration)

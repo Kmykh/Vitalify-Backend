@@ -6,6 +6,7 @@ using Vitalify.Application.Dispositivos;
 using Vitalify.Application.Pacientes;
 using Vitalify.Application.Puertos;
 using Vitalify.Application.Usuarios;
+using Vitalify.Application.Vinculacion;
 using Vitalify.Infrastructure.Persistence.Transaccional.Configuraciones;
 
 namespace Vitalify.Infrastructure.Persistence.Transaccional;
@@ -27,6 +28,7 @@ internal sealed class UnidadDeTrabajo(TransaccionalDbContext db) : IUnidadDeTrab
         [ConfiguracionHospitalizacion.IndicePacienteActivo] = ErroresPaciente.YaHospitalizado,
         [ConfiguracionAsignacionDispositivo.IndiceDispositivoVigente] = ErroresDispositivo.YaVinculado,
         [ConfiguracionAsignacionDispositivo.IndiceHospitalizacionVigente] = ErroresPaciente.YaTieneDispositivo,
+        [ConfiguracionCodigoVinculacion.IndiceActivo] = ErroresVinculacion.CodigoConcurrente,
     };
 
     public async Task<Resultado<Unidad>> GuardarCambiosAsync(CancellationToken ct = default)
