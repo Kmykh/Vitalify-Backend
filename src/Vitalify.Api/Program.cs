@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Vitalify.Api.Configuracion;
 using Vitalify.Api.Entrada.Desarrollo;
+using Vitalify.Api.Entrada.Mqtt;
 using Vitalify.Api.Entrada.Simulador;
 using Vitalify.Api.Seguridad;
 using Vitalify.Application;
@@ -43,6 +44,7 @@ builder.Services.AddAutenticacionVitalify();
 builder.Services.AddAutorizacionVitalify();
 builder.Services.AddLimiteDeLogin(builder.Configuration);
 builder.Services.AddSimuladorTelemetria(builder.Configuration);
+builder.Services.AddReceptorMqtt(builder.Configuration);
 
 var app = builder.Build();
 

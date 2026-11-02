@@ -14,4 +14,5 @@ public enum AccionAuditoria
     DispositivoVinculado = 10,
     DispositivoLiberado = 11,
     ConsultaFichaPaciente = 12,
+    ObservacionRegistrada = 13,
 }
