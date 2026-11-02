@@ -189,9 +189,13 @@ public class PacientesController : ControllerBase
     public async Task<ActionResult<ObservacionRegistradaDto>> RegistrarObservacion(
         Guid id, RegistrarObservacionSolicitud solicitud, [FromServices] RegistrarObservacion registrar, CancellationToken ct)
     {
-        var resultado = await registrar.EjecutarAsync(new RegistrarObservacionComando(
-            id, solicitud.Fr, solicitud.Pas, solicitud.Pad, solicitud.Temperatura, solicitud.Conciencia, solicitud.OxigenoSuplementario,
-            solicitud.ObservadaEn, User.IdUsuario() ?? Guid.Empty, HttpContext.Ip()), ct);
+        var toma = new TomaManualComando
+        {
+            Fr = solicitud.Fr, Pas = solicitud.Pas, Pad = solicitud.Pad, Temperatura = solicitud.Temperatura,
+            Conciencia = solicitud.Conciencia is null ? null : new ConcienciaTomada(solicitud.Conciencia),
+            OxigenoSuplementario = solicitud.OxigenoSuplementario, ObservadaEn = solicitud.ObservadaEn,
+        };
+        var resultado = await registrar.EjecutarAsync(new RegistrarObservacionComando(id, toma, User.IdUsuario() ?? Guid.Empty, HttpContext.Ip()), ct);
 
         return resultado.EsExito
             ? CreatedAtAction(nameof(Riesgo), new { id }, resultado.Valor)

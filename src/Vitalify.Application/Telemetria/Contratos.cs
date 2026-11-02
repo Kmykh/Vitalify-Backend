@@ -1,3 +1,4 @@
+using Vitalify.Domain.Clinica;
 using Vitalify.Domain.Telemetria;
 
 namespace Vitalify.Application.Telemetria;
@@ -50,11 +51,13 @@ public sealed record OpcionesTelemetria(TimeSpan Vigencia, VentanaDeRecepcion Ve
 }
 
 /// <summary>
-/// Evento de aplicación que se publica después de guardar una lectura. Hoy nadie lo escucha: es el punto de
-/// extensión de la fase 4 (NEWS2/MEWS) y la fase 5 (alertas).
+/// Evento de aplicación que se publica después de guardar una lectura. Lo escucha el motor clínico
+/// (<c>EvaluarRiesgoAlRegistrarLectura</c>); las alertas de la fase 6 se engancharán aquí también.
 /// </summary>
+/// <param name="EscalaSpo2">Escala de SpO2 de la hospitalización, con la que se puntúa NEWS2.</param>
 public sealed record LecturaRegistrada(
-    Guid HospitalizacionId, Guid PacienteId, string CodigoDispositivo, DateTime MedidoEn, SignosValidos Signos, bool Caida);
+    Guid HospitalizacionId, Guid PacienteId, string CodigoDispositivo, DateTime MedidoEn, SignosValidos Signos, bool Caida,
+    EscalaSpo2 EscalaSpo2 = EscalaSpo2.Escala1);
 
 public interface IManejadorLecturaRegistrada
 {

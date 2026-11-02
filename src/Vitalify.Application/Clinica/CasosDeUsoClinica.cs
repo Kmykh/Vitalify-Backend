@@ -4,66 +4,188 @@ using Vitalify.Application.Pacientes;
 using Vitalify.Application.Puertos;
 using Vitalify.Domain.Auditoria;
 using Vitalify.Domain.Clinica;
+using Vitalify.Domain.Hospitalizaciones;
 using Vitalify.Domain.Telemetria;
 
 namespace Vitalify.Application.Clinica;
 
-/// <param name="Conciencia"><c>Alerta</c>, <c>ConfusionNueva</c>, <c>RespondeVoz</c>, <c>RespondeDolor</c> o <c>NoResponde</c>.</param>
-/// <param name="ObservadaEn">Momento de la medición; si falta, ahora.</param>
-public sealed record RegistrarObservacionComando(
-    Guid PacienteId, int? Fr, int? Pas, int? Pad, decimal? Temperatura, string? Conciencia, bool? OxigenoSuplementario,
-    DateTime? ObservadaEn, Guid UsuarioId, string? Ip);
-
-public sealed class RegistrarObservacionValidador : AbstractValidator<RegistrarObservacionComando>
+/// <summary>Arma la evaluación para la respuesta: recomendación, próxima toma manual y avisos.</summary>
+public sealed class PresentadorRiesgo(IRepositorioObservaciones observaciones, OpcionesClinicas opciones)
 {
-    public RegistrarObservacionValidador(RangosFisiologicos rangos, OpcionesClinicas opciones, IReloj reloj)
+    public async Task<EvaluacionRiesgoDto> PresentarAsync(EvaluacionRiesgo evaluacion, CancellationToken ct = default)
     {
-        RuleFor(c => c)
-            .Must(c => c.Fr is not null || c.Pas is not null || c.Pad is not null || c.Temperatura is not null
-                       || !string.IsNullOrWhiteSpace(c.Conciencia) || c.OxigenoSuplementario is not null)
-            .WithName("observacion").OverridePropertyName("observacion")
-            .WithMessage("Registra al menos un valor: fr, pas y pad, temperatura, conciencia u oxigenoSuplementario.");
+        var recientes = (await observaciones.ListarDesdeAsync(
+                evaluacion.HospitalizacionId, evaluacion.EvaluadaEn - opciones.VigenciaObservaciones, ct))
+            .Where(o => o.RegistradaEn <= evaluacion.EvaluadaEn)
+            .ToList();
 
-        RuleFor(c => c.Fr).Must(v => v is null || rangos.EsValido(VariableSigno.Fr, v.Value))
-            .WithMessage($"fr debe estar entre {rangos.Fr}.");
-        RuleFor(c => c.Temperatura).Must(v => v is null || rangos.EsValido(VariableSigno.Temperatura, v.Value))
-            .WithMessage($"temperatura debe estar entre {rangos.Temperatura} °C.");
-        RuleFor(c => c.Pas)
-            .Must((c, pas) => (pas is null) == (c.Pad is null)).WithMessage("La presión necesita pas y pad.")
-            .Must((c, pas) => pas is null || c.Pad is null || pas > c.Pad).WithMessage("pas debe ser mayor que pad.")
-            .Must(v => v is null || rangos.EsValido(VariableSigno.Pas, v.Value)).WithMessage($"pas debe estar entre {rangos.Pas}.");
-        RuleFor(c => c.Pad).Must(v => v is null || rangos.EsValido(VariableSigno.Pad, v.Value))
-            .WithMessage($"pad debe estar entre {rangos.Pad}.");
-        RuleFor(c => c.Conciencia)
-            .Must(v => string.IsNullOrWhiteSpace(v) || Enumeraciones.TryParseNombre<NivelConciencia>(v, out _))
-            .WithMessage($"conciencia debe ser una de: {Enumeraciones.Nombres<NivelConciencia>()}.");
-        RuleFor(c => c.ObservadaEn)
-            .Must(v => v is null || v.Value.ToUniversalTime() <= reloj.AhoraUtc.AddMinutes(1))
-            .WithMessage("observadaEn no puede estar en el futuro.")
-            .Must(v => v is null || v.Value.ToUniversalTime() >= reloj.AhoraUtc - opciones.VigenciaObservaciones)
-            .WithMessage($"observadaEn no puede tener más de {opciones.VigenciaObservaciones.TotalHours:0} horas: ya no contaría para el puntaje.");
+        var ultimaToma = recientes.FirstOrDefault()?.ObservadaEn
+            ?? (await observaciones.ObtenerUltimaTomaAsync(evaluacion.HospitalizacionId, ct))?.ObservadaEn;
+
+        return EvaluacionRiesgoDto.Desde(evaluacion, ultimaToma, AvisosClinicos.Generar(evaluacion, recientes));
     }
 }
+
+/// <summary>
+/// Guarda una toma manual y recalcula el riesgo en el historial. Lo comparten <see cref="RegistrarObservacion"/> y la
+/// confirmación de la vinculación por QR (observación inicial), para no duplicar las reglas.
+/// </summary>
+public sealed class ServicioObservaciones(
+    IRepositorioObservaciones observaciones,
+    EvaluadorRiesgo evaluador,
+    IUnidadDeTrabajoHistorial unidadHistorial,
+    PresentadorRiesgo presentador,
+    RangosFisiologicos rangos)
+{
+    /// <summary>Construye la observación en el dominio (lanza <c>ExcepcionDeDominio</c> si es inválida). No guarda.</summary>
+    public ObservacionEnfermeria Construir(Hospitalizacion hospitalizacion, TomaManualComando toma, Guid usuarioId, DateTime ahora)
+    {
+        // Un reloj de la tablet algo adelantado no debe dejar la medición "después" de su registro.
+        var observadaEn = toma.ObservadaEn?.ToUniversalTime() is { } en && en < ahora ? en : ahora;
+        return ObservacionEnfermeria.Registrar(
+            hospitalizacion.Id, hospitalizacion.PacienteId, observadaEn, ahora, usuarioId, TomaManualValidador.Datos(toma, rangos), rangos);
+    }
+
+    public async Task<Resultado<EvaluacionRiesgoDto>> GuardarYEvaluarAsync(
+        Hospitalizacion hospitalizacion, ObservacionEnfermeria observacion, CancellationToken ct = default)
+    {
+        observaciones.Agregar(observacion);
+        var evaluacion = await evaluador.EvaluarAsync(
+            hospitalizacion.Id, hospitalizacion.PacienteId, OrigenEvaluacion.Observacion, hospitalizacion.EscalaSpo2, ct);
+
+        var guardado = await unidadHistorial.GuardarCambiosAsync(ct);
+        if (!guardado.EsExito)
+        {
+            return guardado.Error;
+        }
+
+        return await presentador.PresentarAsync(evaluacion, ct);
+    }
+}
+
+public sealed record RegistrarObservacionComando(Guid PacienteId, TomaManualComando Toma, Guid UsuarioId, string? Ip);
 
 public sealed record ObservacionRegistradaDto(Guid Id, DateTime ObservadaEn, EvaluacionRiesgoDto Riesgo);
 
 /// <summary>
-/// El personal clínico registra lo que el wearable no mide (FR, presión, conciencia, oxígeno suplementario) o la
-/// temperatura de un termómetro clínico. Se recalcula el riesgo en el acto.
+/// Toma manual del personal clínico (asistente de la fase 5 o formato plano de la fase 4). Se recalcula el riesgo en
+/// el acto y la respuesta trae la recomendación, la próxima toma y los avisos.
 /// </summary>
 public sealed class RegistrarObservacion(
-    IValidator<RegistrarObservacionComando> validador,
+    IValidator<TomaManualComando> validador,
     IRepositorioPacientes pacientes,
     IRepositorioHospitalizaciones hospitalizaciones,
-    IRepositorioObservaciones observaciones,
-    EvaluadorRiesgo evaluador,
-    IUnidadDeTrabajoHistorial unidadHistorial,
+    ServicioObservaciones servicio,
     IRepositorioAuditoria auditoria,
     IUnidadDeTrabajo unidadTransaccional,
-    RangosFisiologicos rangos,
     IReloj reloj)
 {
     public async Task<Resultado<ObservacionRegistradaDto>> EjecutarAsync(RegistrarObservacionComando comando, CancellationToken ct = default)
+    {
+        if (await validador.ValidarAsync(comando.Toma, ct) is { } errorValidacion)
+        {
+            return errorValidacion;
+        }
+
+        if (await pacientes.ObtenerPorIdAsync(comando.PacienteId, ct) is null)
+        {
+            return ErroresPaciente.NoEncontrado;
+        }
+
+        var hospitalizacion = await hospitalizaciones.ObtenerActivaDePacienteAsync(comando.PacienteId, ct);
+        if (hospitalizacion is null)
+        {
+            return ErroresPaciente.SinHospitalizacionActivaNoEncontrada;
+        }
+
+        var ahora = reloj.AhoraUtc;
+        var observacion = servicio.Construir(hospitalizacion, comando.Toma, comando.UsuarioId, ahora);
+        var riesgo = await servicio.GuardarYEvaluarAsync(hospitalizacion, observacion, ct);
+        if (!riesgo.EsExito)
+        {
+            return riesgo.Error;
+        }
+
+        auditoria.Agregar(RegistroAuditoria.Registrar(
+            AccionAuditoria.ObservacionRegistrada, ahora, comando.UsuarioId, comando.Ip,
+            $"Observación {observacion.Id} de la hospitalización {hospitalizacion.Id}."));
+        await unidadTransaccional.GuardarCambiosAsync(ct);
+
+        return new ObservacionRegistradaDto(observacion.Id, observacion.ObservadaEn, riesgo.Valor);
+    }
+}
+
+/// <summary>Última evaluación NEWS2/MEWS de la hospitalización activa, con el desglose por parámetro.</summary>
+public sealed class ObtenerRiesgoPaciente(
+    IRepositorioPacientes pacientes,
+    IRepositorioHospitalizaciones hospitalizaciones,
+    IRepositorioEvaluaciones evaluaciones,
+    IRepositorioObservaciones observaciones,
+    PresentadorRiesgo presentador)
+{
+    public async Task<Resultado<RiesgoPacienteDto>> EjecutarAsync(Guid pacienteId, CancellationToken ct = default)
+    {
+        if (await pacientes.ObtenerPorIdAsync(pacienteId, ct) is null)
+        {
+            return ErroresPaciente.NoEncontrado;
+        }
+
+        var hospitalizacion = await hospitalizaciones.ObtenerActivaDePacienteAsync(pacienteId, ct);
+        if (hospitalizacion is null)
+        {
+            return ErroresPaciente.SinHospitalizacionActivaNoEncontrada;
+        }
+
+        return await DtoAsync(hospitalizacion, ct);
+    }
+
+    internal async Task<RiesgoPacienteDto> DtoAsync(Hospitalizacion hospitalizacion, CancellationToken ct)
+    {
+        var ultima = await evaluaciones.ObtenerUltimaAsync(hospitalizacion.Id, ct);
+        var brazo = await observaciones.ObtenerUltimoBrazoPresionAsync(hospitalizacion.Id, ct);
+        return new RiesgoPacienteDto(
+            hospitalizacion.PacienteId, hospitalizacion.Id,
+            ultima is null ? null : await presentador.PresentarAsync(ultima, ct),
+            hospitalizacion.EscalaSpo2.ToString(), brazo?.ToString());
+    }
+}
+
+/// <param name="Escala"><c>Escala1</c> o <c>Escala2</c>.</param>
+/// <param name="Motivo">Por qué se indica (de 3 a 300 caracteres). No va a la auditoría.</param>
+public sealed record CambiarEscalaSpo2Comando(Guid PacienteId, string? Escala, string? Motivo, Guid UsuarioId, string? Ip);
+
+public sealed class CambiarEscalaSpo2Validador : AbstractValidator<CambiarEscalaSpo2Comando>
+{
+    public CambiarEscalaSpo2Validador()
+    {
+        RuleFor(c => c.Escala)
+            .Must(e => Enumeraciones.TryParseNombre<EscalaSpo2>(e, out _))
+            .WithMessage($"La escala debe ser una de: {Enumeraciones.Nombres<EscalaSpo2>()}.");
+        RuleFor(c => c.Motivo)
+            .Must(m => m?.Trim().Length is >= Hospitalizacion.LargoMinimoMotivoEscala and <= Hospitalizacion.LargoMaximoMotivoEscala)
+            .WithMessage($"El motivo debe tener entre {Hospitalizacion.LargoMinimoMotivoEscala} y {Hospitalizacion.LargoMaximoMotivoEscala} caracteres.");
+    }
+}
+
+/// <summary>
+/// El médico indica la escala de SpO2 del paciente (la 2 para la insuficiencia respiratoria hipercápnica). Se guarda en
+/// la hospitalización activa y el riesgo se recalcula al instante con la escala nueva; las lecturas siguientes del
+/// wearable también la usan (se invalida la caché del dispositivo).
+/// </summary>
+public sealed class CambiarEscalaSpo2(
+    IValidator<CambiarEscalaSpo2Comando> validador,
+    IRepositorioPacientes pacientes,
+    IRepositorioHospitalizaciones hospitalizaciones,
+    IRepositorioDispositivos dispositivos,
+    IRepositorioAuditoria auditoria,
+    IUnidadDeTrabajo unidadDeTrabajo,
+    IResolutorDispositivos resolutorDispositivos,
+    EvaluadorRiesgo evaluador,
+    IUnidadDeTrabajoHistorial unidadHistorial,
+    ObtenerRiesgoPaciente obtenerRiesgo,
+    IReloj reloj)
+{
+    public async Task<Resultado<RiesgoPacienteDto>> EjecutarAsync(CambiarEscalaSpo2Comando comando, CancellationToken ct = default)
     {
         if (await validador.ValidarAsync(comando, ct) is { } errorValidacion)
         {
@@ -82,73 +204,31 @@ public sealed class RegistrarObservacion(
         }
 
         var ahora = reloj.AhoraUtc;
-        NivelConciencia? conciencia = Enumeraciones.TryParseNombre<NivelConciencia>(comando.Conciencia, out var c) ? c : null;
-        var observacion = ObservacionEnfermeria.Registrar(
-            hospitalizacion.Id, hospitalizacion.PacienteId, comando.ObservadaEn?.ToUniversalTime() ?? ahora, ahora, comando.UsuarioId,
-            comando.Fr, comando.Pas, comando.Pad, comando.Temperatura, conciencia, comando.OxigenoSuplementario, rangos);
-        observaciones.Agregar(observacion);
+        Enumeraciones.TryParseNombre<EscalaSpo2>(comando.Escala, out var escala);
+        hospitalizacion.CambiarEscalaSpo2(escala, comando.Motivo!, ahora, comando.UsuarioId);
+        auditoria.Agregar(RegistroAuditoria.Registrar(
+            AccionAuditoria.EscalaSpo2Cambiada, ahora, comando.UsuarioId, comando.Ip,
+            $"Hospitalización {hospitalizacion.Id}: escala de SpO2 {escala}."));
 
-        var evaluacion = await evaluador.EvaluarAsync(hospitalizacion.Id, hospitalizacion.PacienteId, OrigenEvaluacion.Observacion, ct);
-        var guardado = await unidadHistorial.GuardarCambiosAsync(ct);
+        var guardado = await unidadDeTrabajo.GuardarCambiosAsync(ct);
         if (!guardado.EsExito)
         {
             return guardado.Error;
         }
 
-        auditoria.Agregar(RegistroAuditoria.Registrar(
-            AccionAuditoria.ObservacionRegistrada, ahora, comando.UsuarioId, comando.Ip,
-            $"Observación {observacion.Id} de la hospitalización {hospitalizacion.Id}."));
-        await unidadTransaccional.GuardarCambiosAsync(ct);
-
-        return new ObservacionRegistradaDto(observacion.Id, observacion.ObservadaEn, EvaluacionRiesgoDto.Desde(evaluacion));
-    }
-}
-
-/// <summary>Última evaluación NEWS2/MEWS de la hospitalización activa, con el desglose por parámetro.</summary>
-public sealed class ObtenerRiesgoPaciente(
-    IRepositorioPacientes pacientes, IRepositorioHospitalizaciones hospitalizaciones, IRepositorioEvaluaciones evaluaciones)
-{
-    public async Task<Resultado<RiesgoPacienteDto>> EjecutarAsync(Guid pacienteId, CancellationToken ct = default)
-    {
-        if (await pacientes.ObtenerPorIdAsync(pacienteId, ct) is null)
+        if (await hospitalizaciones.ObtenerAsignacionVigenteAsync(hospitalizacion.Id, ct) is { } asignacion
+            && await dispositivos.ObtenerPorIdAsync(asignacion.DispositivoId, ct) is { } dispositivo)
         {
-            return ErroresPaciente.NoEncontrado;
+            resolutorDispositivos.Invalidar(dispositivo.Codigo);
         }
 
-        var hospitalizacion = await hospitalizaciones.ObtenerActivaDePacienteAsync(pacienteId, ct);
-        if (hospitalizacion is null)
+        await evaluador.EvaluarAsync(hospitalizacion.Id, hospitalizacion.PacienteId, OrigenEvaluacion.CambioEscala, escala, ct);
+        var evaluado = await unidadHistorial.GuardarCambiosAsync(ct);
+        if (!evaluado.EsExito)
         {
-            return ErroresPaciente.SinHospitalizacionActivaNoEncontrada;
+            return evaluado.Error;
         }
 
-        var ultima = await evaluaciones.ObtenerUltimaAsync(hospitalizacion.Id, ct);
-        return new RiesgoPacienteDto(pacienteId, hospitalizacion.Id, ultima is null ? null : EvaluacionRiesgoDto.Desde(ultima));
+        return await obtenerRiesgo.DtoAsync(hospitalizacion, ct);
     }
-}
-
-/// <summary>
-/// Registra el estado de conexión que publica cada wearable en <c>device/{codigo}/estado</c>. Lo llama el adaptador
-/// MQTT.
-/// </summary>
-public sealed class RegistrarPresenciaDispositivo(IPresenciaDispositivos presencia, IReloj reloj)
-{
-    public const string EnLinea = "en-linea";
-    public const string FueraDeLinea = "fuera-de-linea";
-    public const string Desconocida = "desconocida";
-
-    /// <returns>false si el texto no es <c>online</c> ni <c>offline</c>.</returns>
-    public bool Ejecutar(string codigoDispositivo, string estado)
-    {
-        var texto = estado.Trim().ToLowerInvariant();
-        if (texto is not ("online" or "offline"))
-        {
-            return false;
-        }
-
-        presencia.Registrar(codigoDispositivo.Trim().ToUpperInvariant(), new PresenciaDispositivo(texto == "online", reloj.AhoraUtc));
-        return true;
-    }
-
-    public static string Texto(PresenciaDispositivo? presencia) =>
-        presencia is null ? Desconocida : presencia.EnLinea ? EnLinea : FueraDeLinea;
 }

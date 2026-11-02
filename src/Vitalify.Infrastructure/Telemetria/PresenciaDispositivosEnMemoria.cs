@@ -14,4 +14,6 @@ internal sealed class PresenciaDispositivosEnMemoria : IPresenciaDispositivos
     public void Registrar(string codigoDispositivo, PresenciaDispositivo presencia) => _presencias[codigoDispositivo] = presencia;
 
     public PresenciaDispositivo? Obtener(string codigoDispositivo) => _presencias.GetValueOrDefault(codigoDispositivo);
+
+    public IReadOnlyList<string> ListarEnLinea() => _presencias.Where(p => p.Value.EnLinea).Select(p => p.Key).ToList();
 }

@@ -127,7 +127,10 @@ public class VinculacionYEgresoTests
 
         Assert.True(resultado.EsExito);
         Assert.Equal(("AltaMedica", "ESP32-001"), (resultado.Valor.Motivo, resultado.Valor.DispositivoLiberado));
-        Assert.Equal(guardadosAntes + 1, _e.UnidadDeTrabajo.Guardados);
+
+        // Egreso y liberación van en un solo guardado; el segundo es el QR nuevo del sensor liberado (fase 5).
+        Assert.Equal(guardadosAntes + 2, _e.UnidadDeTrabajo.Guardados);
+        Assert.Equal(["desvinculado", "mostrar-qr"], _e.Comandos.Publicados.Skip(1).Select(p => p.Comando.Accion));
 
         var hospitalizacion = Assert.Single(_e.Hospitalizaciones.Hospitalizaciones);
         var asignacion = Assert.Single(_e.Hospitalizaciones.Asignaciones);

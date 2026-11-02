@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Vitalify.Application.Comun;
 using Vitalify.Application.Pacientes;
 using Vitalify.Application.Puertos;
+using Vitalify.Application.Vinculacion;
 using Vitalify.Domain.Hospitalizaciones;
 using Vitalify.Domain.Pacientes;
 
@@ -24,6 +25,17 @@ internal sealed class RepositorioHospitalizaciones(TransaccionalDbContext db) : 
          join h in db.Hospitalizaciones on a.HospitalizacionId equals h.Id
          join c in db.Camas on h.CamaId equals c.Id
          select c.Codigo).FirstOrDefaultAsync(ct);
+
+    public Task<DispositivoEnCama?> ObtenerVinculoDispositivoAsync(Guid dispositivoId, CancellationToken ct = default) =>
+        (from a in db.AsignacionesDispositivo
+         where a.DispositivoId == dispositivoId && a.LiberadoEn == null
+         join h in db.Hospitalizaciones on a.HospitalizacionId equals h.Id
+         where h.Estado == EstadoHospitalizacion.Activa
+         join c in db.Camas on h.CamaId equals c.Id
+         join p in db.Pacientes on h.PacienteId equals p.Id
+         select new DispositivoEnCama(c.Codigo, p.NombreCompleto))
+        .AsNoTracking()
+        .FirstOrDefaultAsync(ct);
 
     public async Task<HospitalizacionActivaLectura?> ObtenerLecturaActivaAsync(Guid pacienteId, CancellationToken ct = default) =>
         (await Filas().Where(f => f.PacienteId == pacienteId).FirstOrDefaultAsync(ct))?.ALectura();
@@ -62,7 +74,7 @@ internal sealed class RepositorioHospitalizaciones(TransaccionalDbContext db) : 
          where a.LiberadoEn == null
          join h in db.Hospitalizaciones on a.HospitalizacionId equals h.Id
          where h.Estado == EstadoHospitalizacion.Activa
-         select new HospitalizacionPorDispositivoDto(h.Id, h.PacienteId, h.CamaId, d.Id, a.Id, a.AsignadoEn))
+         select new HospitalizacionPorDispositivoDto(h.Id, h.PacienteId, h.CamaId, d.Id, a.Id, a.AsignadoEn, h.EscalaSpo2))
         .AsNoTracking()
         .SingleOrDefaultAsync(ct);
 

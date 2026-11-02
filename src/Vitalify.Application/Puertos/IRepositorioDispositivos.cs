@@ -9,6 +9,9 @@ public interface IRepositorioDispositivos
 
     Task<bool> ExisteCodigoAsync(string codigo, CancellationToken ct = default);
 
+    /// <summary>Por el código del tópico MQTT (ya normalizado a mayúsculas).</summary>
+    Task<Dispositivo?> ObtenerPorCodigoAsync(string codigo, CancellationToken ct = default);
+
     Task<IReadOnlyList<DispositivoDto>> ListarAsync(EstadoDispositivo? estado, CancellationToken ct = default);
 
     void Agregar(Dispositivo dispositivo);

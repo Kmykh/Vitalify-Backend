@@ -4,7 +4,7 @@ using MQTTnet;
 using MQTTnet.Client;
 using MQTTnet.Formatter;
 using MQTTnet.Protocol;
-using Vitalify.Application.Clinica;
+using Vitalify.Application.Vinculacion;
 using Vitalify.Application.Telemetria;
 using Vitalify.Domain.Telemetria;
 
@@ -25,7 +25,6 @@ namespace Vitalify.Api.Entrada.Mqtt;
 public sealed class ReceptorMqtt(
     OpcionesMqtt opciones,
     IServiceScopeFactory scopes,
-    RegistrarPresenciaDispositivo registrarPresencia,
     ILogger<ReceptorMqtt> logger) : BackgroundService
 {
     private static readonly TimeSpan[] EsperasReintento = [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)];
@@ -142,7 +141,8 @@ public sealed class ReceptorMqtt(
         if (partes[2] == "estado")
         {
             var texto = Encoding.UTF8.GetString(payload);
-            if (registrarPresencia.Ejecutar(codigo, texto))
+            await using var scope = scopes.CreateAsyncScope();
+            if (await scope.ServiceProvider.GetRequiredService<RegistrarPresenciaDispositivo>().EjecutarAsync(codigo, texto, ct))
             {
                 logger.LogInformation("MQTT: {Dispositivo} está {Estado}.", codigo, texto.Trim().ToLowerInvariant());
             }

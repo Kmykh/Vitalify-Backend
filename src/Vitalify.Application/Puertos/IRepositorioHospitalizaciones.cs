@@ -1,5 +1,6 @@
 using Vitalify.Application.Comun;
 using Vitalify.Application.Pacientes;
+using Vitalify.Application.Vinculacion;
 using Vitalify.Domain.Hospitalizaciones;
 
 namespace Vitalify.Application.Puertos;
@@ -15,6 +16,12 @@ public interface IRepositorioHospitalizaciones
 
     /// <summary>Código de la cama cuya hospitalización tiene vinculado el dispositivo, o null.</summary>
     Task<string?> ObtenerCamaConDispositivoAsync(Guid dispositivoId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Cama y nombre del paciente con el que está vinculado el dispositivo, o null. El nombre solo se usa para
+    /// calcular las iniciales que muestra el wearable: nunca se registra.
+    /// </summary>
+    Task<DispositivoEnCama?> ObtenerVinculoDispositivoAsync(Guid dispositivoId, CancellationToken ct = default);
 
     Task<HospitalizacionActivaLectura?> ObtenerLecturaActivaAsync(Guid pacienteId, CancellationToken ct = default);
 

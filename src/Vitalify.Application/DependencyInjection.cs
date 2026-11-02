@@ -7,6 +7,7 @@ using Vitalify.Application.Pacientes;
 using Vitalify.Application.Sesiones;
 using Vitalify.Application.Telemetria;
 using Vitalify.Application.Usuarios;
+using Vitalify.Application.Vinculacion;
 
 namespace Vitalify.Application;
 
@@ -63,12 +64,29 @@ public static class DependencyInjection
         services.AddScoped<ListarIncidencias>();
 
         // Motor clínico (fase 4): se engancha a la ingesta como manejador de LecturaRegistrada.
-        services.AddSingleton<IValidator<RegistrarObservacionComando>, RegistrarObservacionValidador>();
         services.AddScoped<EvaluadorRiesgo>();
         services.AddScoped<IManejadorLecturaRegistrada, EvaluarRiesgoAlRegistrarLectura>();
-        services.AddScoped<RegistrarObservacion>();
         services.AddScoped<ObtenerRiesgoPaciente>();
-        services.AddSingleton<RegistrarPresenciaDispositivo>();
+
+        // Asistente de toma manual y escala de SpO2 por paciente (fase 5).
+        services.AddSingleton<IValidator<TomaManualComando>, TomaManualValidador>();
+        services.AddSingleton<TomaInicialValidador>();
+        services.AddSingleton<IValidator<CambiarEscalaSpo2Comando>, CambiarEscalaSpo2Validador>();
+        services.AddSingleton<ObtenerGuiaTomaManual>();
+        services.AddScoped<PresentadorRiesgo>();
+        services.AddScoped<ServicioObservaciones>();
+        services.AddScoped<RegistrarObservacion>();
+        services.AddScoped<CambiarEscalaSpo2>();
+
+        // Vinculación del wearable por QR y comandos al dispositivo (fase 5).
+        services.AddScoped<ServicioCodigosVinculacion>();
+        services.AddScoped<SincronizarPantallaDispositivo>();
+        services.AddScoped<RegistrarPresenciaDispositivo>();
+        services.AddScoped<AtenderSolicitudDispositivo>();
+        services.AddScoped<RegenerarQrDispositivo>();
+        services.AddScoped<EscanearQr>();
+        services.AddScoped<ConfirmarVinculacion>();
+        services.AddScoped<RenovarCodigosVinculacion>();
 
         return services;
     }

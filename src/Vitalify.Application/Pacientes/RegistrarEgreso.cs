@@ -1,7 +1,9 @@
 using FluentValidation;
 using Vitalify.Application.Comun;
 using Vitalify.Application.Puertos;
+using Vitalify.Application.Vinculacion;
 using Vitalify.Domain.Auditoria;
+using Vitalify.Domain.Dispositivos;
 using Vitalify.Domain.Hospitalizaciones;
 
 namespace Vitalify.Application.Pacientes;
@@ -25,7 +27,8 @@ public sealed class RegistrarEgresoValidador : AbstractValidator<RegistrarEgreso
 
 /// <summary>
 /// HU08: registra el egreso. Si el paciente tiene un sensor vinculado, lo libera primero; todo se guarda en una
-/// sola unidad de trabajo (una transacción). La hospitalización queda Finalizada y se conserva.
+/// sola unidad de trabajo (una transacción). La hospitalización queda Finalizada y se conserva. El wearable liberado
+/// recibe <c>desvinculado</c> y un QR nuevo.
 /// </summary>
 public sealed class RegistrarEgreso(
     IValidator<RegistrarEgresoComando> validador,
@@ -35,6 +38,7 @@ public sealed class RegistrarEgreso(
     IRepositorioAuditoria auditoria,
     IUnidadDeTrabajo unidadDeTrabajo,
     IResolutorDispositivos resolutorDispositivos,
+    ServicioCodigosVinculacion servicioCodigos,
     IReloj reloj)
 {
     public async Task<Resultado<EgresoDto>> EjecutarAsync(RegistrarEgresoComando comando, CancellationToken ct = default)
@@ -56,14 +60,14 @@ public sealed class RegistrarEgreso(
         }
 
         var ahora = reloj.AhoraUtc;
-        string? dispositivoLiberado = null;
+        Dispositivo? liberado = null;
 
         var asignacion = await hospitalizaciones.ObtenerAsignacionVigenteAsync(hospitalizacion.Id, ct);
         if (asignacion is not null)
         {
             var dispositivo = (await dispositivos.ObtenerPorIdAsync(asignacion.DispositivoId, ct))!;
             asignacion.Liberar(dispositivo, MotivoLiberacion.Egreso, ahora, comando.UsuarioId);
-            dispositivoLiberado = dispositivo.Codigo;
+            liberado = dispositivo;
             auditoria.Agregar(RegistroAuditoria.Registrar(
                 AccionAuditoria.DispositivoLiberado, ahora, comando.UsuarioId, comando.Ip,
                 $"Dispositivo {dispositivo.Id} liberado de la hospitalización {hospitalizacion.Id} (egreso)."));
@@ -81,11 +85,12 @@ public sealed class RegistrarEgreso(
             return guardado.Error;
         }
 
-        if (dispositivoLiberado is not null)
+        if (liberado is not null)
         {
-            resolutorDispositivos.Invalidar(dispositivoLiberado);
+            resolutorDispositivos.Invalidar(liberado.Codigo);
+            await servicioCodigos.AlLiberarAsync(liberado, comando.UsuarioId, comando.Ip, ct);
         }
 
-        return new EgresoDto(hospitalizacion.PacienteId, hospitalizacion.Id, ahora, motivo.ToString(), dispositivoLiberado);
+        return new EgresoDto(hospitalizacion.PacienteId, hospitalizacion.Id, ahora, motivo.ToString(), liberado?.Codigo);
     }
 }

@@ -19,6 +19,12 @@ public interface IRepositorioObservaciones
 
     /// <summary>Observaciones de la hospitalización tomadas desde <paramref name="desde"/>, la más reciente primero.</summary>
     Task<IReadOnlyList<ObservacionEnfermeria>> ListarDesdeAsync(Guid hospitalizacionId, DateTime desde, CancellationToken ct = default);
+
+    /// <summary>La toma manual más reciente de la hospitalización, de cualquier antigüedad.</summary>
+    Task<ObservacionEnfermeria?> ObtenerUltimaTomaAsync(Guid hospitalizacionId, CancellationToken ct = default);
+
+    /// <summary>Brazo de la última toma de presión que lo registró, para sugerirlo en la siguiente.</summary>
+    Task<BrazoPresion?> ObtenerUltimoBrazoPresionAsync(Guid hospitalizacionId, CancellationToken ct = default);
 }
 
 public sealed record PresenciaDispositivo(bool EnLinea, DateTime Desde);
@@ -33,4 +39,7 @@ public interface IPresenciaDispositivos
     void Registrar(string codigoDispositivo, PresenciaDispositivo presencia);
 
     PresenciaDispositivo? Obtener(string codigoDispositivo);
+
+    /// <summary>Códigos de los dispositivos cuyo último estado es <c>online</c>.</summary>
+    IReadOnlyList<string> ListarEnLinea();
 }

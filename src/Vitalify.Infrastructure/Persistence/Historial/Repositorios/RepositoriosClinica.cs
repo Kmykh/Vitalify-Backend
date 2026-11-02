@@ -22,6 +22,19 @@ internal sealed class RepositorioObservaciones(HistorialDbContext db) : IReposit
 
         return guardadas.Concat(pendientes).OrderByDescending(o => o.ObservadaEn).ToList();
     }
+
+    public Task<ObservacionEnfermeria?> ObtenerUltimaTomaAsync(Guid hospitalizacionId, CancellationToken ct = default) =>
+        db.Observaciones.AsNoTracking()
+            .Where(o => o.HospitalizacionId == hospitalizacionId)
+            .OrderByDescending(o => o.ObservadaEn)
+            .FirstOrDefaultAsync(ct);
+
+    public Task<BrazoPresion?> ObtenerUltimoBrazoPresionAsync(Guid hospitalizacionId, CancellationToken ct = default) =>
+        db.Observaciones.AsNoTracking()
+            .Where(o => o.HospitalizacionId == hospitalizacionId && o.BrazoPa != null)
+            .OrderByDescending(o => o.ObservadaEn)
+            .Select(o => o.BrazoPa)
+            .FirstOrDefaultAsync(ct);
 }
 
 internal sealed class RepositorioEvaluaciones(HistorialDbContext db) : IRepositorioEvaluaciones

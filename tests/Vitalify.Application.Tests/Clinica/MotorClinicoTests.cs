@@ -25,7 +25,14 @@ public class MotorClinicoTests
     private Task<Resultado<ObservacionRegistradaDto>> Observar(
         Guid pacienteId, int? fr = 22, int? pas = 105, int? pad = 70, string? conciencia = "Alerta", bool? oxigeno = false,
         decimal? temperatura = null, DateTime? observadaEn = null) =>
-        _e.RegistrarObservacion().EjecutarAsync(new(pacienteId, fr, pas, pad, temperatura, conciencia, oxigeno, observadaEn, _e.EnfermeraId, "10.0.0.7"));
+        _e.RegistrarObservacion().EjecutarAsync(new(pacienteId,
+            new TomaManualComando
+            {
+                Fr = fr, Pas = pas, Pad = pad, Temperatura = temperatura,
+                Conciencia = conciencia is null ? null : new ConcienciaTomada(conciencia),
+                OxigenoSuplementario = oxigeno, ObservadaEn = observadaEn,
+            },
+            _e.EnfermeraId, "10.0.0.7"));
 
     [Fact]
     public async Task Cada_lectura_del_wearable_evalua_el_riesgo_con_un_puntaje_parcial_que_declara_lo_que_falta()
@@ -104,7 +111,7 @@ public class MotorClinicoTests
         await Observar(pacienteId);
 
         _e.Reloj.Avanzar(TimeSpan.FromHours(4) + TimeSpan.FromMinutes(1));
-        var riesgo = await _e.Evaluador().EvaluarAsync(_e.Hospitalizaciones.Hospitalizaciones.Single().Id, pacienteId, OrigenEvaluacion.Lectura);
+        var riesgo = await _e.Evaluador().EvaluarAsync(_e.Hospitalizaciones.Hospitalizaciones.Single().Id, pacienteId, OrigenEvaluacion.Lectura, EscalaSpo2.Escala1);
 
         Assert.Equal(0, riesgo.News2Total);
         Assert.Equal(7, riesgo.News2().Faltantes.Count);
@@ -170,10 +177,10 @@ public class MotorClinicoTests
         var conexion = async () => (await _e.ListarPacientesMonitoreados().EjecutarAsync()).Valor.Items.Single().ConexionSensor;
 
         Assert.Equal("desconocida", await conexion());
-        Assert.True(_e.RegistrarPresencia().Ejecutar("esp32-001", "online"));
+        Assert.True(await _e.RegistrarPresencia().EjecutarAsync("esp32-001", "online"));
         Assert.Equal("en-linea", await conexion());
-        Assert.True(_e.RegistrarPresencia().Ejecutar("ESP32-001", "offline"));
+        Assert.True(await _e.RegistrarPresencia().EjecutarAsync("ESP32-001", "offline"));
         Assert.Equal("fuera-de-linea", (await _e.ObtenerSignosActuales().EjecutarAsync(pacienteId)).Valor.ConexionSensor);
-        Assert.False(_e.RegistrarPresencia().Ejecutar("ESP32-001", "dormido"));
+        Assert.False(await _e.RegistrarPresencia().EjecutarAsync("ESP32-001", "dormido"));
     }
 }

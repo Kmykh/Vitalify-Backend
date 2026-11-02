@@ -13,6 +13,9 @@ internal sealed class RepositorioDispositivos(TransaccionalDbContext db) : IRepo
     public Task<bool> ExisteCodigoAsync(string codigo, CancellationToken ct = default) =>
         db.Dispositivos.AnyAsync(d => d.Codigo == codigo, ct);
 
+    public Task<Dispositivo?> ObtenerPorCodigoAsync(string codigo, CancellationToken ct = default) =>
+        db.Dispositivos.SingleOrDefaultAsync(d => d.Codigo == codigo, ct);
+
     public async Task<IReadOnlyList<DispositivoDto>> ListarAsync(EstadoDispositivo? estado, CancellationToken ct = default)
     {
         var dispositivos = db.Dispositivos.AsNoTracking();

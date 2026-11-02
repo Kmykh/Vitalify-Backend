@@ -99,6 +99,13 @@ public sealed class HistorialEnMemoria
             .OrderByDescending(o => o.ObservadaEn)
             .ToList());
 
+    public Task<ObservacionEnfermeria?> ObtenerUltimaTomaAsync(Guid hospitalizacionId, CancellationToken ct = default) =>
+        Task.FromResult(Observaciones.Where(o => o.HospitalizacionId == hospitalizacionId).OrderByDescending(o => o.ObservadaEn).FirstOrDefault());
+
+    public Task<BrazoPresion?> ObtenerUltimoBrazoPresionAsync(Guid hospitalizacionId, CancellationToken ct = default) =>
+        Task.FromResult(Observaciones.Where(o => o.HospitalizacionId == hospitalizacionId && o.BrazoPa is not null)
+            .OrderByDescending(o => o.ObservadaEn).Select(o => o.BrazoPa).FirstOrDefault());
+
     public Task<Resultado<Unidad>> GuardarCambiosAsync(CancellationToken ct = default)
     {
         Guardados++;
@@ -134,6 +141,8 @@ public sealed class PresenciaEnMemoria : IPresenciaDispositivos
     public void Registrar(string codigoDispositivo, PresenciaDispositivo presencia) => _presencias[codigoDispositivo] = presencia;
 
     public PresenciaDispositivo? Obtener(string codigoDispositivo) => _presencias.GetValueOrDefault(codigoDispositivo);
+
+    public IReadOnlyList<string> ListarEnLinea() => _presencias.Where(p => p.Value.EnLinea).Select(p => p.Key).ToList();
 }
 
 public sealed class SolicitudNuevaLecturaFalsa : ISolicitudNuevaLectura

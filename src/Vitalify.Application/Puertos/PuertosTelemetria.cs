@@ -47,8 +47,8 @@ public interface IUnidadDeTrabajoHistorial
 public sealed record SolicitudNuevaLectura(string CodigoDispositivo, DateTime MedidoEn, string Motivo);
 
 /// <summary>
-/// Pide al sensor que repita una medición (HU12 E2). Hoy el adaptador solo lo escribe en el log (la incidencia ya
-/// queda con <c>requiere_nueva_lectura</c>); en la fase 7 publicará un comando MQTT al dispositivo.
+/// Pide al sensor que repita una medición (HU12 E2). El adaptador publica el comando <c>repetir-medicion</c> en
+/// <c>device/{codigo}/comandos</c> (la incidencia ya queda con <c>requiere_nueva_lectura</c>).
 /// </summary>
 public interface ISolicitudNuevaLectura
 {
