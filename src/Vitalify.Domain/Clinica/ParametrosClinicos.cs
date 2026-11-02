@@ -32,8 +32,8 @@ public enum ParametroClinico
 }
 
 /// <summary>
-/// Valores con los que se calcula el riesgo. Cualquiera puede faltar: el wearable de Vitalify mide FC, SpO2 y
-/// temperatura; FR, PAS, conciencia y oxígeno suplementario los registra la enfermera.
+/// Valores con los que se calcula el riesgo. Cualquiera puede faltar: el wearable de Vitalify mide FC, SpO2,
+/// temperatura y FR; la presión, la conciencia y el oxígeno suplementario los registra la enfermera en la toma manual.
 /// </summary>
 public sealed record ParametrosClinicos(
     int? Fr = null,
