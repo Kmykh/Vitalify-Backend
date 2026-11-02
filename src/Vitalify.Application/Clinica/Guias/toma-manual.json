@@ -1,0 +1,266 @@
+{
+  "version": "2026.11.1",
+  "titulo": "Asistente de toma manual de signos vitales",
+  "descripcion": "Guía para registrar lo que el wearable no mide: oxígeno suplementario, nivel de conciencia (ACVPU) y presión arterial; la frecuencia respiratoria solo si el sensor no tiene una vigente. Es un apoyo a la decisión: no reemplaza el juicio clínico.",
+  "envio": {
+    "endpoint": "POST /api/v1/pacientes/{id}/observaciones",
+    "campoVersion": "versionGuia",
+    "nota": "Cada pregunta indica en 'campo' dónde va su respuesta en el cuerpo del POST. 'mostrarSi' indica cuándo hacer la pregunta."
+  },
+  "secciones": {
+    "oxigeno": {
+      "titulo": "Oxígeno suplementario",
+      "obligatoriaEnTomaInicial": true,
+      "preguntas": [
+        {
+          "id": "recibe",
+          "campo": "oxigeno.recibe",
+          "tipo": "si-no",
+          "texto": "¿Recibe oxígeno ahora?"
+        },
+        {
+          "id": "dispositivo",
+          "campo": "oxigeno.dispositivo",
+          "tipo": "opcion",
+          "texto": "¿Con qué dispositivo?",
+          "mostrarSi": { "campo": "oxigeno.recibe", "igualA": true },
+          "opciones": [
+            { "valor": "CanulaNasal", "texto": "Cánula nasal" },
+            { "valor": "MascarillaSimple", "texto": "Mascarilla simple" },
+            { "valor": "Venturi", "texto": "Mascarilla Venturi" },
+            { "valor": "MascarillaReservorio", "texto": "Mascarilla con reservorio" },
+            { "valor": "AltoFlujo", "texto": "Cánula de alto flujo" }
+          ]
+        },
+        {
+          "id": "flujoLpm",
+          "campo": "oxigeno.flujoLpm",
+          "tipo": "numero",
+          "texto": "Flujo de oxígeno",
+          "unidad": "L/min",
+          "minimo": 0.5,
+          "maximo": 60,
+          "mostrarSi": { "campo": "oxigeno.recibe", "igualA": true }
+        },
+        {
+          "id": "fio2",
+          "campo": "oxigeno.fio2",
+          "tipo": "entero",
+          "texto": "FiO2 indicada",
+          "unidad": "%",
+          "minimo": 21,
+          "maximo": 100,
+          "mostrarSi": { "campo": "oxigeno.dispositivo", "enLista": [ "Venturi", "AltoFlujo" ] }
+        },
+        {
+          "id": "objetivo88a92",
+          "campo": "oxigeno.objetivo88a92",
+          "tipo": "si-no",
+          "texto": "¿Tiene indicado un objetivo de SpO2 de 88–92 %?"
+        }
+      ],
+      "recomendaciones": [
+        "Registre el dispositivo y el flujo tal como están en este momento.",
+        "En NEWS2, cualquier oxígeno suplementario suma 2 puntos.",
+        "Si tiene indicado un objetivo de 88–92 % y el paciente sigue en la escala 1 de SpO2, solicite al médico revisar la escala."
+      ],
+      "fuentes": [ "news2-rcp-2017" ]
+    },
+    "conciencia": {
+      "titulo": "Nivel de conciencia (ACVPU)",
+      "obligatoriaEnTomaInicial": true,
+      "nota": "El nivel lo calcula el backend a partir de las respuestas. Si el paciente tiene confusión basal (campo confusionBasal de la ficha), use los textos 'textoConConfusionBasal'.",
+      "preguntas": [
+        {
+          "id": "despiertoCoherente",
+          "campo": "conciencia.despiertoCoherente",
+          "tipo": "si-no",
+          "texto": "¿Está despierto, abre los ojos solo y responde con coherencia?",
+          "textoConConfusionBasal": "¿Está despierto y abre los ojos solo? (su confusión de siempre no cuenta)"
+        },
+        {
+          "id": "confusionNueva",
+          "campo": "conciencia.confusionNueva",
+          "tipo": "si-no",
+          "texto": "¿Hay confusión o desorientación nueva (lugar, fecha, más confundido que antes)?",
+          "textoConConfusionBasal": "¿Está más confundido que de costumbre?",
+          "mostrarSi": { "campo": "conciencia.despiertoCoherente", "igualA": true },
+          "resultado": { "si": "C", "no": "A" }
+        },
+        {
+          "id": "respondeVoz",
+          "campo": "conciencia.respondeVoz",
+          "tipo": "si-no",
+          "texto": "¿Responde cuando se le habla (abre los ojos, habla o se mueve)?",
+          "mostrarSi": { "campo": "conciencia.despiertoCoherente", "igualA": false },
+          "resultado": { "si": "V" }
+        },
+        {
+          "id": "respondeDolor",
+          "campo": "conciencia.respondeDolor",
+          "tipo": "si-no",
+          "texto": "¿Responde a un estímulo doloroso?",
+          "mostrarSi": { "campo": "conciencia.respondeVoz", "igualA": false },
+          "resultado": { "si": "P", "no": "U" }
+        }
+      ],
+      "niveles": [
+        { "codigo": "A", "valor": "Alerta", "texto": "Alerta" },
+        { "codigo": "C", "valor": "ConfusionNueva", "texto": "Confusión nueva" },
+        { "codigo": "V", "valor": "RespondeVoz", "texto": "Responde a la voz" },
+        { "codigo": "P", "valor": "RespondeDolor", "texto": "Responde al dolor" },
+        { "codigo": "U", "valor": "NoResponde", "texto": "No responde" }
+      ],
+      "recomendaciones": [
+        "En NEWS2, cualquier nivel distinto de A suma 3 puntos.",
+        "La confusión nueva (C) es un signo de deterioro: no la atribuya a la edad sin avisar."
+      ],
+      "fuentes": [ "news2-rcp-2017" ]
+    },
+    "presion": {
+      "titulo": "Presión arterial",
+      "obligatoriaEnTomaInicial": true,
+      "checklist": [
+        { "id": "reposo5Min", "campo": "presion.checklist.reposo5Min", "texto": "Reposo de al menos 5 minutos antes de medir" },
+        { "id": "brazoApoyadoAlturaCorazon", "campo": "presion.checklist.brazoApoyadoAlturaCorazon", "texto": "Brazo apoyado a la altura del corazón" },
+        { "id": "brazaleteTallaCorrecta", "campo": "presion.checklist.brazaleteTallaCorrecta", "texto": "Brazalete de la talla correcta para el brazo" },
+        { "id": "sinCafeTabacoEsfuerzo30Min", "campo": "presion.checklist.sinCafeTabacoEsfuerzo30Min", "texto": "Sin café, tabaco ni esfuerzo en los últimos 30 minutos" },
+        { "id": "tensiometroValidado", "campo": "presion.checklist.tensiometroValidado", "texto": "Tensiómetro validado y calibrado" }
+      ],
+      "notaChecklist": "El checklist no bloquea el registro, pero si queda incompleto la respuesta avisa que el valor puede no ser fiable.",
+      "preguntas": [
+        {
+          "id": "posicion",
+          "campo": "presion.posicion",
+          "tipo": "opcion",
+          "texto": "Posición del paciente",
+          "opciones": [
+            { "valor": "Sentado", "texto": "Sentado" },
+            { "valor": "Acostado", "texto": "Acostado" },
+            { "valor": "DePie", "texto": "De pie" }
+          ]
+        },
+        {
+          "id": "brazo",
+          "campo": "presion.brazo",
+          "tipo": "opcion",
+          "texto": "Brazo",
+          "sugerencia": "Use el mismo brazo de la toma anterior: GET /api/v1/pacientes/{id}/riesgo lo devuelve en ultimoBrazoPa.",
+          "opciones": [
+            { "valor": "Izquierdo", "texto": "Izquierdo" },
+            { "valor": "Derecho", "texto": "Derecho" }
+          ]
+        },
+        {
+          "id": "metodo",
+          "campo": "presion.metodo",
+          "tipo": "opcion",
+          "texto": "Método",
+          "opciones": [
+            { "valor": "Automatico", "texto": "Tensiómetro automático" },
+            { "valor": "Manual", "texto": "Esfigmomanómetro manual" }
+          ]
+        },
+        {
+          "id": "lecturas",
+          "campo": "presion.lecturas",
+          "tipo": "lista",
+          "texto": "Lecturas (sistólica y diastólica)",
+          "minimo": 1,
+          "maximo": 3,
+          "elemento": {
+            "pas": { "tipo": "entero", "unidad": "mmHg", "texto": "Sistólica" },
+            "pad": { "tipo": "entero", "unidad": "mmHg", "texto": "Diastólica" },
+            "medidaEn": { "tipo": "fecha-hora", "texto": "Hora de la lectura (UTC)" }
+          }
+        }
+      ],
+      "recomendaciones": [
+        "Tome 2 lecturas con 1–2 min de intervalo y registre el promedio.",
+        "Si las 2 lecturas difieren en más de 10 mmHg (sistólica o diastólica), tome una tercera.",
+        "PAS ≤ 90 mmHg o ≥ 220 mmHg: confirme con una nueva toma y avise al médico."
+      ],
+      "fuentes": [ "rm-031-2015-minsa", "gt-006-ins-cets-2026", "ley-29459" ]
+    },
+    "frecuenciaRespiratoria": {
+      "titulo": "Frecuencia respiratoria",
+      "obligatoriaEnTomaInicial": false,
+      "mostrarSi": { "condicion": "fr-del-sensor-no-vigente", "nota": "El wearable mide la FR. Pregunte solo si en GET /api/v1/pacientes/{id}/signos/actual la variable fr no está vigente." },
+      "preguntas": [
+        {
+          "id": "fr",
+          "campo": "fr",
+          "tipo": "entero",
+          "texto": "Respiraciones por minuto",
+          "unidad": "rpm"
+        }
+      ],
+      "recomendaciones": [
+        "Cuente las respiraciones durante 60 s sin avisar al paciente."
+      ],
+      "fuentes": [ "news2-rcp-2017" ]
+    },
+    "contexto": {
+      "titulo": "Contexto de la toma",
+      "obligatoriaEnTomaInicial": false,
+      "nota": "No suma puntos: ayuda a interpretar los demás valores.",
+      "preguntas": [
+        { "id": "dolor", "campo": "contexto.dolor", "tipo": "entero", "texto": "Dolor (escala numérica)", "minimo": 0, "maximo": 10 },
+        { "id": "ansiedadOEsfuerzoReciente", "campo": "contexto.ansiedadOEsfuerzoReciente", "tipo": "si-no", "texto": "¿Ansiedad o esfuerzo reciente?" },
+        { "id": "antipireticoUltimas4h", "campo": "contexto.antipireticoUltimas4h", "tipo": "si-no", "texto": "¿Recibió un antipirético en las últimas 4 h?" },
+        { "id": "betabloqueadores", "campo": "contexto.betabloqueadores", "tipo": "si-no", "texto": "¿Toma betabloqueadores?" }
+      ],
+      "recomendaciones": [
+        "El dolor, la ansiedad o el esfuerzo pueden subir la FC y la presión.",
+        "Un antipirético puede ocultar la fiebre y un betabloqueador, una taquicardia."
+      ],
+      "fuentes": [ "news2-rcp-2017" ]
+    },
+    "preocupacion": {
+      "titulo": "Preocupación clínica",
+      "obligatoriaEnTomaInicial": false,
+      "preguntas": [
+        {
+          "id": "preocupacionClinica",
+          "campo": "preocupacionClinica",
+          "tipo": "si-no",
+          "texto": "¿Le preocupa este paciente aunque el puntaje sea bajo?"
+        }
+      ],
+      "recomendaciones": [
+        "El juicio clínico prima sobre el puntaje: si le preocupa, regístrelo y se notificará al médico."
+      ],
+      "fuentes": [ "news2-rcp-2017", "ley-27669" ]
+    }
+  },
+  "registro": {
+    "texto": "Cada toma queda registrada con su autor, la hora de la medición y la versión de esta guía.",
+    "fuentes": [ "nts-139-minsa-2018", "ley-27669" ]
+  },
+  "fuentes": {
+    "rm-031-2015-minsa": {
+      "texto": "Resolución Ministerial N° 031-2015/MINSA. Guía Técnica: Guía de Práctica Clínica para el Diagnóstico, Tratamiento y Control de la Enfermedad Hipertensiva (Anexo 4: medición de la presión arterial).",
+      "enlace": "https://docs.bvsalud.org/biblioref/2019/01/968909/rm_031-2015-minsa.pdf"
+    },
+    "gt-006-ins-cets-2026": {
+      "texto": "Guía Técnica N° 006-INS/CETS-2026: Guía de Práctica Clínica para la prevención, diagnóstico y tratamiento de la hipertensión arterial en adultos. Aprobada con la RPE N° 000093-2026-INS/PE.",
+      "enlace": "https://busquedas.elperuano.pe/dispositivo/NL/2515740-1"
+    },
+    "ley-27669": {
+      "texto": "Ley N° 27669, Ley del Trabajo de la Enfermera(o).",
+      "enlace": "https://www.congreso.gob.pe/Docs/congresistas2001/CelinaPalomino/files/ley_trabajo_enfermera.pdf"
+    },
+    "nts-139-minsa-2018": {
+      "texto": "NTS N° 139-MINSA/2018/DGAIN: Norma Técnica de Salud para la Gestión de la Historia Clínica (RM N° 214-2018/MINSA).",
+      "enlace": "https://busquedas.elperuano.pe/api/visor_html/1626125-1"
+    },
+    "ley-29459": {
+      "texto": "Ley N° 29459, Ley de los Productos Farmacéuticos, Dispositivos Médicos y Productos Sanitarios.",
+      "enlace": "https://faolex.fao.org/docs/pdf/per127508.pdf"
+    },
+    "news2-rcp-2017": {
+      "texto": "Royal College of Physicians. National Early Warning Score (NEWS) 2: Standardising the assessment of acute-illness severity in the NHS. Londres: RCP; 2017.",
+      "enlace": "https://www.rcp.ac.uk/media/a4ibkkbf/news2-final-report_0_0.pdf"
+    }
+  }
+}

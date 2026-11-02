@@ -1,5 +1,6 @@
 using Vitalify.Application.Comun;
 using Vitalify.Application.Puertos;
+using Vitalify.Application.Vinculacion;
 using Vitalify.Domain.Auditoria;
 using Vitalify.Domain.Hospitalizaciones;
 
@@ -7,7 +8,10 @@ namespace Vitalify.Application.Pacientes;
 
 public sealed record LiberarDispositivoComando(Guid PacienteId, Guid UsuarioId, string? Ip);
 
-/// <summary>HU06: desvincula el sensor del paciente; el sensor vuelve a Disponible y la asignación queda en el historial.</summary>
+/// <summary>
+/// HU06: desvincula el sensor del paciente; el sensor vuelve a Disponible, la asignación queda en el historial y el
+/// wearable recibe <c>desvinculado</c> y un QR nuevo.
+/// </summary>
 public sealed class LiberarDispositivo(
     IRepositorioPacientes pacientes,
     IRepositorioDispositivos dispositivos,
@@ -15,6 +19,7 @@ public sealed class LiberarDispositivo(
     IRepositorioAuditoria auditoria,
     IUnidadDeTrabajo unidadDeTrabajo,
     IResolutorDispositivos resolutorDispositivos,
+    ServicioCodigosVinculacion servicioCodigos,
     IReloj reloj)
 {
     public async Task<Resultado<Unidad>> EjecutarAsync(LiberarDispositivoComando comando, CancellationToken ct = default)
@@ -47,6 +52,7 @@ public sealed class LiberarDispositivo(
         if (guardado.EsExito)
         {
             resolutorDispositivos.Invalidar(dispositivo.Codigo);
+            await servicioCodigos.AlLiberarAsync(dispositivo, comando.UsuarioId, comando.Ip, ct);
         }
 
         return guardado;

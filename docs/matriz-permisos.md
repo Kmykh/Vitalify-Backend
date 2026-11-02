@@ -28,11 +28,15 @@ Control de acceso basado en roles (RBAC) de Vitalify. Cada rol tiene permisos di
 | Dispositivos (inventario y estado) | `POST /dispositivos`, `PATCH /dispositivos/{id}/estado` · `GET /dispositivos?estado=` | **G** | L | L | `SoloAdministrador` para escribir · `AdministradorOPersonalClinico` para leer |
 | Pacientes: ingreso, edición de datos básicos y egreso (HU05, HU08) | `POST /pacientes`, `PUT /pacientes/{id}`, `POST /pacientes/{id}/egreso` · `GET /pacientes`, `GET /pacientes/{id}` | — | L | **G** | `SoloEnfermera` para escribir · `PersonalClinico` para leer |
 | Vincular y liberar un sensor (HU06) | `POST /pacientes/{id}/dispositivo`, `DELETE /pacientes/{id}/dispositivo` | — | L | **G** | `SoloEnfermera` para escribir · `PersonalClinico` para leer (en la ficha) |
+| Vinculación por QR (HU06, fase 5) | `POST /vinculaciones/escaneo` (10 por minuto por usuario), `POST /vinculaciones/confirmar` | — | — | **G** | `SoloEnfermera` |
+| Regenerar el QR de un sensor | `POST /dispositivos/{id}/qr` | **G** | **G** | **G** | `AdministradorOPersonalClinico` (no devuelve el código: solo lo muestra el wearable) |
 | Pacientes monitoreados (HU07), con última lectura y señal | `GET /pacientes/monitoreados` | — | L | L | `PersonalClinico` |
 | Signos vitales actuales (HU10, HU11 y HU12) | `GET /pacientes/{id}/signos/actual` | — | L | L | `PersonalClinico` |
 | Historial de lecturas del wearable (gráficos del dashboard) | `GET /pacientes/{id}/signos/historial` | — | L | L | `PersonalClinico` |
 | Riesgo NEWS2 y MEWS (fase 4) | `GET /pacientes/{id}/riesgo` | — | L | L | `PersonalClinico` |
-| Observaciones de signos (FR, presión, conciencia, oxígeno, temperatura) | `POST /pacientes/{id}/observaciones` | — | **G** | **G** | `PersonalClinico` |
+| Toma manual (asistente: presión, conciencia, oxígeno, FR, contexto, preocupación) | `POST /pacientes/{id}/observaciones` | — | **G** | **G** | `PersonalClinico` |
+| Guía de toma manual | `GET /guias/toma-manual` | — | L | L | `PersonalClinico` |
+| Escala de SpO2 del paciente | `PUT /pacientes/{id}/escala-spo2` | — | **G** | — | `SoloMedico` |
 | Incidencias de telemetría (datos técnicos, sin datos del paciente) | `GET /telemetria/incidencias` | L | — | — | `SoloAdministrador` |
 | Ingesta de telemetría de desarrollo (solo Development) | `POST /dev/telemetria` | **G** | — | — | `SoloAdministrador` |
 | Estado del servicio | `GET /ping`, `GET /health` | ✓ | ✓ | ✓ | Anónimo |
@@ -48,6 +52,11 @@ Notas:
   - Las incidencias de la ingesta son datos técnicos del sensor (dispositivo, variable, valor recibido, ids), así que las revisa el administrador. Nunca incluyen el nombre ni el documento del paciente.
   - La ingesta real por MQTT no usa usuarios de la API: la autentica el broker (cada wearable con su código y clave, y un ACL por tópico). El endpoint de desarrollo exige un administrador.
 - **Observaciones:** las registra el médico o la enfermera y quedan auditadas como `ObservacionRegistrada`.
+- **Vinculación por QR:** solo la enfermera escanea y confirma.
+  - Se audita `QrGenerado`, `QrEscaneado`, `QrRechazado` (con el motivo) y `VinculacionPorQr`, solo con ids.
+  - Al wearable solo van la cama y las iniciales del paciente.
+  - Los comandos MQTT al wearable los autentica el broker: el backend escribe en `device/+/comandos` y cada wearable lee solo el suyo.
+- **Escala de SpO2:** la indica solo el médico. Queda auditada como `EscalaSpo2Cambiada`, sin el motivo (texto libre).
 
 ### Cambio respecto de la versión anterior
 
@@ -60,10 +69,10 @@ Se confirmarán al implementar cada fase.
 | Módulo | Fase | Administrador | Médico | Enfermera | Política prevista |
 |---|:---:|:---:|:---:|:---:|---|
 | Signos vitales en tiempo real (actualización en vivo con SignalR) | 6 y 7 | — | L | L | `PersonalClinico` |
-| Alertas NEWS2/MEWS | 5 | — | **A** | **A** | `PersonalClinico` |
+| Alertas NEWS2/MEWS (y preocupación clínica) | 6 | — | **A** | **A** | `PersonalClinico` |
 | Historial de puntajes de riesgo | 6 | — | L | L | `PersonalClinico` |
 | Observaciones clínicas (notas) | 6 | — | **G** | **G** | `PersonalClinico`. Cada uno edita solo sus propias notas |
-| Configuración de umbrales de alerta por paciente | 6 | — | **G** | L | `SoloMedico` para escribir, `PersonalClinico` para leer |
+| Configuración de umbrales de alerta por paciente (la escala de SpO2 ya está en la fase 5) | 6 | — | **G** | L | `SoloMedico` para escribir, `PersonalClinico` para leer |
 | Consulta de la auditoría de seguridad | — | L | — | — | `SoloAdministrador` |
 
 ## Cómo se aplica
@@ -91,8 +100,12 @@ Se confirmarán al implementar cada fase.
 | El administrador no ve el riesgo ni registra observaciones; el médico sí | `ElAdministradorNoVeElRiesgoNiRegistraObservacionesYElMedicoSi` |
 | El administrador recibe 403 en el historial de signos | `ElAdministradorRecibe403YUnPacienteInexistente404` |
 | El médico recibe 403 al ingresar pacientes | `ElMedicoRecibe403AlIngresarPacientes` |
+| Solo la enfermera escanea y confirma la vinculación por QR | `SoloLaEnfermeraEscaneaYConfirma` |
+| Administrador y personal clínico regeneran el QR; no si el sensor está vinculado | `RegenerarQr_LoPuedenPedirAdministradorYPersonalClinico_PeroNoSiElSensorEstaVinculado` |
+| Solo el médico cambia la escala de SpO2 y la auditoría no guarda el motivo | `ElMedicoCambiaLaEscalaDeSpo2_SeAuditaYElRiesgoSeRecalculaAlInstante` |
+| La auditoría de la vinculación por QR no contiene el nombre ni el documento | `QR_E5_ConfirmarConPacienteNuevoCamaLibreYObservacionInicial_PacienteHospitalizadoVinculadoYPrimerRiesgo` |
 | El administrador ve la ocupación de las camas sin datos del paciente | `ElAdministradorVeLaOcupacionDeLaCamaPeroNoQuienLaOcupa` |
 | La auditoría del ingreso no contiene el nombre ni el documento | `HU05_E1_EnfermeraCompletaNombreEdadCamaYDiagnostico_PacienteRegistradoYHabilitadoParaSensor` |
 | Un token con la firma alterada (rol cambiado a Administrador) es rechazado | `UnTokenConLaFirmaAlterada_Devuelve401` |
 
-Las pruebas están en `tests/Vitalify.Api.IntegrationTests/` (`HU03ControlDeAccesoTests.cs`, `PermisosFase2Tests.cs`, `HU05RegistroDePacienteTests.cs` y `TelemetriaExtrasTests.cs`).
+Las pruebas están en `tests/Vitalify.Api.IntegrationTests/` (`HU03ControlDeAccesoTests.cs`, `PermisosFase2Tests.cs`, `HU05RegistroDePacienteTests.cs`, `TelemetriaExtrasTests.cs`, `HU06VinculacionPorQrTests.cs` y `TomaManualTests.cs`).

@@ -15,4 +15,9 @@ public enum AccionAuditoria
     DispositivoLiberado = 11,
     ConsultaFichaPaciente = 12,
     ObservacionRegistrada = 13,
+    QrGenerado = 14,
+    QrEscaneado = 15,
+    QrRechazado = 16,
+    VinculacionPorQr = 17,
+    EscalaSpo2Cambiada = 18,
 }

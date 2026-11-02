@@ -3,6 +3,7 @@ using Vitalify.Application.Camas;
 using Vitalify.Application.Comun;
 using Vitalify.Application.Puertos;
 using Vitalify.Domain.Auditoria;
+using Vitalify.Domain.Camas;
 using Vitalify.Domain.Hospitalizaciones;
 using Vitalify.Domain.Pacientes;
 
@@ -62,6 +63,29 @@ public sealed class RegistrarIngresoPaciente(
             return errorValidacion;
         }
 
+        var preparado = await PrepararAsync(comando, null, ct);
+        if (!preparado.EsExito)
+        {
+            return preparado.Error;
+        }
+
+        var guardado = await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        if (!guardado.EsExito)
+        {
+            return guardado.Error;
+        }
+
+        return FichaPacienteDto.Desde(preparado.Valor.Paciente, preparado.Valor.Lectura(), DateOnly.FromDateTime(reloj.AhoraUtc));
+    }
+
+    /// <summary>
+    /// Reglas del ingreso sin guardar: cama activa y libre, paciente nuevo o reutilizado por su documento (o el
+    /// <paramref name="pacienteElegido"/>) sin otra hospitalización activa, y la auditoría. Lo reutiliza la vinculación
+    /// por QR para guardar el ingreso y la vinculación en una sola transacción. Asume el comando ya validado.
+    /// </summary>
+    internal async Task<Resultado<IngresoPreparado>> PrepararAsync(
+        RegistrarIngresoPacienteComando comando, Paciente? pacienteElegido, CancellationToken ct)
+    {
         var cama = await camas.ObtenerPorIdAsync(comando.CamaId!.Value, ct);
         if (cama is null || !cama.Activa)
         {
@@ -75,7 +99,8 @@ public sealed class RegistrarIngresoPaciente(
 
         Enumeraciones.TryParseNombre<TipoDocumento>(comando.TipoDocumento, out var tipoDocumento);
         var ahora = reloj.AhoraUtc;
-        var paciente = await pacientes.ObtenerPorDocumentoAsync(tipoDocumento, Paciente.NormalizarDocumento(comando.NumeroDocumento), ct);
+        var paciente = pacienteElegido
+            ?? await pacientes.ObtenerPorDocumentoAsync(tipoDocumento, Paciente.NormalizarDocumento(comando.NumeroDocumento), ct);
 
         if (paciente is null)
         {
@@ -94,16 +119,15 @@ public sealed class RegistrarIngresoPaciente(
             AccionAuditoria.PacienteIngresado, ahora, comando.UsuarioId, comando.Ip,
             $"Paciente {paciente.Id}, hospitalización {hospitalizacion.Id}, cama {cama.Id}."));
 
-        var guardado = await unidadDeTrabajo.GuardarCambiosAsync(ct);
-        if (!guardado.EsExito)
-        {
-            return guardado.Error;
-        }
-
-        var lectura = new HospitalizacionActivaLectura(
-            paciente.Id, paciente.NombreCompleto, paciente.TipoDocumento, paciente.NumeroDocumento, paciente.FechaNacimiento,
-            paciente.FechaNacimientoEstimada, hospitalizacion.Id, hospitalizacion.DiagnosticoIngreso, hospitalizacion.IngresoEn,
-            cama.Id, cama.Codigo, cama.Servicio, null, null, null);
-        return FichaPacienteDto.Desde(paciente, lectura, DateOnly.FromDateTime(ahora));
+        return new IngresoPreparado(paciente, hospitalizacion, cama);
     }
+}
+
+/// <summary>Ingreso listo para guardar.</summary>
+internal sealed record IngresoPreparado(Paciente Paciente, Hospitalizacion Hospitalizacion, Cama Cama)
+{
+    public HospitalizacionActivaLectura Lectura(Guid? dispositivoId = null, string? codigoDispositivo = null, DateTime? asignadoEn = null) =>
+        new(Paciente.Id, Paciente.NombreCompleto, Paciente.TipoDocumento, Paciente.NumeroDocumento, Paciente.FechaNacimiento,
+            Paciente.FechaNacimientoEstimada, Hospitalizacion.Id, Hospitalizacion.DiagnosticoIngreso, Hospitalizacion.IngresoEn,
+            Cama.Id, Cama.Codigo, Cama.Servicio, dispositivoId, codigoDispositivo, asignadoEn);
 }

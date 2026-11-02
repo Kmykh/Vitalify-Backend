@@ -58,7 +58,7 @@ public class PacientesController : ControllerBase
     {
         var resultado = await actualizar.EjecutarAsync(new ActualizarDatosPacienteComando(
             id, solicitud.NombreCompleto ?? string.Empty, solicitud.FechaNacimiento, solicitud.Edad,
-            solicitud.DiagnosticoIngreso ?? string.Empty, User.IdUsuario() ?? Guid.Empty, HttpContext.Ip()), ct);
+            solicitud.DiagnosticoIngreso ?? string.Empty, User.IdUsuario() ?? Guid.Empty, HttpContext.Ip(), solicitud.ConfusionBasal), ct);
 
         return resultado.EsExito ? Ok(resultado.Valor) : this.Problema(resultado.Error);
     }
@@ -157,9 +157,11 @@ public class PacientesController : ControllerBase
 
     /// <summary>Última evaluación de riesgo NEWS2 y MEWS del paciente, con el desglose por parámetro.</summary>
     /// <remarks>
-    /// Se recalcula con cada lectura del wearable y con cada observación. El wearable mide FC, SpO2 y temperatura: sin
-    /// observaciones de FR, presión, conciencia y oxígeno, el puntaje es <b>parcial</b> (<c>completo: false</c>) y
-    /// <c>faltantes</c> dice qué falta. <c>ultimaEvaluacion</c> es null si aún no hay ninguna.
+    /// Se recalcula con cada lectura del wearable y con cada observación. El wearable mide FC, SpO2, temperatura y FR:
+    /// sin una toma manual de presión, conciencia y oxígeno, el puntaje es <b>parcial</b> (<c>completo: false</c>) y
+    /// <c>faltantes</c> dice qué falta. La evaluación trae <c>recomendacion</c>, <c>proximaTomaManualEn</c> y
+    /// <c>avisos</c>; la respuesta, <c>escalaSpo2</c> y <c>ultimoBrazoPa</c> (para sugerir el mismo brazo).
+    /// <c>ultimaEvaluacion</c> es null si aún no hay ninguna.
     /// </remarks>
     /// <response code="200">Riesgo actual.</response>
     /// <response code="404">El paciente no existe o no tiene una hospitalización activa.</response>
@@ -173,13 +175,15 @@ public class PacientesController : ControllerBase
         return resultado.EsExito ? Ok(resultado.Valor) : this.Problema(resultado.Error);
     }
 
-    /// <summary>Registra signos que el wearable no mide y recalcula el riesgo.</summary>
+    /// <summary>Registra una toma manual (asistente de la guía) y recalcula el riesgo.</summary>
     /// <remarks>
-    /// FR, presión (pas y pad juntas), nivel de conciencia ACVPU, oxígeno suplementario y temperatura de termómetro
-    /// clínico. Cada valor cuenta para NEWS2/MEWS durante 4 h; gana el valor más reciente entre la observación y el sensor.
+    /// Presión con 1 a 3 lecturas (se guarda el promedio; si 2 lecturas difieren en más de 10 mmHg, pide una tercera),
+    /// conciencia por respuestas (el backend calcula el ACVPU), oxígeno con dispositivo y flujo, FR si el sensor no tiene
+    /// una vigente, contexto y preocupación clínica. Siguen aceptándose los campos planos de la fase 4. Cada valor cuenta
+    /// para NEWS2/MEWS durante 4 h; gana el más reciente entre la toma y el sensor. Ver <c>GET /api/v1/guias/toma-manual</c>.
     /// </remarks>
-    /// <response code="201">Observación registrada, con la nueva evaluación de riesgo.</response>
-    /// <response code="400">Sin valores, valores imposibles, presión incompleta o fecha fuera de rango.</response>
+    /// <response code="201">Toma registrada, con la evaluación, la recomendación, la próxima toma y los avisos.</response>
+    /// <response code="400">Sin valores, valores imposibles, respuestas incompletas, lecturas que piden una tercera o fecha fuera de rango.</response>
     /// <response code="404">El paciente no existe o no tiene una hospitalización activa.</response>
     [HttpPost("{id:guid}/observaciones")]
     [Authorize(Policy = Politicas.PersonalClinico)]
@@ -189,17 +193,40 @@ public class PacientesController : ControllerBase
     public async Task<ActionResult<ObservacionRegistradaDto>> RegistrarObservacion(
         Guid id, RegistrarObservacionSolicitud solicitud, [FromServices] RegistrarObservacion registrar, CancellationToken ct)
     {
-        var resultado = await registrar.EjecutarAsync(new RegistrarObservacionComando(
-            id, solicitud.Fr, solicitud.Pas, solicitud.Pad, solicitud.Temperatura, solicitud.Conciencia, solicitud.OxigenoSuplementario,
-            solicitud.ObservadaEn, User.IdUsuario() ?? Guid.Empty, HttpContext.Ip()), ct);
+        var resultado = await registrar.EjecutarAsync(
+            new RegistrarObservacionComando(id, solicitud.AComando(), User.IdUsuario() ?? Guid.Empty, HttpContext.Ip()), ct);
 
         return resultado.EsExito
             ? CreatedAtAction(nameof(Riesgo), new { id }, resultado.Valor)
             : this.Problema(resultado.Error);
     }
 
-    /// <summary>Vincula un sensor disponible a la cama del paciente (HU06).</summary>
-    /// <remarks>Repetir la vinculación del mismo sensor es idempotente.</remarks>
+    /// <summary>El médico indica la escala de SpO2 de NEWS2 del paciente.</summary>
+    /// <remarks>
+    /// La escala 2 es para la insuficiencia respiratoria hipercápnica (objetivo 88–92 %). Se guarda en la hospitalización
+    /// activa, queda auditada como <c>EscalaSpo2Cambiada</c> (sin el motivo) y el riesgo se recalcula al instante.
+    /// </remarks>
+    /// <response code="200">Escala cambiada, con el riesgo recalculado.</response>
+    /// <response code="400">Escala desconocida o motivo inválido.</response>
+    /// <response code="404">El paciente no existe o no tiene una hospitalización activa.</response>
+    [HttpPut("{id:guid}/escala-spo2")]
+    [Authorize(Policy = Politicas.SoloMedico)]
+    [ProducesResponseType<RiesgoPacienteDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<RiesgoPacienteDto>> CambiarEscalaSpo2(
+        Guid id, CambiarEscalaSpo2Solicitud solicitud, [FromServices] CambiarEscalaSpo2 cambiar, CancellationToken ct)
+    {
+        var resultado = await cambiar.EjecutarAsync(
+            new CambiarEscalaSpo2Comando(id, solicitud.Escala, solicitud.Motivo, User.IdUsuario() ?? Guid.Empty, HttpContext.Ip()), ct);
+        return resultado.EsExito ? Ok(resultado.Valor) : this.Problema(resultado.Error);
+    }
+
+    /// <summary>Vincula un sensor disponible a la cama del paciente (HU06), sin QR.</summary>
+    /// <remarks>
+    /// Vía manual de respaldo de <c>POST /vinculaciones</c>: invalida el QR del sensor y le publica "vinculado".
+    /// Repetir la vinculación del mismo sensor es idempotente.
+    /// </remarks>
     /// <response code="200">Vinculación confirmada.</response>
     /// <response code="400">Falta el dispositivo.</response>
     /// <response code="404">El paciente o el dispositivo no existen.</response>
@@ -221,7 +248,7 @@ public class PacientesController : ControllerBase
         return resultado.EsExito ? Ok(resultado.Valor) : this.Problema(resultado.Error);
     }
 
-    /// <summary>Desvincula el sensor del paciente; el sensor vuelve a Disponible (HU06).</summary>
+    /// <summary>Desvincula el sensor del paciente; el sensor vuelve a Disponible y muestra un QR nuevo (HU06).</summary>
     /// <response code="204">Sensor liberado.</response>
     /// <response code="404">El paciente no existe, no está hospitalizado o no tiene sensor.</response>
     [HttpDelete("{id:guid}/dispositivo")]

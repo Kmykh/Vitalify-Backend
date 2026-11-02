@@ -20,6 +20,12 @@ internal static class Validacion
         return Error.Validacion(detalles);
     }
 
+    /// <summary>
+    /// camelCase por segmento, para que los campos anidados coincidan con el JSON:
+    /// <c>Presion.Lecturas[0].Pas</c> → <c>presion.lecturas[0].pas</c>.
+    /// </summary>
     private static string CamelCase(string nombre) =>
-        string.IsNullOrEmpty(nombre) ? nombre : char.ToLowerInvariant(nombre[0]) + nombre[1..];
+        string.IsNullOrEmpty(nombre)
+            ? nombre
+            : string.Join('.', nombre.Split('.').Select(s => s.Length == 0 ? s : char.ToLowerInvariant(s[0]) + s[1..]));
 }

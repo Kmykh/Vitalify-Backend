@@ -26,6 +26,8 @@ internal sealed class ConfiguracionHospitalizacion : IEntityTypeConfiguration<Ho
         builder.Property(h => h.MotivoEgreso).HasConversion<string>().HasMaxLength(20);
         builder.Property(h => h.ObservacionEgreso).HasMaxLength(Hospitalizacion.LargoMaximoObservacion);
         builder.Property(h => h.Estado).HasConversion<string>().HasMaxLength(20).IsRequired();
+        builder.Property(h => h.EscalaSpo2).HasConversion<string>().HasMaxLength(10).IsRequired();
+        builder.Property(h => h.MotivoEscalaSpo2).HasMaxLength(Hospitalizacion.LargoMaximoMotivoEscala);
 
         builder.HasIndex(h => h.CamaId, IndiceCamaActiva).HasDatabaseName(IndiceCamaActiva).IsUnique().HasFilter(SoloActivas);
         builder.HasIndex(h => h.PacienteId, IndicePacienteActivo).HasDatabaseName(IndicePacienteActivo).IsUnique().HasFilter(SoloActivas);
@@ -38,5 +40,6 @@ internal sealed class ConfiguracionHospitalizacion : IEntityTypeConfiguration<Ho
         builder.HasOne<Cama>().WithMany().HasForeignKey(h => h.CamaId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Usuario>().WithMany().HasForeignKey(h => h.RegistradoPor).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Usuario>().WithMany().HasForeignKey(h => h.EgresoRegistradoPor).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Usuario>().WithMany().HasForeignKey(h => h.EscalaSpo2CambiadaPor).OnDelete(DeleteBehavior.Restrict);
     }
 }

@@ -107,7 +107,8 @@ public sealed class RegistrarLectura(
         await SolicitarNuevaLecturaSiHaceFaltaAsync(evaluacion, lectura, ct);
 
         var evento = new LecturaRegistrada(
-            hospitalizacion.HospitalizacionId, hospitalizacion.PacienteId, codigo, lectura.MedidoEn, evaluacion.Validos, lectura.Caida);
+            hospitalizacion.HospitalizacionId, hospitalizacion.PacienteId, codigo, lectura.MedidoEn, evaluacion.Validos, lectura.Caida,
+            hospitalizacion.EscalaSpo2);
         foreach (var manejador in manejadores)
         {
             await manejador.ManejarAsync(evento, ct);

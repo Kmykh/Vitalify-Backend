@@ -10,6 +10,7 @@ using Vitalify.Infrastructure.Persistence.Transaccional.Repositorios;
 using Vitalify.Infrastructure.Seguridad;
 using Vitalify.Infrastructure.Semillas;
 using Vitalify.Infrastructure.Telemetria;
+using Vitalify.Infrastructure.Vinculacion;
 
 namespace Vitalify.Infrastructure;
 
@@ -65,13 +66,19 @@ public static class DependencyInjection
         services.AddScoped<IRepositorioIncidencias, RepositorioIncidencias>();
         services.AddScoped<IUnidadDeTrabajoHistorial, UnidadDeTrabajoHistorial>();
         services.AddScoped<IResolutorDispositivos, ResolutorDispositivosConCache>();
-        services.AddSingleton<ISolicitudNuevaLectura, SolicitudNuevaLecturaEnLog>();
+        services.AddSingleton<ISolicitudNuevaLectura, SolicitudNuevaLecturaPorComando>();
         services.AddSingleton<IPresenciaDispositivos, PresenciaDispositivosEnMemoria>();
 
         // Motor clínico: observaciones y evaluaciones en el historial.
         services.AddSingleton(ConfiguracionTelemetria.CargarOpcionesClinicas(configuration));
         services.AddScoped<IRepositorioObservaciones, RepositorioObservaciones>();
         services.AddScoped<IRepositorioEvaluaciones, RepositorioEvaluaciones>();
+
+        // Vinculación por QR: códigos en el esquema transaccional; los comandos al wearable van por MQTT. Este es el
+        // adaptador por defecto (solo log): la API lo reemplaza por el de MQTT cuando Mqtt__Habilitado=true.
+        services.AddSingleton(ConfiguracionTelemetria.CargarOpcionesVinculacion(configuration));
+        services.AddScoped<IRepositorioCodigosVinculacion, RepositorioCodigosVinculacion>();
+        services.AddSingleton<IPublicadorComandosDispositivo, PublicadorComandosEnLog>();
 
         services.AddHostedService<SemillaAdministrador>();
         services.AddHostedService<SemillaDatosDemo>();

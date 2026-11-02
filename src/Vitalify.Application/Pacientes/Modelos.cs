@@ -1,3 +1,4 @@
+using Vitalify.Domain.Clinica;
 using Vitalify.Domain.Pacientes;
 
 namespace Vitalify.Application.Pacientes;
@@ -27,6 +28,7 @@ public sealed record DispositivoVinculadoDto(Guid Id, string Codigo, DateTime As
 public sealed record HospitalizacionActivaDto(Guid Id, string DiagnosticoIngreso, DateTime IngresoEn, CamaAsignadaDto Cama, DispositivoVinculadoDto? Dispositivo);
 
 /// <summary>Ficha del paciente con su hospitalización activa (null si no está hospitalizado).</summary>
+/// <param name="ConfusionBasal">Vive con confusión previa: el asistente de conciencia pregunta "¿más confundido que de costumbre?".</param>
 public sealed record FichaPacienteDto(
     Guid Id,
     string NombreCompleto,
@@ -35,11 +37,12 @@ public sealed record FichaPacienteDto(
     DateOnly FechaNacimiento,
     bool FechaNacimientoEstimada,
     int Edad,
+    bool ConfusionBasal,
     HospitalizacionActivaDto? HospitalizacionActiva)
 {
     public static FichaPacienteDto Desde(Paciente paciente, HospitalizacionActivaLectura? lectura, DateOnly hoy) =>
         new(paciente.Id, paciente.NombreCompleto, paciente.TipoDocumento.ToString(), paciente.NumeroDocumento,
-            paciente.FechaNacimiento, paciente.FechaNacimientoEstimada, paciente.Edad(hoy),
+            paciente.FechaNacimiento, paciente.FechaNacimientoEstimada, paciente.Edad(hoy), paciente.ConfusionBasal,
             lectura is null ? null : new HospitalizacionActivaDto(
                 lectura.HospitalizacionId, lectura.DiagnosticoIngreso, lectura.IngresoEn,
                 new CamaAsignadaDto(lectura.CamaId, lectura.CodigoCama, lectura.Servicio),
@@ -76,5 +79,7 @@ public sealed record VinculacionDto(
 public sealed record EgresoDto(Guid PacienteId, Guid HospitalizacionId, DateTime EgresoEn, string Motivo, string? DispositivoLiberado);
 
 /// <summary>Resultado de "¿qué hospitalización activa corresponde a este dispositivo?", para la ingesta (fase 3).</summary>
+/// <param name="EscalaSpo2">Escala de SpO2 con la que el motor clínico puntúa las lecturas de este dispositivo.</param>
 public sealed record HospitalizacionPorDispositivoDto(
-    Guid HospitalizacionId, Guid PacienteId, Guid CamaId, Guid DispositivoId, Guid AsignacionId, DateTime AsignadoEn);
+    Guid HospitalizacionId, Guid PacienteId, Guid CamaId, Guid DispositivoId, Guid AsignacionId, DateTime AsignadoEn,
+    EscalaSpo2 EscalaSpo2 = EscalaSpo2.Escala1);

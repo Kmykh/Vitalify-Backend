@@ -1,4 +1,4 @@
-# Contrato de telemetría (firmware ESP32 → backend)
+# Contrato de telemetría y comandos (firmware ESP32 ↔ backend)
 
 Este documento define el mensaje que publica el wearable ESP32 con los signos vitales del paciente (firmware en `IOT/tesis_V01`, repositorio `Kmykh/IoT-Vitalfy`). Lo usan todos los adaptadores de entrada: el **receptor MQTT**, que es el camino real, y, solo en Development, el endpoint de pruebas y el simulador.
 
@@ -9,13 +9,19 @@ El backend lo interpreta en un solo lugar (`MensajeTelemetria`) y lo pasa al ún
 ```
 ESP32 (usuario = código)  ──QoS 1──>  Mosquitto (IOT/tesis_V01/broker)  ──QoS 1──>  ReceptorMqtt (backend)
    device/ESP32-001/telemetria                                                       → MensajeTelemetria → IRegistrarLectura
-   device/ESP32-001/estado  (online / offline, retenido)                             → presencia del wearable
+   device/ESP32-001/estado       (online / offline, retenido)                        → presencia + QR o "vinculado"
+   device/ESP32-001/solicitudes  {"accion":"solicitar-qr"}                           → QR nuevo
+
+ESP32  <──QoS 1──  Mosquitto  <──QoS 1──  backend (misma conexión)
+   device/ESP32-001/comandos     mostrar-qr, emparejando, vinculado, desvinculado, repetir-medicion
 ```
 
 | Aspecto | Valor |
 |---|---|
 | Tópico de lecturas | `device/{codigo}/telemetria`. `{codigo}` es el código del dispositivo registrado en Vitalify (patrón `^[A-Z0-9-]{3,32}$`, por ejemplo `ESP32-001`). Es también el usuario MQTT del wearable |
 | Tópico de estado | `device/{codigo}/estado`: `online` al conectar y `offline` como *last will* (lo publica el broker si el ESP32 desaparece). Ambos son retenidos |
+| Tópico de comandos | `device/{codigo}/comandos`: lo publica el backend y lo lee el wearable (ver [Comandos al wearable](#comandos-al-wearable)) |
+| Tópico de solicitudes | `device/{codigo}/solicitudes`: el wearable pide un QR nuevo con `{"accion":"solicitar-qr"}` |
 | QoS | **1** (al menos una vez), en el wearable y en el backend |
 | Formato | JSON en UTF-8 |
 | Frecuencia | Una lectura cada 10 s, y otra al instante si se confirma una caída |
@@ -23,7 +29,8 @@ ESP32 (usuario = código)  ──QoS 1──>  Mosquitto (IOT/tesis_V01/broker) 
 
 **Backend (`src/Vitalify.Api/Entrada/Mqtt/ReceptorMqtt.cs`):**
 - **Conexión:** entra como `vitalify-backend` con **sesión persistente** y un *client id* fijo. Así, lo que publiquen los wearables mientras el backend está caído queda en el broker (hasta 1000 mensajes) y llega al reconectar.
-- **Suscripción:** `device/+/telemetria` y `device/+/estado`, con QoS 1.
+- **Suscripción:** `device/+/telemetria`, `device/+/estado` y `device/+/solicitudes`, con QoS 1.
+- **Publicación:** los comandos salen por la **misma conexión** (no abre una segunda). Los casos de uso los encolan y el receptor los publica en orden; si el broker no está, esperan a la reconexión.
 - **Configuración:** `Mqtt__Habilitado`, `Mqtt__Servidor`, `Mqtt__Puerto`, `Mqtt__Usuario` y `Mqtt__Clave`. La clave es `MQTT_BACKEND_CLAVE` de `broker/.env`.
 - **Código del dispositivo:** el del JSON debe coincidir con el del tópico; si no, el mensaje se ignora. El ACL del broker ya impide que un wearable publique en el tópico de otro.
 - **Mensajes malformados:** se registran en el log y no detienen el receptor.
@@ -63,9 +70,11 @@ Con QoS 1, **el mismo mensaje puede llegar dos veces**: por ejemplo, si el PUBAC
 | `bateria` | número | no | % | Batería del wearable (0 a 100) |
 
 - **Todas las variables son opcionales**, porque cada sensor puede fallar por separado: si el sensor de temperatura no mide, se omite `temp`. Un campo con `null` es lo mismo que un campo ausente.
-- **Lo que envía hoy el wearable de Vitalify:** `fc` (del ECG si los electrodos dan un ritmo confiable; si no, del PPG), `spo2`, `temp` y `caida`.
+- **Lo que envía el wearable de Vitalify:** `fc` (del ECG si los electrodos dan un ritmo confiable; si no, del PPG), `spo2`, `temp`, `fr` y `caida`.
+  - **La frecuencia respiratoria la mide el wearable** y llega en `fr`. La enfermera solo la cuenta a mano si el sensor no tiene una vigente.
   - Sin dedo no van `fc` ni `spo2`, salvo que la FC venga del ECG; sin sonda no va `temp`; sin paciente conectado no se envía nada.
-  - **No mide `fr`, `pas`, `pad` ni `bateria`**: el contrato los admite para hardware futuro. Para NEWS2 y MEWS se completan con observaciones del personal clínico (ver `docs/motor-clinico.md`).
+  - **No mide `pas`, `pad` ni `bateria`.** La presión, el nivel de conciencia y el oxígeno suplementario los registra la enfermera con el asistente de toma manual (ver `docs/motor-clinico.md`).
+  - **Solo envía mientras está `vinculado`** (ver [Comandos al wearable](#comandos-al-wearable)).
   - `seq` vuelve a 0 cuando el ESP32 se reinicia.
 
 Ejemplos reales, generados por `construirJsonTelemetria` del firmware:
@@ -148,20 +157,59 @@ La señal del sensor (`senal`, también en `GET /pacientes/monitoreados`) puede 
 | `sin-senal` | No llega ninguna lectura en ese tiempo |
 | `sin-datos` | Nunca llegó una lectura |
 
-## Comando de nueva lectura
+## Comandos al wearable
 
-Hoy el adaptador de `ISolicitudNuevaLectura` solo lo escribe en el log. La tabla de incidencias ya lo registra con `requiere_nueva_lectura = true`.
+El backend le habla al wearable por `device/{codigo}/comandos`, con QoS 1 y JSON en UTF-8. El adaptador es `PublicadorComandosMqtt` y el contrato está en un solo lugar (`ContratoComandos`, con pruebas que fijan el JSON exacto). Cambiar estos mensajes es cambiar el firmware.
 
-Solo se dispara con la presión incompleta, y el wearable actual no mide presión, así que con este hardware no ocurre. El ACL del broker ya reserva el tópico de comandos (el backend escribe y cada wearable lee el suyo), pero el firmware todavía no se suscribe. La siguiente es una **propuesta**:
+| `accion` | Retenido | Cuerpo | Cuándo |
+|---|:-:|---|---|
+| `mostrar-qr` | sí | `{"accion":"mostrar-qr","qr":"VTF1:ESP32-001:K7P3QX9M","expira":"2026-11-02T15:10:00Z"}` | Al conectarse sin vincular, al pedirlo, al vencer el anterior y tras liberar el sensor |
+| `emparejando` | no | `{"accion":"emparejando"}` | Una enfermera escaneó el QR y está registrando al paciente |
+| `vinculado` | sí | `{"accion":"vinculado","cama":"MED-B-01","iniciales":"R.M."}` | Se confirmó la vinculación (o se reconectó estando vinculado) |
+| `desvinculado` | sí | `{"accion":"desvinculado"}` | Egreso o liberación del sensor (le sigue un `mostrar-qr`) |
+| `repetir-medicion` | no | `{"accion":"repetir-medicion","variable":"presion","motivo":"..."}` | Llegó una medición incompleta (por ejemplo, PAS sin PAD). La incidencia queda con `requiere_nueva_lectura` |
 
-- Tópico: `device/{codigo}/comandos`, QoS 1.
-- Mensaje: `{"accion": "repetir-medicion", "variable": "presion", "motivo": "..."}`.
+- **Retenidos:** el broker guarda el último `mostrar-qr`, `vinculado` o `desvinculado`. Al reconectarse, el wearable recibe enseguida su estado actual.
+- **Datos del paciente:** solo las **iniciales** (primera letra del primer nombre y del primer apellido, sin tildes) y la cama. Nunca el nombre, el DNI ni el diagnóstico.
+- **QR:** el formato y la seguridad están en [`vinculacion-qr.md`](vinculacion-qr.md).
+
+### Lo que debe hacer el firmware
+
+1. **Suscribirse** a `device/{codigo}/comandos` con QoS 1 **cada vez que se conecta**: antes de publicar `online` o justo después.
+2. **Estados de la pantalla:**
+
+   | Estado | Pasa a este estado con | OLED | Telemetría |
+   |---|---|---|---|
+   | `esperando-qr` (al arrancar) | `mostrar-qr` o `desvinculado` | El QR y "Escanee para vincular" | **No envía** |
+   | `emparejando` | `emparejando` | "Emparejando…" | No envía |
+   | `vinculado` | `vinculado` | Cama e iniciales (por ejemplo, `MED-B-01 · R.M.`) | Envía cada 10 s y al instante si hay una caída |
+
+   Un `mostrar-qr` o un `desvinculado` también hace volver a `esperando-qr` desde cualquier estado.
+3. **Dibujar el QR** con la librería `QRCode` de ricmoo:
+   - versión 3, `ECC_MEDIUM`, a partir del texto de `qr`;
+   - 2 píxeles por módulo, con 4 módulos de margen blanco.
+
+   Si `expira` ya pasó, mostrar "Código vencido" y pedir otro.
+4. **No enviar telemetría hasta `vinculado`.** Al pasar a `esperando-qr`, **descartar el búfer offline**: esas lecturas eran del paciente anterior. Tras reconectarse, esperar el primer comando retenido antes de vaciar el búfer.
+5. **Pedir un QR** publicando `{"accion":"solicitar-qr"}` en `device/{codigo}/solicitudes` (QoS 1). Hacerlo si al conectarse no llega ningún comando en unos segundos, si el QR venció o si se pulsa el botón.
+6. **`repetir-medicion`:** avisar en la OLED. Hoy el wearable no mide presión, así que no debería llegar.
+
+### Broker
+
+El ACL ya permite al backend escribir en `device/+/comandos` y a cada wearable leer el suyo. Para las solicitudes hay que agregar:
+
+```
+user vitalify-backend
+topic read device/+/solicitudes
+
+pattern write device/%u/solicitudes
+```
 
 ## Probarlo con el wearable real
 
 1. **Broker:** `cd IOT/tesis_V01/broker && docker compose up -d`.
 2. **Backend:** en su `.env`, `Mqtt__Habilitado=true`, `Mqtt__Usuario=vitalify-backend` y `Mqtt__Clave` igual a `MQTT_BACKEND_CLAVE` de `broker/.env`. Después, `dotnet run --project src/Vitalify.Api`. En `/health` aparece `mqtt: Healthy`.
-3. **Wearable:** en la misma red Wi-Fi que la laptop. `ESP32-001` debe estar registrado y vinculado a un paciente activo.
+3. **Wearable:** en la misma red Wi-Fi que la laptop y registrado como `ESP32-001`. Al conectarse muestra un QR. La enfermera lo escanea con `POST /api/v1/vinculaciones/escaneo` y confirma con `POST /api/v1/vinculaciones/confirmar`; también puede usar la vía manual, `POST /pacientes/{id}/dispositivo`. Con `mosquitto_sub -t 'device/+/comandos' -v` (con un usuario que pueda leer ese tópico) se ven los comandos.
 4. **Verificar:** `GET /api/v1/pacientes/{id}/signos/actual`, `.../riesgo` y `/pacientes/monitoreados` (con `conexionSensor: "en-linea"`).
 
 ## Probarlo sin hardware (solo en Development)

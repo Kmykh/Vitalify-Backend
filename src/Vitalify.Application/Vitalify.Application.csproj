@@ -5,6 +5,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Guía de toma manual versionada (GET /api/v1/guias/toma-manual): es contenido clínico, no va en la base. -->
+    <EmbeddedResource Include="Clinica\Guias\toma-manual.json" LogicalName="Vitalify.Application.Clinica.Guias.toma-manual.json" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="FluentValidation" Version="12.1.1" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
   </ItemGroup>

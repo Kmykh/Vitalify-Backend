@@ -4,28 +4,34 @@ using MQTTnet;
 using MQTTnet.Client;
 using MQTTnet.Formatter;
 using MQTTnet.Protocol;
-using Vitalify.Application.Clinica;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Vitalify.Api.Entrada.Vinculacion;
+using Vitalify.Api.Salida.Mqtt;
+using Vitalify.Application.Puertos;
+using Vitalify.Application.Vinculacion;
 using Vitalify.Application.Telemetria;
 using Vitalify.Domain.Telemetria;
 
 namespace Vitalify.Api.Entrada.Mqtt;
 
 /// <summary>
-/// Adaptador de entrada real de la telemetría: se conecta al Mosquitto del proyecto IoT y recibe lo que publica cada
-/// wearable ESP32.
+/// Única conexión MQTT del backend con el Mosquitto del proyecto IoT. Recibe lo que publica cada wearable ESP32:
 /// <list type="bullet">
 /// <item><c>device/{codigo}/telemetria</c> (QoS 1): JSON del contrato → <see cref="MensajeTelemetria"/> →
 /// <see cref="IRegistrarLectura"/>, el mismo puerto de siempre. El código del JSON debe coincidir con el del tópico (el
 /// ACL del broker garantiza que cada wearable solo publica en su propio tópico).</item>
-/// <item><c>device/{codigo}/estado</c> (retenido): <c>online</c>/<c>offline</c> → <see cref="RegistrarPresenciaDispositivo"/>.</item>
+/// <item><c>device/{codigo}/estado</c> (retenido): <c>online</c>/<c>offline</c> → <see cref="RegistrarPresenciaDispositivo"/>,
+/// que además le manda el QR o "vinculado" al conectarse.</item>
+/// <item><c>device/{codigo}/solicitudes</c>: <c>{"accion":"solicitar-qr"}</c> → <see cref="AtenderSolicitudDispositivo"/>.</item>
 /// </list>
+/// Por la misma conexión publica los comandos de <see cref="ColaComandosMqtt"/> en <c>device/{codigo}/comandos</c>.
 /// Sesión persistente con client id fijo: lo que publiquen los wearables mientras el backend está caído queda en el
 /// broker y llega al reconectar. Reconexión con espera creciente (2 a 30 s).
 /// </summary>
 public sealed class ReceptorMqtt(
     OpcionesMqtt opciones,
     IServiceScopeFactory scopes,
-    RegistrarPresenciaDispositivo registrarPresencia,
+    ColaComandosMqtt cola,
     ILogger<ReceptorMqtt> logger) : BackgroundService
 {
     private static readonly TimeSpan[] EsperasReintento = [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)];
@@ -60,8 +66,10 @@ public sealed class ReceptorMqtt(
         var suscripcion = fabrica.CreateSubscribeOptionsBuilder()
             .WithTopicFilter(f => f.WithTopic(OpcionesMqtt.TopicoTelemetria).WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce))
             .WithTopicFilter(f => f.WithTopic(OpcionesMqtt.TopicoEstado).WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce))
+            .WithTopicFilter(f => f.WithTopic(ContratoComandos.TopicoSolicitudes).WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce))
             .Build();
 
+        var envio = EnviarComandosAsync(cliente, stoppingToken);
         var espera = TimeSpan.FromSeconds(2);
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -74,9 +82,9 @@ public sealed class ReceptorMqtt(
                     _conectado = true;
                     espera = TimeSpan.FromSeconds(2);
                     logger.LogInformation(
-                        "MQTT conectado a {Servidor}:{Puerto} como {ClientId} (sesión previa: {SesionPrevia}); suscrito a {Telemetria} y {Estado}.",
+                        "MQTT conectado a {Servidor}:{Puerto} como {ClientId} (sesión previa: {SesionPrevia}); suscrito a {Telemetria}, {Estado} y {Solicitudes}.",
                         opciones.Servidor, opciones.Puerto, opciones.ClientId, resultado.IsSessionPresent,
-                        OpcionesMqtt.TopicoTelemetria, OpcionesMqtt.TopicoEstado);
+                        OpcionesMqtt.TopicoTelemetria, OpcionesMqtt.TopicoEstado, ContratoComandos.TopicoSolicitudes);
                 }
 
                 await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
@@ -104,9 +112,67 @@ public sealed class ReceptorMqtt(
             }
         }
 
+        try
+        {
+            await envio;
+        }
+        catch (OperationCanceledException)
+        {
+            // La API se está deteniendo.
+        }
+
         if (cliente.IsConnected)
         {
             await cliente.DisconnectAsync(new MqttClientDisconnectOptionsBuilder().Build(), CancellationToken.None);
+        }
+    }
+
+    /// <summary>
+    /// Publica en orden los comandos encolados. Si se pierde la conexión, el comando en curso se queda primero en la
+    /// cola y se reintenta al reconectar.
+    /// </summary>
+    private async Task EnviarComandosAsync(IMqttClient cliente, CancellationToken ct)
+    {
+        while (await cola.Lector.WaitToReadAsync(ct))
+        {
+            if (!cliente.IsConnected)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(500), ct);
+                continue;
+            }
+
+            while (cliente.IsConnected && cola.Lector.TryPeek(out var mensaje))
+            {
+                try
+                {
+                    var resultado = await cliente.PublishAsync(new MqttApplicationMessageBuilder()
+                        .WithTopic(mensaje.Topico)
+                        .WithPayload(mensaje.Payload)
+                        .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
+                        .WithRetainFlag(mensaje.Retenido)
+                        .Build(), ct);
+                    cola.Lector.TryRead(out _);
+
+                    if (resultado.IsSuccess)
+                    {
+                        logger.LogInformation(
+                            "MQTT: {Accion} publicado a {Dispositivo} (retenido: {Retenido}).", mensaje.Accion, mensaje.Dispositivo, mensaje.Retenido);
+                    }
+                    else
+                    {
+                        logger.LogWarning(
+                            "MQTT: el broker rechazó {Accion} a {Dispositivo} ({Motivo}). ¿El ACL permite al backend escribir en {Topico}?",
+                            mensaje.Accion, mensaje.Dispositivo, resultado.ReasonCode, mensaje.Topico);
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogWarning("MQTT: no se pudo publicar {Accion} a {Dispositivo} ({Error}); se reintenta al reconectar.",
+                        mensaje.Accion, mensaje.Dispositivo, ex.Message);
+                    await Task.Delay(TimeSpan.FromSeconds(1), ct);
+                    break;
+                }
+            }
         }
     }
 
@@ -142,9 +208,17 @@ public sealed class ReceptorMqtt(
         if (partes[2] == "estado")
         {
             var texto = Encoding.UTF8.GetString(payload);
-            if (registrarPresencia.Ejecutar(codigo, texto))
+            try
             {
-                logger.LogInformation("MQTT: {Dispositivo} está {Estado}.", codigo, texto.Trim().ToLowerInvariant());
+                await using var scope = scopes.CreateAsyncScope();
+                if (await scope.ServiceProvider.GetRequiredService<RegistrarPresenciaDispositivo>().EjecutarAsync(codigo, texto, ct))
+                {
+                    logger.LogInformation("MQTT: {Dispositivo} está {Estado}.", codigo, texto.Trim().ToLowerInvariant());
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex, "MQTT: no se pudo procesar el estado de {Dispositivo}.", codigo);
             }
 
             return;
@@ -153,6 +227,16 @@ public sealed class ReceptorMqtt(
         if (partes[2] == "telemetria")
         {
             await ProcesarTelemetriaAsync(codigo, payload, ct);
+            return;
+        }
+
+        if (partes[2] == "solicitudes")
+        {
+            await using var scope = scopes.CreateAsyncScope();
+            var atendida = await scope.ServiceProvider.GetRequiredService<AtenderSolicitudDispositivo>().EjecutarAsync(codigo, payload, ct);
+            logger.LogInformation(
+                atendida is null ? "MQTT: solicitud de {Dispositivo} fuera del contrato; se ignora." : "MQTT: {Dispositivo} pidió un QR ({Resultado}).",
+                codigo, atendida);
         }
     }
 
@@ -228,11 +312,15 @@ internal static class RegistroMqtt
     {
         var opciones = OpcionesMqtt.Cargar(configuration);
         services.AddSingleton(opciones);
+        services.AddSingleton<ColaComandosMqtt>();
         services.AddSingleton<ReceptorMqtt>();
         services.AddHostedService(sp => sp.GetRequiredService<ReceptorMqtt>());
+        services.AddHostedService<RenovadorCodigosVinculacionWorker>();
 
         if (opciones.Habilitado)
         {
+            // Los comandos al wearable salen por la misma conexión (reemplaza al adaptador de log de la infraestructura).
+            services.Replace(ServiceDescriptor.Singleton<IPublicadorComandosDispositivo, PublicadorComandosMqtt>());
             services.AddHealthChecks().AddCheck<ChequeoMqtt>("mqtt", tags: ["mqtt"]);
         }
 

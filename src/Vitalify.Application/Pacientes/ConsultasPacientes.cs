@@ -1,5 +1,6 @@
 using FluentValidation;
 using Vitalify.Application.Clinica;
+using Vitalify.Application.Vinculacion;
 using Vitalify.Application.Comun;
 using Vitalify.Application.Puertos;
 using Vitalify.Application.Telemetria;

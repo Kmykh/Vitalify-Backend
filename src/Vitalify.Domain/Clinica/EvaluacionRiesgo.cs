@@ -7,6 +7,9 @@ public enum OrigenEvaluacion
 
     /// <summary>La disparó una observación registrada por el personal clínico.</summary>
     Observacion = 2,
+
+    /// <summary>La disparó el médico al cambiar la escala de SpO2 del paciente.</summary>
+    CambioEscala = 3,
 }
 
 /// <summary>

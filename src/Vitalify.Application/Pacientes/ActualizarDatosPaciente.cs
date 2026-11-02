@@ -12,12 +12,16 @@ public sealed record ActualizarDatosPacienteComando(
     int? Edad,
     string DiagnosticoIngreso,
     Guid UsuarioId,
-    string? Ip) : IDatosBasicosPaciente;
+    string? Ip,
+    bool? ConfusionBasal = null) : IDatosBasicosPaciente;
 
 public sealed class ActualizarDatosPacienteValidador(IReloj reloj)
     : DatosBasicosPacienteValidador<ActualizarDatosPacienteComando>(reloj);
 
-/// <summary>HU05: corrige nombre y fecha de nacimiento del paciente y el diagnóstico de la hospitalización activa.</summary>
+/// <summary>
+/// HU05: corrige nombre y fecha de nacimiento del paciente y el diagnóstico de la hospitalización activa. También
+/// indica si el paciente vive con confusión basal (cambia la pregunta de conciencia del asistente).
+/// </summary>
 public sealed class ActualizarDatosPaciente(
     IValidator<ActualizarDatosPacienteComando> validador,
     IRepositorioPacientes pacientes,
@@ -49,6 +53,11 @@ public sealed class ActualizarDatosPaciente(
         var hoy = DateOnly.FromDateTime(ahora);
         var (fecha, estimada) = DatosBasicosPacienteValidador<ActualizarDatosPacienteComando>.ResolverFechaNacimiento(comando, hoy);
         paciente.ActualizarDatos(comando.NombreCompleto, fecha, estimada, ahora);
+        if (comando.ConfusionBasal is { } confusionBasal)
+        {
+            paciente.CambiarConfusionBasal(confusionBasal, ahora);
+        }
+
         hospitalizacion.ActualizarDiagnostico(comando.DiagnosticoIngreso);
         auditoria.Agregar(RegistroAuditoria.Registrar(
             AccionAuditoria.PacienteActualizado, ahora, comando.UsuarioId, comando.Ip,

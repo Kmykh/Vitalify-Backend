@@ -6,11 +6,12 @@ using Vitalify.Domain.Hospitalizaciones;
 using Vitalify.Domain.Pacientes;
 using Vitalify.Domain.Sesiones;
 using Vitalify.Domain.Usuarios;
+using Vitalify.Domain.Vinculacion;
 
 namespace Vitalify.Infrastructure.Persistence.Transaccional;
 
 /// <summary>
-/// Datos transaccionales: usuarios, sesiones, auditoría, camas, dispositivos, pacientes y hospitalizaciones.
+/// Datos transaccionales: usuarios, sesiones, auditoría, camas, dispositivos, pacientes, hospitalizaciones y códigos de vinculación por QR.
 /// Usa el esquema <c>vitalify</c> y no <c>public</c>, porque Supabase expone <c>public</c> por su API de datos.
 /// </summary>
 public class TransaccionalDbContext(DbContextOptions<TransaccionalDbContext> options) : DbContext(options)
@@ -26,6 +27,7 @@ public class TransaccionalDbContext(DbContextOptions<TransaccionalDbContext> opt
     public DbSet<Paciente> Pacientes => Set<Paciente>();
     public DbSet<Hospitalizacion> Hospitalizaciones => Set<Hospitalizacion>();
     public DbSet<AsignacionDispositivo> AsignacionesDispositivo => Set<AsignacionDispositivo>();
+    public DbSet<CodigoVinculacion> CodigosVinculacion => Set<CodigoVinculacion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

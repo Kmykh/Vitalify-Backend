@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Vitalify.Api.Contratos;
 using Vitalify.Api.Seguridad;
 using Vitalify.Application.Dispositivos;
+using Vitalify.Application.Vinculacion;
 
 namespace Vitalify.Api.Controllers.V1;
 
@@ -45,6 +46,25 @@ public class DispositivosController : ControllerBase
         Guid id, CambiarEstadoDispositivoSolicitud solicitud, [FromServices] CambiarEstadoDispositivo cambiarEstado, CancellationToken ct)
     {
         var resultado = await cambiarEstado.EjecutarAsync(new CambiarEstadoDispositivoComando(id, solicitud.Estado ?? string.Empty), ct);
+        return resultado.EsExito ? Ok(resultado.Valor) : this.Problema(resultado.Error);
+    }
+
+    /// <summary>Genera un QR de vinculación nuevo y lo publica en la pantalla del sensor.</summary>
+    /// <remarks>
+    /// Invalida el QR anterior. El código no se devuelve: solo lo muestra el wearable, para que vincular exija estar
+    /// frente al sensor. Vale 10 minutos.
+    /// </remarks>
+    /// <response code="200">QR publicado (con su vencimiento).</response>
+    /// <response code="404">El dispositivo no existe.</response>
+    /// <response code="409">El sensor está vinculado a un paciente, en mantenimiento o dado de baja.</response>
+    [HttpPost("{id:guid}/qr")]
+    [Authorize(Policy = Politicas.AdministradorOPersonalClinico)]
+    [ProducesResponseType<QrGeneradoDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<QrGeneradoDto>> RegenerarQr(Guid id, [FromServices] RegenerarQrDispositivo regenerar, CancellationToken ct)
+    {
+        var resultado = await regenerar.EjecutarAsync(new RegenerarQrComando(id, User.IdUsuario() ?? Guid.Empty, HttpContext.Ip()), ct);
         return resultado.EsExito ? Ok(resultado.Valor) : this.Problema(resultado.Error);
     }
 

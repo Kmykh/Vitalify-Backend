@@ -38,6 +38,9 @@ public sealed class RepositorioDispositivosEnMemoria(Func<Guid, string?> camaDe)
     public Task<bool> ExisteCodigoAsync(string codigo, CancellationToken ct = default) =>
         Task.FromResult(Dispositivos.Any(d => d.Codigo == codigo));
 
+    public Task<Dispositivo?> ObtenerPorCodigoAsync(string codigo, CancellationToken ct = default) =>
+        Task.FromResult(Dispositivos.SingleOrDefault(d => d.Codigo == codigo));
+
     public Task<IReadOnlyList<DispositivoDto>> ListarAsync(EstadoDispositivo? estado, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<DispositivoDto>>(Dispositivos
             .Where(d => estado is null || d.Estado == estado)
@@ -117,9 +120,13 @@ public sealed class RepositorioHospitalizacionesEnMemoria : IRepositorioHospital
             where d.Codigo == codigoDispositivo
             join a in Asignaciones.Where(a => a.EstaVigente) on d.Id equals a.DispositivoId
             join h in Hospitalizaciones.Where(h => h.EstaActiva) on a.HospitalizacionId equals h.Id
-            select new HospitalizacionPorDispositivoDto(h.Id, h.PacienteId, h.CamaId, d.Id, a.Id, a.AsignadoEn);
+            select new HospitalizacionPorDispositivoDto(h.Id, h.PacienteId, h.CamaId, d.Id, a.Id, a.AsignadoEn, h.EscalaSpo2);
         return Task.FromResult(resultado.SingleOrDefault());
     }
+
+    public Task<Application.Vinculacion.DispositivoEnCama?> ObtenerVinculoDispositivoAsync(Guid dispositivoId, CancellationToken ct = default) =>
+        Task.FromResult(Lecturas().Where(l => l.DispositivoId == dispositivoId)
+            .Select(l => new Application.Vinculacion.DispositivoEnCama(l.CodigoCama, l.NombreCompleto)).SingleOrDefault());
 
     public Task<IReadOnlyList<string>> ListarCodigosDispositivosVinculadosAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<string>>(Lecturas().Where(l => l.CodigoDispositivo is not null).Select(l => l.CodigoDispositivo!).Order().ToList());

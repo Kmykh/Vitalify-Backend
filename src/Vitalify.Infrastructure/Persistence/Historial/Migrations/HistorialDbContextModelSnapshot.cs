@@ -127,10 +127,37 @@ namespace Vitalify.Infrastructure.Persistence.Historial.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("BrazoPa")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("brazo_pa");
+
+                    b.Property<string>("ChecklistPa")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("checklist_pa");
+
                     b.Property<string>("Conciencia")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("conciencia");
+
+                    b.Property<string>("Contexto")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("contexto");
+
+                    b.Property<string>("DispositivoOxigeno")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("dispositivo_oxigeno");
+
+                    b.Property<int?>("Fio2")
+                        .HasColumnType("integer")
+                        .HasColumnName("fio2");
+
+                    b.Property<decimal?>("FlujoOxigenoLpm")
+                        .HasPrecision(4, 1)
+                        .HasColumnType("numeric(4,1)")
+                        .HasColumnName("flujo_oxigeno_lpm");
 
                     b.Property<int?>("Fr")
                         .HasColumnType("integer")
@@ -139,6 +166,19 @@ namespace Vitalify.Infrastructure.Persistence.Historial.Migrations
                     b.Property<Guid>("HospitalizacionId")
                         .HasColumnType("uuid")
                         .HasColumnName("hospitalizacion_id");
+
+                    b.Property<string>("LecturasPa")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("lecturas_pa");
+
+                    b.Property<string>("MetodoPa")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("metodo_pa");
+
+                    b.Property<bool?>("ObjetivoSpo288a92")
+                        .HasColumnType("boolean")
+                        .HasColumnName("objetivo_spo2_88a92");
 
                     b.Property<DateTime>("ObservadaEn")
                         .HasColumnType("timestamp with time zone")
@@ -160,6 +200,15 @@ namespace Vitalify.Infrastructure.Persistence.Historial.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("pas");
 
+                    b.Property<string>("PosicionPa")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("posicion_pa");
+
+                    b.Property<bool?>("PreocupacionClinica")
+                        .HasColumnType("boolean")
+                        .HasColumnName("preocupacion_clinica");
+
                     b.Property<DateTime>("RegistradaEn")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("registrada_en");
@@ -172,6 +221,11 @@ namespace Vitalify.Infrastructure.Persistence.Historial.Migrations
                         .HasPrecision(4, 1)
                         .HasColumnType("numeric(4,1)")
                         .HasColumnName("temperatura");
+
+                    b.Property<string>("VersionGuia")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("version_guia");
 
                     b.HasKey("Id")
                         .HasName("pk_observacion_enfermeria");

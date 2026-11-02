@@ -5,6 +5,7 @@ using Vitalify.Application.Pacientes;
 using Vitalify.Application.Sesiones;
 using Vitalify.Application.Telemetria;
 using Vitalify.Application.Usuarios;
+using Vitalify.Application.Vinculacion;
 using Vitalify.Domain.Camas;
 using Vitalify.Domain.Dispositivos;
 using Vitalify.Domain.Usuarios;
@@ -38,6 +39,9 @@ public sealed class Escenario
     public ManejadorLecturaRegistradaFalso Manejador { get; } = new();
     public PresenciaEnMemoria Presencia { get; } = new();
     public OpcionesClinicas Clinicas { get; set; } = OpcionesClinicas.PorDefecto;
+    public RepositorioCodigosEnMemoria Codigos { get; } = new();
+    public PublicadorComandosFalso Comandos { get; } = new();
+    public OpcionesVinculacion Vinculacion { get; set; } = OpcionesVinculacion.PorDefecto;
 
     public Escenario()
     {
@@ -83,13 +87,33 @@ public sealed class Escenario
         new(new ActualizarDatosPacienteValidador(Reloj), Pacientes, Hospitalizaciones, Auditoria, UnidadDeTrabajo, Reloj);
 
     public VincularDispositivo VincularDispositivo() =>
-        new(Pacientes, Dispositivos, Camas, Hospitalizaciones, Auditoria, UnidadDeTrabajo, Resolutor, Reloj);
+        new(Pacientes, Dispositivos, Camas, Hospitalizaciones, Codigos, Auditoria, UnidadDeTrabajo, Resolutor, ServicioCodigos(), Reloj);
 
     public LiberarDispositivo LiberarDispositivo() =>
-        new(Pacientes, Dispositivos, Hospitalizaciones, Auditoria, UnidadDeTrabajo, Resolutor, Reloj);
+        new(Pacientes, Dispositivos, Hospitalizaciones, Auditoria, UnidadDeTrabajo, Resolutor, ServicioCodigos(), Reloj);
 
     public RegistrarEgreso RegistrarEgreso() =>
-        new(new RegistrarEgresoValidador(), Pacientes, Dispositivos, Hospitalizaciones, Auditoria, UnidadDeTrabajo, Resolutor, Reloj);
+        new(new RegistrarEgresoValidador(), Pacientes, Dispositivos, Hospitalizaciones, Auditoria, UnidadDeTrabajo, Resolutor, ServicioCodigos(), Reloj);
+
+    public ServicioCodigosVinculacion ServicioCodigos() =>
+        new(Codigos, Hospitalizaciones, Auditoria, UnidadDeTrabajo, Comandos, Vinculacion, Reloj);
+
+    public SincronizarPantallaDispositivo SincronizarPantalla() => new(Dispositivos, Codigos, ServicioCodigos(), Comandos, Reloj);
+
+    public AtenderSolicitudDispositivo AtenderSolicitud() => new(SincronizarPantalla());
+
+    public RegenerarQrDispositivo RegenerarQr() => new(Dispositivos, ServicioCodigos());
+
+    public EscanearQr EscanearQr() =>
+        new(Dispositivos, Codigos, Presencia, ServicioCodigos(), Comandos, Auditoria, UnidadDeTrabajo, Vinculacion, Reloj);
+
+    public RenovarCodigosVinculacion RenovarCodigos() => new(Presencia, Dispositivos, Codigos, ServicioCodigos(), Reloj);
+
+    public ConfirmarVinculacion ConfirmarVinculacion() =>
+        new(new RegistrarIngresoPacienteValidador(Reloj),
+            new TomaInicialValidador(Domain.Telemetria.RangosFisiologicos.PorDefecto, Clinicas, Reloj),
+            Codigos, Dispositivos, Pacientes, RegistrarIngresoPaciente(), VincularDispositivo(), ServicioObservaciones(), ServicioCodigos(),
+            Auditoria, UnidadDeTrabajo, Resolutor, Reloj);
 
     public ListarPacientesMonitoreados ListarPacientesMonitoreados() =>
         new(Hospitalizaciones, Historial, Historial, Presencia, OpcionesTelemetria.PorDefecto, Reloj);
@@ -107,14 +131,22 @@ public sealed class Escenario
 
     public EvaluadorRiesgo Evaluador() => new(Historial, Historial, Historial, OpcionesTelemetria.PorDefecto, Clinicas, Reloj);
 
+    public PresentadorRiesgo PresentadorRiesgo() => new(Historial, Clinicas);
+
+    public ServicioObservaciones ServicioObservaciones() =>
+        new(Historial, Evaluador(), Historial, PresentadorRiesgo(), Domain.Telemetria.RangosFisiologicos.PorDefecto);
+
     public RegistrarObservacion RegistrarObservacion() =>
-        new(new RegistrarObservacionValidador(Domain.Telemetria.RangosFisiologicos.PorDefecto, Clinicas, Reloj),
-            Pacientes, Hospitalizaciones, Historial, Evaluador(), Historial, Auditoria, UnidadDeTrabajo,
-            Domain.Telemetria.RangosFisiologicos.PorDefecto, Reloj);
+        new(new TomaManualValidador(Domain.Telemetria.RangosFisiologicos.PorDefecto, Clinicas, Reloj),
+            Pacientes, Hospitalizaciones, ServicioObservaciones(), Auditoria, UnidadDeTrabajo, Reloj);
 
-    public ObtenerRiesgoPaciente ObtenerRiesgoPaciente() => new(Pacientes, Hospitalizaciones, Historial);
+    public ObtenerRiesgoPaciente ObtenerRiesgoPaciente() => new(Pacientes, Hospitalizaciones, Historial, Historial, PresentadorRiesgo());
 
-    public RegistrarPresenciaDispositivo RegistrarPresencia() => new(Presencia, Reloj);
+    public CambiarEscalaSpo2 CambiarEscalaSpo2() =>
+        new(new CambiarEscalaSpo2Validador(), Pacientes, Hospitalizaciones, Dispositivos, Auditoria, UnidadDeTrabajo, Resolutor,
+            Evaluador(), Historial, ObtenerRiesgoPaciente(), Reloj);
+
+    public RegistrarPresenciaDispositivo RegistrarPresencia() => new(Presencia, SincronizarPantalla(), Reloj);
 
     public ListarIncidencias ListarIncidencias() => new(new ListarIncidenciasValidador(), Historial);
 

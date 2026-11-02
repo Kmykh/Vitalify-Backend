@@ -226,6 +226,20 @@ namespace Vitalify.Infrastructure.Persistence.Transaccional.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("egreso_registrado_por");
 
+                    b.Property<string>("EscalaSpo2")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("escala_spo2");
+
+                    b.Property<DateTime?>("EscalaSpo2CambiadaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("escala_spo2_cambiada_en");
+
+                    b.Property<Guid?>("EscalaSpo2CambiadaPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("escala_spo2_cambiada_por");
+
                     b.Property<string>("Estado")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -240,6 +254,11 @@ namespace Vitalify.Infrastructure.Persistence.Transaccional.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("motivo_egreso");
+
+                    b.Property<string>("MotivoEscalaSpo2")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("motivo_escala_spo2");
 
                     b.Property<string>("ObservacionEgreso")
                         .HasMaxLength(500)
@@ -262,6 +281,9 @@ namespace Vitalify.Infrastructure.Persistence.Transaccional.Migrations
 
                     b.HasIndex("EgresoRegistradoPor")
                         .HasDatabaseName("ix_hospitalizacion_egreso_registrado_por");
+
+                    b.HasIndex("EscalaSpo2CambiadaPor")
+                        .HasDatabaseName("ix_hospitalizacion_escala_spo2_cambiada_por");
 
                     b.HasIndex("Estado")
                         .HasDatabaseName("ix_hospitalizacion_estado");
@@ -294,6 +316,10 @@ namespace Vitalify.Infrastructure.Persistence.Transaccional.Migrations
                     b.Property<DateTime>("ActualizadoEn")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("actualizado_en");
+
+                    b.Property<bool>("ConfusionBasal")
+                        .HasColumnType("boolean")
+                        .HasColumnName("confusion_basal");
 
                     b.Property<DateTime>("CreadoEn")
                         .HasColumnType("timestamp with time zone")
@@ -467,6 +493,78 @@ namespace Vitalify.Infrastructure.Persistence.Transaccional.Migrations
                     b.ToTable("usuario", "vitalify");
                 });
 
+            modelBuilder.Entity("Vitalify.Domain.Vinculacion.CodigoVinculacion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<Guid>("DispositivoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("dispositivo_id");
+
+                    b.Property<DateTime>("ExpiraEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expira_en");
+
+                    b.Property<string>("HashCodigo")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .HasColumnName("hash_codigo")
+                        .IsFixedLength();
+
+                    b.Property<int>("IntentosFallidos")
+                        .HasColumnType("integer")
+                        .HasColumnName("intentos_fallidos");
+
+                    b.Property<DateTime?>("InvalidadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("invalidado_en");
+
+                    b.Property<DateTime?>("TokenExpiraEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("token_expira_en");
+
+                    b.Property<string>("TokenHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .HasColumnName("token_hash")
+                        .IsFixedLength();
+
+                    b.Property<DateTime?>("UsadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("usado_en");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_codigo_vinculacion");
+
+                    b.HasIndex("DispositivoId")
+                        .HasDatabaseName("ix_codigo_vinculacion_dispositivo_id");
+
+                    b.HasIndex(new[] { "DispositivoId" }, "ux_codigo_vinculacion_activo")
+                        .IsUnique()
+                        .HasDatabaseName("ux_codigo_vinculacion_activo")
+                        .HasFilter("usado_en IS NULL AND invalidado_en IS NULL");
+
+                    b.HasIndex(new[] { "TokenHash" }, "ux_codigo_vinculacion_token")
+                        .IsUnique()
+                        .HasDatabaseName("ux_codigo_vinculacion_token")
+                        .HasFilter("token_hash IS NOT NULL");
+
+                    b.ToTable("codigo_vinculacion", "vitalify");
+                });
+
             modelBuilder.Entity("Vitalify.Domain.Auditoria.RegistroAuditoria", b =>
                 {
                     b.HasOne("Vitalify.Domain.Usuarios.Usuario", null)
@@ -521,6 +619,12 @@ namespace Vitalify.Infrastructure.Persistence.Transaccional.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_hospitalizacion_usuario_egreso_registrado_por");
 
+                    b.HasOne("Vitalify.Domain.Usuarios.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("EscalaSpo2CambiadaPor")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_hospitalizacion_usuario_escala_spo2_cambiada_por");
+
                     b.HasOne("Vitalify.Domain.Pacientes.Paciente", null)
                         .WithMany()
                         .HasForeignKey("PacienteId")
@@ -554,6 +658,16 @@ namespace Vitalify.Infrastructure.Persistence.Transaccional.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_token_revocado_usuario_usuario_id");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Vinculacion.CodigoVinculacion", b =>
+                {
+                    b.HasOne("Vitalify.Domain.Dispositivos.Dispositivo", null)
+                        .WithMany()
+                        .HasForeignKey("DispositivoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_codigo_vinculacion_dispositivo_dispositivo_id");
                 });
 #pragma warning restore 612, 618
         }

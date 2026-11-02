@@ -23,12 +23,24 @@ public sealed partial class Paciente
     /// <summary>La fecha se estimó a partir de la edad (1 de enero del año correspondiente).</summary>
     public bool FechaNacimientoEstimada { get; private set; }
 
+    /// <summary>
+    /// El paciente vive con confusión o deterioro cognitivo previo (demencia, por ejemplo). Para NEWS2 solo cuenta la
+    /// confusión <b>nueva</b>, así que el asistente de conciencia pregunta "¿más confundido que de costumbre?".
+    /// </summary>
+    public bool ConfusionBasal { get; private set; }
+
     public DateTime CreadoEn { get; private set; }
     public DateTime ActualizadoEn { get; private set; }
 
     private Paciente()
     {
     }
+
+    /// <summary>
+    /// Iniciales para la pantalla del wearable (<c>R.M.</c>): primera letra del primer nombre y del primer apellido.
+    /// Es lo único del paciente que sale hacia el dispositivo.
+    /// </summary>
+    public string Iniciales => CalcularIniciales(NombreCompleto);
 
     public static Paciente Registrar(
         string nombreCompleto, TipoDocumento tipoDocumento, string numeroDocumento,
@@ -68,6 +80,69 @@ public sealed partial class Paciente
         FechaNacimiento = fechaNacimiento;
         FechaNacimientoEstimada = fechaEstimada;
         ActualizadoEn = ahora;
+    }
+
+    public void CambiarConfusionBasal(bool confusionBasal, DateTime ahora)
+    {
+        if (ConfusionBasal == confusionBasal)
+        {
+            return;
+        }
+
+        ConfusionBasal = confusionBasal;
+        ActualizadoEn = ahora;
+    }
+
+    /// <summary>
+    /// Primera letra del primer nombre y del primer apellido, sin tildes y en mayúsculas (la fuente de la OLED es
+    /// ASCII). El nombre completo se escribe "nombres apellido-paterno apellido-materno": con tres palabras o más, el
+    /// primer apellido es la penúltima; con dos, la segunda. Las partículas (de, del, la, los...) no cuentan.
+    /// </summary>
+    public static string CalcularIniciales(string? nombreCompleto)
+    {
+        var palabras = (nombreCompleto ?? string.Empty)
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(p => p.Trim('.', ',', ';'))
+            .Where(p => !Particulas.Contains(p))
+            .Select(Inicial)
+            .Where(c => c is not null)
+            .Select(c => c!.Value)
+            .ToList();
+
+        return palabras.Count switch
+        {
+            0 => string.Empty,
+            1 => $"{palabras[0]}.",
+            _ => $"{palabras[0]}.{palabras[Math.Max(1, palabras.Count - 2)]}.",
+        };
+    }
+
+    private static readonly HashSet<string> Particulas = new(StringComparer.OrdinalIgnoreCase) { "de", "del", "la", "las", "los", "y", "e" };
+
+    /// <summary>Primera letra ASCII de la palabra, sin tilde (el mapa es propio: la API corre en modo de globalización invariante).</summary>
+    private static char? Inicial(string palabra)
+    {
+        foreach (var caracter in palabra)
+        {
+            var letra = char.ToUpperInvariant(caracter) switch
+            {
+                'Á' or 'À' or 'Ä' or 'Â' => 'A',
+                'É' or 'È' or 'Ë' or 'Ê' => 'E',
+                'Í' or 'Ì' or 'Ï' or 'Î' => 'I',
+                'Ó' or 'Ò' or 'Ö' or 'Ô' => 'O',
+                'Ú' or 'Ù' or 'Ü' or 'Û' => 'U',
+                'Ñ' => 'N',
+                'Ç' => 'C',
+                var c => c,
+            };
+
+            if (char.IsAsciiLetterUpper(letra))
+            {
+                return letra;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>Años cumplidos a la fecha <paramref name="hoy"/>.</summary>

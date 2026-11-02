@@ -42,7 +42,7 @@ builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddAutenticacionVitalify();
 builder.Services.AddAutorizacionVitalify();
-builder.Services.AddLimiteDeLogin(builder.Configuration);
+builder.Services.AddLimitesDeSolicitudes(builder.Configuration);
 builder.Services.AddSimuladorTelemetria(builder.Configuration);
 builder.Services.AddReceptorMqtt(builder.Configuration);
 

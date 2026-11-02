@@ -23,14 +23,15 @@ public sealed class EvaluadorRiesgo(
     OpcionesClinicas opcionesClinicas,
     IReloj reloj)
 {
+    /// <param name="escala">Escala de SpO2 de la hospitalización (la indica el médico; por defecto la 1).</param>
     public async Task<EvaluacionRiesgo> EvaluarAsync(
-        Guid hospitalizacionId, Guid pacienteId, OrigenEvaluacion origen, CancellationToken ct = default)
+        Guid hospitalizacionId, Guid pacienteId, OrigenEvaluacion origen, EscalaSpo2 escala, CancellationToken ct = default)
     {
         var ahora = reloj.AhoraUtc;
         var estado = await estados.ObtenerAsync(hospitalizacionId, ct);
         var manuales = await observaciones.ListarDesdeAsync(hospitalizacionId, ahora - opcionesClinicas.VigenciaObservaciones, ct);
 
-        var evaluacion = EvaluacionRiesgo.Calcular(hospitalizacionId, pacienteId, ahora, origen, Combinar(estado, manuales, ahora));
+        var evaluacion = EvaluacionRiesgo.Calcular(hospitalizacionId, pacienteId, ahora, origen, Combinar(estado, manuales, ahora), escala);
         evaluaciones.Agregar(evaluacion);
         return evaluacion;
     }
@@ -84,7 +85,7 @@ public sealed class EvaluarRiesgoAlRegistrarLectura(
             return;
         }
 
-        await evaluador.EvaluarAsync(lectura.HospitalizacionId, lectura.PacienteId, OrigenEvaluacion.Lectura, ct);
+        await evaluador.EvaluarAsync(lectura.HospitalizacionId, lectura.PacienteId, OrigenEvaluacion.Lectura, lectura.EscalaSpo2, ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
     }
 }

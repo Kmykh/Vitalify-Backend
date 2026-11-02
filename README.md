@@ -110,19 +110,24 @@ Usa el mismo `.env` (con `env_file`). La API queda en <http://localhost:8080> (`
 | POST | `/api/v1/dispositivos` | Administrador | Registra un wearable (código `^[A-Z0-9-]{3,32}$`, por ejemplo `ESP32-001`) |
 | PATCH | `/api/v1/dispositivos/{id}/estado` | Administrador | `Mantenimiento`, `DadoDeBaja` o `Disponible` (reactivar) |
 | GET | `/api/v1/dispositivos?estado=Disponible` | todos | Dispositivos; si están asignados, la cama |
+| POST | `/api/v1/dispositivos/{id}/qr` | todos | Genera y publica un QR de vinculación nuevo en la pantalla del sensor (no devuelve el código) |
+| POST | `/api/v1/vinculaciones/escaneo` | Enfermera | Valida el QR del wearable (`VTF1:{codigo}:{codigo QR}`) y devuelve un token de vinculación. 10 por minuto por usuario |
+| POST | `/api/v1/vinculaciones/confirmar` | Enfermera | Ingreso (o reingreso), sensor, observación inicial y primer NEWS2/MEWS en un paso; el wearable recibe "vinculado" |
 | POST | `/api/v1/pacientes` | Enfermera | Ingreso: datos básicos (`fechaNacimiento` o `edad`), cama y diagnóstico (HU05) |
-| PUT | `/api/v1/pacientes/{id}` | Enfermera | Corrige los datos básicos y el diagnóstico |
+| PUT | `/api/v1/pacientes/{id}` | Enfermera | Corrige los datos básicos, el diagnóstico y la `confusionBasal` |
 | GET | `/api/v1/pacientes?pagina=&tamano=&buscar=` | Médico o Enfermera | Pacientes hospitalizados |
 | GET | `/api/v1/pacientes/{id}` | Médico o Enfermera | Ficha con la hospitalización, la cama y el sensor (auditada) |
-| POST | `/api/v1/pacientes/{id}/dispositivo` | Enfermera | Vincula un sensor disponible (HU06) |
-| DELETE | `/api/v1/pacientes/{id}/dispositivo` | Enfermera | Libera el sensor |
+| POST | `/api/v1/pacientes/{id}/dispositivo` | Enfermera | Vincula un sensor disponible sin QR (respaldo de la HU06); publica "vinculado" |
+| DELETE | `/api/v1/pacientes/{id}/dispositivo` | Enfermera | Libera el sensor; el wearable recibe "desvinculado" y un QR nuevo |
 | POST | `/api/v1/pacientes/{id}/egreso` | Enfermera | Egreso con motivo; libera el sensor en la misma transacción (HU08) |
-| GET | `/api/v1/pacientes/monitoreados` | Médico o Enfermera | Pacientes con sensor (HU07), con `ultimaLecturaEn` y `senal`. Puntajes NEWS2/MEWS en la fase 4 |
+| GET | `/api/v1/pacientes/monitoreados` | Médico o Enfermera | Pacientes con sensor (HU07), con NEWS2, MEWS, nivel de riesgo, `senal` y `conexionSensor` |
 | GET | `/api/v1/pacientes/{id}/signos/actual` | Médico o Enfermera | Último valor de cada signo con `vigente`, `pendiente-actualizacion` o `sin-datos` |
 | GET | `/api/v1/pacientes/{id}/signos/historial?desde=&hasta=` | Médico o Enfermera | Lecturas de la hospitalización activa en el rango (por defecto la última hora; máximo 24 h), para los gráficos del dashboard web |
 | GET | `/api/v1/telemetria/incidencias?desde=&hasta=&dispositivo=&tipo=` | Administrador | Log de incidencias técnicas de la telemetría |
-| GET | `/api/v1/pacientes/{id}/riesgo` | Médico o Enfermera | NEWS2 y MEWS: total, nivel, si es completo, puntos por parámetro y faltantes |
-| POST | `/api/v1/pacientes/{id}/observaciones` | Médico o Enfermera | Registra FR, presión, conciencia, oxígeno o temperatura de termómetro y recalcula el riesgo |
+| GET | `/api/v1/pacientes/{id}/riesgo` | Médico o Enfermera | NEWS2 y MEWS (total, nivel, completo, puntos y faltantes), `recomendacion`, `proximaTomaManualEn`, `avisos`, `escalaSpo2` y `ultimoBrazoPa` |
+| POST | `/api/v1/pacientes/{id}/observaciones` | Médico o Enfermera | Toma manual con el asistente (presión con 1 a 3 lecturas, conciencia ACVPU por respuestas, oxígeno, FR, contexto y preocupación clínica) y recalcula el riesgo |
+| PUT | `/api/v1/pacientes/{id}/escala-spo2` | Médico | Indica la escala de SpO2 (1 o 2) del paciente y recalcula el riesgo |
+| GET | `/api/v1/guias/toma-manual` | Médico o Enfermera | Guía versionada del asistente: preguntas, recomendaciones y fuentes |
 | POST | `/api/v1/dev/telemetria` | Administrador | **Solo Development:** envía una lectura como el ESP32 |
 | GET | `/api/v1/ping` | anónimo | `{ "servicio": "vitalify-api", "version": "0.1.0", "hora": <UTC> }` |
 | GET | `/health` | anónimo | Estado de las conexiones `transaccional` e `historial` (200 o 503) |
@@ -146,9 +151,10 @@ El firmware y el broker están en el proyecto IoT (`../IOT/tesis_V01`). Para rec
    ```
 
 3. Arranca la API. `/health` debe mostrar `mqtt: Healthy`.
-4. Registra el sensor `ESP32-001` (o `Seed__DatosDemo=true`), vincúlalo a un paciente y enciende el wearable en la misma red Wi-Fi que la laptop.
+4. Registra el sensor `ESP32-001` (o `Seed__DatosDemo=true`) y enciende el wearable en la misma red Wi-Fi que la laptop.
+5. **Vincúlalo por QR:** al conectarse, el wearable muestra un QR. La enfermera lo escanea (`POST /vinculaciones/escaneo`) y confirma paciente, cama y toma inicial (`POST /vinculaciones/confirmar`). El wearable pasa a "vinculado" y empieza a enviar. El flujo completo está en [`docs/vinculacion-qr.md`](docs/vinculacion-qr.md).
 
-Las lecturas aparecen en `/pacientes/{id}/signos/actual` y el riesgo en `/pacientes/{id}/riesgo`. Cómo se calcula NEWS2/MEWS con este hardware: [`docs/motor-clinico.md`](docs/motor-clinico.md).
+Las lecturas aparecen en `/pacientes/{id}/signos/actual` y el riesgo en `/pacientes/{id}/riesgo`. Cómo se calcula NEWS2/MEWS con este hardware y la toma manual: [`docs/motor-clinico.md`](docs/motor-clinico.md). Los comandos que el backend envía al wearable: [`docs/contrato-telemetria.md`](docs/contrato-telemetria.md#comandos-al-wearable).
 
 ### Telemetría (sin hardware)
 
@@ -197,7 +203,7 @@ El CI (`.github/workflows/ci.yml`) ejecuta restore, build y todas las pruebas, i
 | 1    | Usuarios, JWT y RBAC                          |
 | 2    | Pacientes, camas y sensores                   |
 | 3    | Ingesta simulada de signos vitales            |
-| 4    | Cálculo de NEWS2 y MEWS con el wearable real por MQTT (este estado) |
-| 5    | Alertas                                       |
-| 6    | Consultas                                     |
-| 7    | IoT (Mosquitto, MQTT, ESP32), TimescaleDB y despliegue |
+| 4    | Cálculo de NEWS2 y MEWS con el wearable real por MQTT |
+| 5    | Vinculación por QR, comandos al wearable y asistente de toma manual (este estado) |
+| 6    | Alertas y consultas del dashboard             |
+| 7    | TimescaleDB, tiempo real (SignalR, push) y despliegue |
