@@ -1,10 +1,14 @@
 using Microsoft.EntityFrameworkCore;
+using Vitalify.Domain.Alertas;
 using Vitalify.Domain.Auditoria;
 using Vitalify.Domain.Camas;
 using Vitalify.Domain.Dispositivos;
 using Vitalify.Domain.Hospitalizaciones;
+using Vitalify.Domain.Notificaciones;
 using Vitalify.Domain.Pacientes;
+using Vitalify.Domain.Servicios;
 using Vitalify.Domain.Sesiones;
+using Vitalify.Domain.Turnos;
 using Vitalify.Domain.Usuarios;
 using Vitalify.Domain.Vinculacion;
 
@@ -28,6 +32,10 @@ public class TransaccionalDbContext(DbContextOptions<TransaccionalDbContext> opt
     public DbSet<Hospitalizacion> Hospitalizaciones => Set<Hospitalizacion>();
     public DbSet<AsignacionDispositivo> AsignacionesDispositivo => Set<AsignacionDispositivo>();
     public DbSet<CodigoVinculacion> CodigosVinculacion => Set<CodigoVinculacion>();
+    public DbSet<Servicio> Servicios => Set<Servicio>();
+    public DbSet<ProgramacionTurno> ProgramacionTurnos => Set<ProgramacionTurno>();
+    public DbSet<AlertaClinica> Alertas => Set<AlertaClinica>();
+    public DbSet<DispositivoMovil> DispositivosMoviles => Set<DispositivoMovil>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

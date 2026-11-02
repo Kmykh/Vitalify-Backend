@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Vitalify.Domain.Servicios;
 using Vitalify.Domain.Usuarios;
 
 namespace Vitalify.Infrastructure.Persistence.Transaccional.Configuraciones;
@@ -25,5 +26,7 @@ internal sealed class ConfiguracionUsuario : IEntityTypeConfiguration<Usuario>
         builder.Property(u => u.HashContrasena).HasMaxLength(512).IsRequired();
         builder.Property(u => u.Rol).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.HasIndex(u => u.Rol);
+        builder.HasIndex(u => u.ServicioId);
+        builder.HasOne<Servicio>().WithMany().HasForeignKey(u => u.ServicioId).OnDelete(DeleteBehavior.Restrict);
     }
 }

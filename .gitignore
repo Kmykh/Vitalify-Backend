@@ -485,3 +485,8 @@ $RECYCLE.BIN/
 
 # Variables de entorno locales (cadenas de conexión)
 .env
+
+# Credenciales de Firebase (cuenta de servicio para el push): nunca van al repositorio.
+*firebase*.json
+*-firebase-adminsdk-*.json
+credenciales/

@@ -1,10 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Vitalify.Application.Alertas;
 using Vitalify.Application.Camas;
 using Vitalify.Application.Comun;
 using Vitalify.Application.Dispositivos;
 using Vitalify.Application.Pacientes;
 using Vitalify.Application.Puertos;
+using Vitalify.Application.Servicios;
 using Vitalify.Application.Usuarios;
 using Vitalify.Application.Vinculacion;
 using Vitalify.Infrastructure.Persistence.Transaccional.Configuraciones;
@@ -29,6 +31,9 @@ internal sealed class UnidadDeTrabajo(TransaccionalDbContext db) : IUnidadDeTrab
         [ConfiguracionAsignacionDispositivo.IndiceDispositivoVigente] = ErroresDispositivo.YaVinculado,
         [ConfiguracionAsignacionDispositivo.IndiceHospitalizacionVigente] = ErroresPaciente.YaTieneDispositivo,
         [ConfiguracionCodigoVinculacion.IndiceActivo] = ErroresVinculacion.CodigoConcurrente,
+        [ConfiguracionServicio.IndiceCodigo] = ErroresServicio.CodigoDuplicado,
+        [ConfiguracionAlertaClinica.IndiceAbierta] = ErroresAlerta.AbiertaDuplicada,
+        [ConfiguracionProgramacionTurno.IndiceTurno] = Error.Conflicto("programacion-concurrente", "Otro usuario cargó la programación al mismo tiempo. Intenta de nuevo."),
     };
 
     public async Task<Resultado<Unidad>> GuardarCambiosAsync(CancellationToken ct = default)

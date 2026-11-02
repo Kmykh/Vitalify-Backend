@@ -5,18 +5,21 @@ using Microsoft.Extensions.Logging;
 using Vitalify.Application.Puertos;
 using Vitalify.Domain.Camas;
 using Vitalify.Domain.Dispositivos;
+using Vitalify.Domain.Servicios;
 
 namespace Vitalify.Infrastructure.Semillas;
 
 /// <summary>
-/// Solo en Development y con <c>Seed__DatosDemo=true</c>: crea las camas <c>MED-B-01</c> a <c>MED-B-06</c>
-/// (servicio "Medicina B") y los dispositivos <c>ESP32-001</c> a <c>ESP32-004</c> que no existan. No crea pacientes.
+/// Solo en Development y con <c>Seed__DatosDemo=true</c>: crea el servicio <c>MEDICINA-B</c> ("Medicina B"), las camas
+/// <c>MED-B-01</c> a <c>MED-B-06</c> y los dispositivos <c>ESP32-001</c> a <c>ESP32-004</c> que no existan. No crea
+/// pacientes ni usuarios.
 /// </summary>
 internal sealed class SemillaDatosDemo(
     IServiceScopeFactory scopes, IConfiguration configuration, IHostEnvironment entorno, ILogger<SemillaDatosDemo> logger)
     : IHostedService
 {
     public const string ServicioDemo = "Medicina B";
+    public const string CodigoServicioDemo = "MEDICINA-B";
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
@@ -49,6 +52,14 @@ internal sealed class SemillaDatosDemo(
         var servicios = scope.ServiceProvider;
         var camas = servicios.GetRequiredService<IRepositorioCamas>();
         var dispositivos = servicios.GetRequiredService<IRepositorioDispositivos>();
+        var repositorioServicios = servicios.GetRequiredService<IRepositorioServicios>();
+        var servicio = (await repositorioServicios.ListarAsync(ct)).FirstOrDefault(s => s.Codigo == CodigoServicioDemo);
+        if (servicio is null)
+        {
+            servicio = Servicio.Registrar(CodigoServicioDemo, ServicioDemo);
+            repositorioServicios.Agregar(servicio);
+        }
+
         var camasCreadas = 0;
         var dispositivosCreados = 0;
 
@@ -56,7 +67,7 @@ internal sealed class SemillaDatosDemo(
         {
             if (!await camas.ExisteCodigoAsync(codigo, ct))
             {
-                camas.Agregar(Cama.Registrar(codigo, ServicioDemo));
+                camas.Agregar(Cama.Registrar(codigo, servicio.Id));
                 camasCreadas++;
             }
         }

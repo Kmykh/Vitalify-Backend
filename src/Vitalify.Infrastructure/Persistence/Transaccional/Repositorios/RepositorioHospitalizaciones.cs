@@ -37,6 +37,18 @@ internal sealed class RepositorioHospitalizaciones(TransaccionalDbContext db) : 
         .AsNoTracking()
         .FirstOrDefaultAsync(ct);
 
+    public Task<ContextoHospitalizacion?> ObtenerContextoAsync(Guid hospitalizacionId, CancellationToken ct = default) =>
+        (from h in db.Hospitalizaciones.AsNoTracking()
+         where h.Id == hospitalizacionId
+         join c in db.Camas on h.CamaId equals c.Id
+         select new ContextoHospitalizacion(h.Id, h.PacienteId, c.ServicioId, c.Codigo, h.Estado == EstadoHospitalizacion.Activa))
+        .SingleOrDefaultAsync(ct);
+
+    public async Task<IReadOnlyList<HospitalizacionActivaLectura>> ListarActivasDeServicioAsync(Guid? servicioId, CancellationToken ct = default) =>
+        (await Filas().Where(f => servicioId == null || f.ServicioId == servicioId).OrderBy(f => f.CodigoCama).ToListAsync(ct))
+            .Select(f => f.ALectura())
+            .ToList();
+
     public async Task<HospitalizacionActivaLectura?> ObtenerLecturaActivaAsync(Guid pacienteId, CancellationToken ct = default) =>
         (await Filas().Where(f => f.PacienteId == pacienteId).FirstOrDefaultAsync(ct))?.ALectura();
 
@@ -97,6 +109,7 @@ internal sealed class RepositorioHospitalizaciones(TransaccionalDbContext db) : 
         where h.Estado == EstadoHospitalizacion.Activa
         join p in db.Pacientes on h.PacienteId equals p.Id
         join c in db.Camas on h.CamaId equals c.Id
+        join s in db.Servicios on c.ServicioId equals s.Id
         from a in db.AsignacionesDispositivo.Where(a => a.HospitalizacionId == h.Id && a.LiberadoEn == null).DefaultIfEmpty()
         from d in db.Dispositivos.Where(d => d.Id == a.DispositivoId).DefaultIfEmpty()
         select new FilaActiva
@@ -112,7 +125,8 @@ internal sealed class RepositorioHospitalizaciones(TransaccionalDbContext db) : 
             IngresoEn = h.IngresoEn,
             CamaId = c.Id,
             CodigoCama = c.Codigo,
-            Servicio = c.Servicio,
+            Servicio = s.Nombre,
+            ServicioId = s.Id,
             DispositivoId = d == null ? null : d.Id,
             CodigoDispositivo = d == null ? null : d.Codigo,
             DispositivoAsignadoEn = a == null ? null : a.AsignadoEn,
@@ -136,13 +150,14 @@ internal sealed class RepositorioHospitalizaciones(TransaccionalDbContext db) : 
         public Guid CamaId { get; init; }
         public string CodigoCama { get; init; } = null!;
         public string Servicio { get; init; } = null!;
+        public Guid ServicioId { get; init; }
         public Guid? DispositivoId { get; init; }
         public string? CodigoDispositivo { get; init; }
         public DateTime? DispositivoAsignadoEn { get; init; }
 
         public HospitalizacionActivaLectura ALectura() => new(
             PacienteId, NombreCompleto, TipoDocumento, NumeroDocumento, FechaNacimiento, FechaNacimientoEstimada,
-            HospitalizacionId, DiagnosticoIngreso, IngresoEn, CamaId, CodigoCama, Servicio,
+            HospitalizacionId, DiagnosticoIngreso, IngresoEn, CamaId, CodigoCama, Servicio, ServicioId,
             DispositivoId, CodigoDispositivo, DispositivoAsignadoEn);
     }
 }
