@@ -166,6 +166,19 @@ public class Fase6TurnosTests(FabricaVitalify fabrica) : PruebaApi(fabrica)
     }
 
     [Fact]
+    public async Task ElAdministradorNoVeAlertasNiLaEntregaDeTurno_PeroSiLaProgramacion()
+    {
+        var administrador = await ClienteAdministradorAsync();
+        var servicio = await administrador.CrearServicioAsync();
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await administrador.GetAsync("/api/v1/alertas")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await administrador.GetAsync($"/api/v1/servicios/{servicio.Id}/entrega-turno")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await administrador.GetAsync($"/api/v1/turnos/actual?servicioId={servicio.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await administrador.PostAsJsonAsync("/api/v1/notificaciones/dispositivos", new { token = "t", plataforma = "Android" })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await administrador.GetAsync($"/api/v1/servicios/{servicio.Id}/programacion/2026/11")).StatusCode);
+    }
+
+    [Fact]
     public async Task ElAdministradorAsignaElServicioDeUnaEnfermeraYCreaServicios()
     {
         var administrador = await ClienteAdministradorAsync();

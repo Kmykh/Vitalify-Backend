@@ -252,10 +252,15 @@ public sealed class ComandosRegistrados : IPublicadorComandosDispositivo
     }
 }
 
-/// <summary>Registra cada push (tokens y mensaje) y lo pasa al adaptador real.</summary>
+/// <summary>
+/// Registra cada push (tokens y mensaje) y lo pasa al adaptador real. Los tokens de <see cref="NoRegistrados"/> responden
+/// "no registrado", como FCM con una app desinstalada.
+/// </summary>
 public sealed class PushRegistrado : INotificadorPush
 {
     private readonly System.Collections.Concurrent.ConcurrentQueue<(IReadOnlyList<string> Tokens, MensajePush Mensaje)> _enviados = new();
+
+    public System.Collections.Concurrent.ConcurrentDictionary<string, bool> NoRegistrados { get; } = new();
 
     internal INotificadorPush? Interno { get; set; }
 
@@ -268,6 +273,7 @@ public sealed class PushRegistrado : INotificadorPush
     public async Task<IReadOnlyList<ResultadoEnvioPush>> EnviarAsync(IReadOnlyList<string> tokens, MensajePush mensaje, CancellationToken ct = default)
     {
         _enviados.Enqueue((tokens, mensaje));
-        return Interno is null ? tokens.Select(_ => ResultadoEnvioPush.Enviado).ToList() : await Interno.EnviarAsync(tokens, mensaje, ct);
+        var resultados = Interno is null ? tokens.Select(_ => ResultadoEnvioPush.Enviado).ToList() : await Interno.EnviarAsync(tokens, mensaje, ct);
+        return tokens.Select((token, i) => NoRegistrados.ContainsKey(token) ? ResultadoEnvioPush.NoRegistrado : resultados[i]).ToList();
     }
 }

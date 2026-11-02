@@ -284,7 +284,24 @@ public class Fase6AlertasTests(FabricaVitalify fabrica) : PruebaApi(fabrica)
     }
 
     [Fact]
-    public async Task UnTokenQueFcmDaPorNoRegistradoSeBorra_YQuitarloAlCerrarSesionLoElimina()
+    public async Task UnTokenQueFcmDaPorNoRegistradoSeBorra()
+    {
+        var sala = await SalaAsync();
+        var token = $"fcm-{sala.SesionEnfermera.Usuario.Id}";
+        Fabrica.Push.NoRegistrados[token] = true;
+
+        await EnviarAsync(sala, fr: 16, spo2: 97, fc: 80, caida: true);
+
+        var alerta = await AlertaAsync(sala, TipoAlerta.Caida);
+        Assert.Contains(token, Fabrica.Push.DeAlerta(alerta.Id).Single().Tokens);
+        Assert.False(await Fabrica.ConsultarAsync(db => db.DispositivosMoviles.AnyAsync(d => d.UsuarioId == sala.SesionEnfermera.Usuario.Id)));
+        var notificacion = Assert.Single((await Fabrica.ConsultarAsync(db => db.Alertas.SingleAsync(a => a.Id == alerta.Id))).NotificadaA,
+            n => n.UsuarioId == sala.SesionEnfermera.Usuario.Id && n.Canal == "push");
+        Assert.Equal("no-registrado", notificacion.Resultado);
+    }
+
+    [Fact]
+    public async Task QuitarElTokenAlCerrarSesionLoElimina_YUnaPlataformaDesconocidaDa400()
     {
         var sala = await SalaAsync();
         var token = $"fcm-{sala.SesionEnfermera.Usuario.Id}";
