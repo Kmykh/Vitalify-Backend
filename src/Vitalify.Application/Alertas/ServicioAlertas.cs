@@ -150,7 +150,8 @@ public sealed record DisparoAlerta(
 /// <summary>
 /// Crea o actualiza alertas. Hay como máximo una abierta por hospitalización y tipo (índice único parcial): si ya existe,
 /// se actualizan sus valores y solo se vuelve a notificar si <b>subió</b> la prioridad o el nivel. Ninguna alerta de
-/// riesgo, caída o preocupación clínica se cierra sola.
+/// riesgo, caída o preocupación clínica se cierra sola. Tras atender una de riesgo, durante
+/// <see cref="OpcionesAlertas.EsperaTrasAtender"/> no se abre otra salvo que el nivel suba.
 /// </summary>
 public sealed class ServicioAlertas(
     IRepositorioAlertas alertas,
@@ -159,6 +160,7 @@ public sealed class ServicioAlertas(
     NotificadorAlertas notificador,
     IUnidadDeTrabajo unidadDeTrabajo,
     IBitacoraFallos bitacora,
+    OpcionesAlertas opciones,
     IReloj reloj)
 {
     public async Task<AlertaClinica?> DispararAsync(DisparoAlerta disparo, CancellationToken ct = default)
@@ -177,6 +179,11 @@ public sealed class ServicioAlertas(
             string? motivo;
             if (abierta is null)
             {
+                if (await EnEsperaTrasAtenderAsync(disparo, ahora, ct))
+                {
+                    return null;
+                }
+
                 alerta = AlertaClinica.Crear(
                     contexto.HospitalizacionId, contexto.PacienteId, contexto.ServicioId, disparo.Tipo, disparo.Prioridad,
                     disparo.NivelRiesgo, disparo.News2, disparo.Mews, disparo.Detalle, ahora);
@@ -222,6 +229,12 @@ public sealed class ServicioAlertas(
 
         return null;
     }
+
+    /// <summary>¿Se atendió hace poco una alerta de riesgo de este nivel o mayor? Entonces todavía no se abre otra.</summary>
+    private async Task<bool> EnEsperaTrasAtenderAsync(DisparoAlerta disparo, DateTime ahora, CancellationToken ct) =>
+        disparo.Tipo == TipoAlerta.Riesgo
+        && await alertas.ObtenerUltimaAtendidaAsync(disparo.HospitalizacionId, disparo.Tipo, ct) is { } atendida
+        && atendida.SilenciaNuevaAlerta(disparo.Prioridad, disparo.NivelRiesgo, ahora, opciones.EsperaTrasAtender);
 
     /// <summary>Volvió la señal o llegó la toma: cierra la alerta abierta de ese tipo con "Resuelta automáticamente".</summary>
     public async Task ResolverAsync(Guid hospitalizacionId, TipoAlerta tipo, CancellationToken ct = default)

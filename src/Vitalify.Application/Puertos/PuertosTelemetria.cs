@@ -12,6 +12,15 @@ public interface IRepositorioLecturas
     /// <summary>Lecturas de la hospitalización medidas entre ambos límites (inclusive), de la más antigua a la más reciente.</summary>
     Task<IReadOnlyList<LecturaSignos>> ListarPorHospitalizacionAsync(Guid hospitalizacionId, DateTime desde, DateTime hasta, CancellationToken ct = default);
 
+    /// <summary>
+    /// Lecturas de la hospitalización entre ambos límites, agrupadas cada <paramref name="segundos"/> (alineado a la
+    /// época UNIX), del grupo más antiguo al más reciente. Solo aparecen los grupos con lecturas. Se agrega en la base.
+    /// </summary>
+    Task<IReadOnlyList<GrupoLecturas>> AgruparAsync(Guid hospitalizacionId, DateTime desde, DateTime hasta, int segundos, CancellationToken ct = default);
+
+    /// <summary>Mínimo y máximo de cada variable en toda la hospitalización.</summary>
+    Task<ExtremosSignos> ObtenerExtremosAsync(Guid hospitalizacionId, CancellationToken ct = default);
+
     void Agregar(LecturaSignos lectura);
 }
 

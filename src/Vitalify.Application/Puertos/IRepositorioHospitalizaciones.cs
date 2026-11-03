@@ -10,6 +10,17 @@ public interface IRepositorioHospitalizaciones
 {
     Task<Hospitalizacion?> ObtenerActivaDePacienteAsync(Guid pacienteId, CancellationToken ct = default);
 
+    Task<Hospitalizacion?> ObtenerPorIdAsync(Guid hospitalizacionId, CancellationToken ct = default);
+
+    /// <summary>La hospitalización más reciente del paciente (la activa, si la hay), o null si nunca estuvo hospitalizado.</summary>
+    Task<Hospitalizacion?> ObtenerUltimaDePacienteAsync(Guid pacienteId, CancellationToken ct = default);
+
+    /// <summary>Todos los episodios del paciente, del más reciente al más antiguo.</summary>
+    Task<IReadOnlyList<EpisodioLectura>> ListarEpisodiosAsync(Guid pacienteId, CancellationToken ct = default);
+
+    /// <summary>Sensores que estuvieron vinculados a esas hospitalizaciones, en orden de vinculación.</summary>
+    Task<IReadOnlyList<SensorEpisodioLectura>> ListarSensoresAsync(IReadOnlyCollection<Guid> hospitalizaciones, CancellationToken ct = default);
+
     Task<bool> CamaOcupadaAsync(Guid camaId, CancellationToken ct = default);
 
     Task<AsignacionDispositivo?> ObtenerAsignacionVigenteAsync(Guid hospitalizacionId, CancellationToken ct = default);

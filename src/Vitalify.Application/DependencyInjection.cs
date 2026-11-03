@@ -1,9 +1,12 @@
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Vitalify.Application.Alertas;
+using Vitalify.Application.Auditoria;
 using Vitalify.Application.Camas;
 using Vitalify.Application.Clinica;
 using Vitalify.Application.Dispositivos;
+using Vitalify.Application.Historial;
+using Vitalify.Application.Notas;
 using Vitalify.Application.Notificaciones;
 using Vitalify.Application.Pacientes;
 using Vitalify.Application.Servicios;
@@ -124,6 +127,24 @@ public static class DependencyInjection
         services.AddScoped<ListarAlertasPaciente>();
         services.AddScoped<RegistrarDispositivoMovil>();
         services.AddScoped<QuitarDispositivoMovil>();
+
+        // Fase 7: historial del paciente para el médico, notas clínicas y consulta de la auditoría.
+        services.AddScoped<EpisodiosPaciente>();
+        services.AddScoped<AuditoriaHistorial>();
+        services.AddScoped<DirectorioProfesionales>();
+        services.AddScoped<ListarHospitalizacionesPaciente>();
+        services.AddScoped<ObtenerHistorialRiesgo>();
+        services.AddScoped<ListarObservacionesPaciente>();
+        services.AddScoped<ObtenerResumenPaciente>();
+        services.AddScoped<PresentadorNotas>();
+        services.AddSingleton<IValidator<RegistrarNotaComando>, RegistrarNotaValidador>();
+        services.AddSingleton<IValidator<EditarNotaComando>, EditarNotaValidador>();
+        services.AddScoped<RegistrarNota>();
+        services.AddScoped<ListarNotas>();
+        services.AddScoped<EditarNota>();
+        services.AddScoped<ListarVersionesNota>();
+        services.AddSingleton<IValidator<ListarAuditoriaConsulta>, ListarAuditoriaValidador>();
+        services.AddScoped<ListarAuditoria>();
 
         return services;
     }

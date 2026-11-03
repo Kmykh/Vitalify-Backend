@@ -58,7 +58,11 @@ public interface IRepositorioAlertas
     /// <summary>Ordenadas por prioridad (alta primero) y antigüedad (la más antigua primero).</summary>
     Task<Pagina<AlertaConCama>> ListarAsync(FiltroAlertas filtro, int pagina, int tamano, CancellationToken ct = default);
 
-    Task<IReadOnlyList<AlertaConCama>> ListarDePacienteAsync(Guid pacienteId, Guid servicioId, CancellationToken ct = default);
+    /// <summary>Todas las alertas de la hospitalización, la más reciente primero (historial del paciente).</summary>
+    Task<IReadOnlyList<AlertaConCama>> ListarDeHospitalizacionAsync(Guid hospitalizacionId, CancellationToken ct = default);
+
+    /// <summary>La última alerta atendida de ese tipo de la hospitalización, o null (espera tras atender).</summary>
+    Task<AlertaClinica?> ObtenerUltimaAtendidaAsync(Guid hospitalizacionId, TipoAlerta tipo, CancellationToken ct = default);
 
     /// <summary>Abiertas y atendidas desde <paramref name="atendidasDesde"/> de esas hospitalizaciones (entrega de turno).</summary>
     Task<IReadOnlyList<AlertaConCama>> ListarParaEntregaAsync(IReadOnlyCollection<Guid> hospitalizaciones, DateTime atendidasDesde, CancellationToken ct = default);
