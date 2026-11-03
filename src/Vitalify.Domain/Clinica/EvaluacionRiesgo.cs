@@ -86,6 +86,28 @@ public sealed class EvaluacionRiesgo
 
     public void FijarProximaTomaManual(DateTime proxima) => ProximaTomaManualEn = proxima;
 
+    /// <summary>
+    /// El wearable dispara una evaluación cada ~10 s (8640 al día). Las que no cambian nada se guardan como máximo una
+    /// cada este intervalo, para no llenar el historial (plan gratuito de Supabase: 500 MB).
+    /// </summary>
+    public static readonly TimeSpan IntervaloSinCambios = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// ¿Aporta algo respecto de <paramref name="anterior"/> (la última guardada)? Sí si no hay anterior, si cambió el
+    /// total o el nivel de NEWS2 o de MEWS, si cambió si están completos, si cambió la próxima toma manual (de ella
+    /// depende cuánto cuenta cada toma) o si pasaron <see cref="IntervaloSinCambios"/> desde la anterior.
+    /// </summary>
+    public bool AportaRespectoDe(EvaluacionRiesgo? anterior) =>
+        anterior is null
+        || News2Total != anterior.News2Total
+        || News2Nivel != anterior.News2Nivel
+        || News2Completo != anterior.News2Completo
+        || MewsTotal != anterior.MewsTotal
+        || MewsNivel != anterior.MewsNivel
+        || MewsCompleto != anterior.MewsCompleto
+        || ProximaTomaManualEn != anterior.ProximaTomaManualEn
+        || EvaluadaEn - anterior.EvaluadaEn >= IntervaloSinCambios;
+
     public ResultadoNews2 News2() => CalculadoraNews2.Calcular(Parametros, EscalaSpo2);
 
     public ResultadoMews Mews() => CalculadoraMews.Calcular(Parametros);

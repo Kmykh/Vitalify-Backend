@@ -183,4 +183,36 @@ public class MotorClinicoTests
         Assert.Equal("fuera-de-linea", (await _e.ObtenerSignosActuales().EjecutarAsync(pacienteId)).Valor.ConexionSensor);
         Assert.False(await _e.RegistrarPresencia().EjecutarAsync("ESP32-001", "dormido"));
     }
+
+    [Fact]
+    public async Task Una_evaluacion_del_wearable_solo_se_guarda_si_cambia_el_puntaje_o_pasaron_5_minutos_pero_siempre_se_publica()
+    {
+        await PacienteConSensorAsync();
+        async Task LecturaAsync(int spo2, TimeSpan despues)
+        {
+            _e.Reloj.Avanzar(despues);
+            await RegistrarLecturaDelWearableAsync(fc: 80, spo2: spo2, temp: 36.8m);
+        }
+
+        // Seis lecturas iguales en un minuto: una sola fila.
+        for (var i = 0; i < 6; i++)
+        {
+            await LecturaAsync(97, TimeSpan.FromSeconds(10));
+        }
+
+        Assert.Single(_e.Historial.Evaluaciones);
+        Assert.Equal(6, _e.TiempoReal.Riesgos.Count);
+
+        // SpO2 95 suma 1 punto: se guarda al instante.
+        await LecturaAsync(95, TimeSpan.FromSeconds(10));
+        Assert.Equal(2, _e.Historial.Evaluaciones.Count);
+        Assert.Equal(1, _e.Historial.Evaluaciones.Last().News2Total);
+
+        // Sin cambios: a los 4 min 50 s todavía no; a los 5 min, sí.
+        await LecturaAsync(95, TimeSpan.FromMinutes(4) + TimeSpan.FromSeconds(50));
+        Assert.Equal(2, _e.Historial.Evaluaciones.Count);
+        await LecturaAsync(95, TimeSpan.FromSeconds(10));
+        Assert.Equal(3, _e.Historial.Evaluaciones.Count);
+        Assert.Equal(9, _e.TiempoReal.Riesgos.Count);
+    }
 }

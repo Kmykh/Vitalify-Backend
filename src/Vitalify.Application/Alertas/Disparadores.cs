@@ -7,7 +7,11 @@ using Vitalify.Domain.Clinica;
 
 namespace Vitalify.Application.Alertas;
 
-/// <summary>Evento de aplicación que se publica al guardar cada evaluación de riesgo.</summary>
+/// <summary>
+/// Evento de aplicación que se publica con cada evaluación de riesgo. Las del wearable que no cambian nada no se guardan
+/// (<see cref="EvaluacionRiesgo.AportaRespectoDe"/>): entonces <see cref="EvaluacionId"/> es la última guardada, que tiene
+/// el mismo puntaje.
+/// </summary>
 public sealed record RiesgoEvaluado(
     Guid HospitalizacionId, Guid PacienteId, Guid EvaluacionId, DateTime EvaluadaEn, int News2, NivelRiesgoNews2 News2Nivel,
     int Mews, NivelRiesgoMews MewsNivel, bool Completo, OrigenEvaluacion Origen)
@@ -25,9 +29,10 @@ public interface IManejadorRiesgoEvaluado
 /// <summary>Publica <see cref="RiesgoEvaluado"/>. Un manejador que falla queda en la bitácora y no interrumpe a los demás.</summary>
 public sealed class PublicadorRiesgoEvaluado(IEnumerable<IManejadorRiesgoEvaluado> manejadores, IBitacoraFallos bitacora)
 {
-    public async Task PublicarAsync(EvaluacionRiesgo evaluacion, CancellationToken ct = default)
+    /// <param name="evaluacionGuardadaId">La evaluación guardada que respalda el puntaje, si no es la misma (ver <see cref="RiesgoEvaluado"/>).</param>
+    public async Task PublicarAsync(EvaluacionRiesgo evaluacion, Guid? evaluacionGuardadaId = null, CancellationToken ct = default)
     {
-        var evento = RiesgoEvaluado.Desde(evaluacion);
+        var evento = RiesgoEvaluado.Desde(evaluacion) with { EvaluacionId = evaluacionGuardadaId ?? evaluacion.Id };
         foreach (var manejador in manejadores)
         {
             try

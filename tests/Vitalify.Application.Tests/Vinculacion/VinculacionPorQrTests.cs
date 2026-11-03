@@ -167,7 +167,8 @@ public class VinculacionPorQrTests
         await _e.VincularAsync(ficha.Id, _e.AgregarDispositivo());
 
         var cambio = await _e.CambiarEscalaSpo2().EjecutarAsync(new CambiarEscalaSpo2Comando(ficha.Id, "escala2", "EPOC con hipercapnia", Guid.NewGuid(), null));
-        await _e.RegistrarLectura().EjecutarAsync(_e.Lectura(new SignosMedidos(Fc: 80, Spo2: 89, Temperatura: 36.8m), segundos: 1));
+        // FC 95 suma 1: el puntaje cambia respecto de la evaluación del cambio de escala, así que esta sí se guarda.
+        await _e.RegistrarLectura().EjecutarAsync(_e.Lectura(new SignosMedidos(Fc: 95, Spo2: 89, Temperatura: 36.8m), segundos: 1));
 
         Assert.True(cambio.EsExito);
         Assert.Contains("ESP32-001", _e.Resolutor.Invalidaciones);
