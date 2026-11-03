@@ -188,18 +188,20 @@ El backend le habla al wearable por `device/{codigo}/comandos`, con QoS 1 y JSON
    | `vinculado` | `vinculado` | Cama e iniciales (por ejemplo, `MED-B-01 · R.M.`) | Envía cada 10 s y al instante si hay una caída |
 
    Un `mostrar-qr` o un `desvinculado` también hace volver a `esperando-qr` desde cualquier estado.
-3. **Dibujar el QR** con la librería `QRCode` de ricmoo:
-   - versión 3, `ECC_MEDIUM`, a partir del texto de `qr`;
-   - 2 píxeles por módulo, con 4 módulos de margen blanco.
+3. **Dibujar el QR** a partir del texto de `qr`. El firmware (`tesis/vinculacion.cpp` y `tesis/pantallas.cpp`) lo hace así:
+   - con el generador de Nayuki (`qrcodegen.c`, MIT). La librería `QRCode` de ricmoo no sirve: su `qrcode.h` choca con el del core ESP32 3.x;
+   - la versión más chica en la que entra el texto: la 2 (25x25) con `ESP32-001`, y hasta la 3 con códigos de 32 caracteres. Corrección M, o mayor si entra en la misma versión;
+   - oscuro sobre un cuadro claro de 64x64, a 2 píxeles por módulo;
+   - a 4 px del borde de arriba: en las OLED bicolor, la franja sin píxeles entre las filas 15 y 16 cortaba los patrones de posición y el QR no se leía.
 
-   Si `expira` ya pasó, mostrar "Código vencido" y pedir otro.
+   Se comprobó con un lector de QR (zxing) sobre la imagen que dibuja el firmware, con y sin esa franja. Si `expira` ya pasó, mostrar "Código vencido" y pedir otro.
 4. **No enviar telemetría hasta `vinculado`.** Al pasar a `esperando-qr`, **descartar el búfer offline**: esas lecturas eran del paciente anterior. Tras reconectarse, esperar el primer comando retenido antes de vaciar el búfer.
 5. **Pedir un QR** publicando `{"accion":"solicitar-qr"}` en `device/{codigo}/solicitudes` (QoS 1). Hacerlo si al conectarse no llega ningún comando en unos segundos, si el QR venció o si se pulsa el botón.
 6. **`repetir-medicion`:** avisar en la OLED. Hoy el wearable no mide presión, así que no debería llegar.
 
 ### Broker
 
-El ACL permite al backend escribir en `device/+/comandos` y a cada wearable leer el suyo. Para las solicitudes hacen falta estas dos líneas, que el ACL de producción ([`deploy/mosquitto/acl`](../deploy/mosquitto/acl)) ya tiene. Al ACL del broker de desarrollo (`IOT/tesis_V01/broker/acl`) todavía hay que agregárselas:
+El ACL permite al backend escribir en `device/+/comandos` y a cada wearable leer el suyo. Para las solicitudes hacen falta estas dos líneas. Las tienen el ACL de producción ([`deploy/mosquitto/acl`](../deploy/mosquitto/acl)) y el del broker de desarrollo (`IOT/tesis_V01/broker/acl`); después de actualizar el de desarrollo, hay que reiniciar el broker:
 
 ```
 user vitalify-backend
@@ -216,46 +218,31 @@ En producción el wearable no habla con la laptop: sale a Internet hacia el domi
 |---|---|---|
 | Host | IP de la laptop en la red Wi-Fi | El dominio, por ejemplo `vitalify.duckdns.org` (el mismo `DOMINIO` del `.env` del servidor) |
 | Puerto | 1883 | **8883** |
-| Cliente | `WiFiClient` | **`WiFiClientSecure`** con la raíz **ISRG Root X1** |
+| Cliente | esp-mqtt sobre TCP (`MQTT_TRANSPORT_OVER_TCP`) | esp-mqtt sobre **TLS** (`MQTT_TRANSPORT_OVER_SSL`) con la raíz **ISRG Root X1** |
 | Usuario | Código del dispositivo (`ESP32-001`) | Igual |
 | Clave | La de `MQTT_DISPOSITIVOS` en `broker/.env` | La que se cargó con `mosquitto_passwd` en el `password_file` del servidor ([despliegue.md](despliegue.md#un-wearable-nuevo)) |
 
-Lo que debe hacer el firmware:
+**Todavía no está en el firmware.** El wearable usa el cliente nativo de ESP-IDF (esp-mqtt, en `tesis/red.cpp`); esto es lo que hay que cambiar en él:
 
 1. **Sincronizar la hora por NTP antes de conectar.** TLS valida las fechas del certificado; con el reloj en 1970, el handshake falla. Además, el campo `ts` de cada lectura sale de ese reloj.
 2. **Confiar solo en ISRG Root X1**, la raíz de Let's Encrypt (vence en 2035). El certificado del dominio lo obtiene Caddy y se renueva cada ~60 días, pero la raíz no cambia, así que el firmware no se toca en cada renovación. Por defecto, Let's Encrypt entrega una cadena que termina en ISRG Root X1, también para los certificados ECDSA. El PEM se descarga de <https://letsencrypt.org/certs/isrgrootx1.pem>. No usar `setInsecure()`.
-3. **Usar el dominio, no la IP**, en `setServer`: el certificado se valida contra ese nombre.
-4. Mantener lo demás igual: QoS 1, *last will* `offline` retenido en `device/{codigo}/estado`, búfer offline y los mismos tópicos.
+3. **Usar el dominio, no la IP.** Hoy `red.cpp` resuelve el nombre del broker a una IP (mDNS) y le pasa esa IP a esp-mqtt. Con TLS hay que pasarle el dominio (`hostname`), porque el certificado se valida contra ese nombre.
+4. Mantener lo demás igual: QoS 1, *last will* `offline` retenido en `device/{codigo}/estado`, la suscripción a `comandos`, el búfer offline y los mismos tópicos.
 
 ```cpp
-#include <WiFiClientSecure.h>
-#include <PubSubClient.h>
-#include <time.h>
-
 // ISRG Root X1 en PEM, copiado de https://letsencrypt.org/certs/isrgrootx1.pem (es pública; va en el firmware).
-static const char ISRG_ROOT_X1[] PROGMEM = R"PEM(
------BEGIN CERTIFICATE-----
+static const char ISRG_ROOT_X1[] = R"PEM(-----BEGIN CERTIFICATE-----
 ...
 -----END CERTIFICATE-----
 )PEM";
 
-WiFiClientSecure red;
-PubSubClient mqtt(red);
-
-void sincronizarHora() {
-  configTime(0, 0, "pool.ntp.org", "time.google.com");  // UTC: ts va en UTC
-  while (time(nullptr) < 1700000000) {                  // espera una fecha real (después de 2023)
-    delay(500);
-  }
-}
-
-bool conectarMqtt() {
-  red.setCACert(ISRG_ROOT_X1);
-  // En config.h: MQTT_BROKER_POR_DEFECTO "vitalify.duckdns.org" y MQTT_PUERTO 8883.
-  mqtt.setServer(MQTT_BROKER_POR_DEFECTO, MQTT_PUERTO);
-  // usuario = CODIGO_DISPOSITIVO; clave = MQTT_CLAVE de secretos.h (nunca en el repositorio)
-  return mqtt.connect(CODIGO_DISPOSITIVO, CODIGO_DISPOSITIVO, MQTT_CLAVE, TOPICO_ESTADO, 1, true, "offline");
-}
+// En iniciarMqtt() de red.cpp, con MQTT_BROKER_POR_DEFECTO "vitalify.duckdns.org" y MQTT_PUERTO 8883 en config.h:
+cfg.broker.address.hostname = MQTT_BROKER_POR_DEFECTO;   // el dominio, no la IP resuelta
+cfg.broker.address.port = MQTT_PUERTO;
+cfg.broker.address.transport = MQTT_TRANSPORT_OVER_SSL;
+cfg.broker.verification.certificate = ISRG_ROOT_X1;       // termina en '\0': esp-mqtt toma su largo solo
+// Lo demás no cambia: usuario = CODIGO_DISPOSITIVO, clave = MQTT_CLAVE (secretos.h), last will "offline".
+// La conexión se inicia después de tener hora NTP (atenderHora ya sabe cuándo).
 ```
 
 Para probarlo sin dominio: con `DOMINIO=vitalify.localhost`, Caddy firma con su CA local y el wearable debería confiar en esa raíz (`root.crt` de Caddy) en lugar de ISRG Root X1. Ver ["Probarlo en la laptop"](despliegue.md#probarlo-en-la-laptop-sin-dominio).
