@@ -47,7 +47,7 @@ builder.Services.AddAutenticacionVitalify();
 builder.Services.AddAutorizacionVitalify();
 builder.Services.AddLimitesDeSolicitudes(builder.Configuration);
 builder.Services.AddSimuladorTelemetria(builder.Configuration);
-builder.Services.AddReceptorMqtt(builder.Configuration);
+builder.Services.AddReceptorMqtt(builder.Configuration, builder.Environment);
 builder.Services.AddTiempoReal();
 builder.Services.AddHostedService<VigilanteAlertasWorker>();
 builder.Services.AddHostedService<RetencionHistorialWorker>();
