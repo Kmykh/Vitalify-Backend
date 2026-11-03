@@ -137,6 +137,9 @@ namespace Vitalify.Infrastructure.Persistence.Transaccional.Migrations
                     b.HasIndex("ServicioId", "Estado")
                         .HasDatabaseName("ix_alerta_clinica_servicio_id_estado");
 
+                    b.HasIndex("HospitalizacionId", "Tipo", "AtendidaEn")
+                        .HasDatabaseName("ix_alerta_clinica_hospitalizacion_id_tipo_atendida_en");
+
                     b.ToTable("alerta_clinica", "vitalify");
                 });
 
@@ -178,6 +181,9 @@ namespace Vitalify.Infrastructure.Persistence.Transaccional.Migrations
 
                     b.HasIndex("UsuarioId")
                         .HasDatabaseName("ix_auditoria_usuario_id");
+
+                    b.HasIndex("Accion", "Fecha")
+                        .HasDatabaseName("ix_auditoria_accion_fecha");
 
                     b.ToTable("auditoria", "vitalify");
                 });
@@ -423,6 +429,114 @@ namespace Vitalify.Infrastructure.Persistence.Transaccional.Migrations
                         .HasFilter("estado = 'Activa'");
 
                     b.ToTable("hospitalizacion", "vitalify");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Notas.NotaClinica", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AutorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("autor_id");
+
+                    b.Property<DateTime>("CreadaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creada_en");
+
+                    b.Property<DateTime?>("EditadaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("editada_en");
+
+                    b.Property<Guid>("HospitalizacionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("hospitalizacion_id");
+
+                    b.Property<Guid>("PacienteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("paciente_id");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<string>("Texto")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("texto");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("tipo");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_nota_clinica");
+
+                    b.HasIndex("AutorId")
+                        .HasDatabaseName("ix_nota_clinica_autor_id");
+
+                    b.HasIndex("PacienteId")
+                        .HasDatabaseName("ix_nota_clinica_paciente_id");
+
+                    b.HasIndex("HospitalizacionId", "CreadaEn")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_nota_clinica_hospitalizacion_id_creada_en");
+
+                    b.ToTable("nota_clinica", "vitalify");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Notas.NotaClinicaVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("NotaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("nota_id");
+
+                    b.Property<int>("Numero")
+                        .HasColumnType("integer")
+                        .HasColumnName("numero");
+
+                    b.Property<DateTime>("ReemplazadaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reemplazada_en");
+
+                    b.Property<string>("Texto")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("texto");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("tipo");
+
+                    b.Property<DateTime>("VigenteDesde")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("vigente_desde");
+
+                    b.HasKey("Id")
+                        .HasName("pk_nota_clinica_version");
+
+                    b.HasIndex("NotaId", "Numero")
+                        .IsUnique()
+                        .HasDatabaseName("ux_nota_clinica_version");
+
+                    b.ToTable("nota_clinica_version", "vitalify");
                 });
 
             modelBuilder.Entity("Vitalify.Domain.Notificaciones.DispositivoMovil", b =>
@@ -945,6 +1059,40 @@ namespace Vitalify.Infrastructure.Persistence.Transaccional.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_hospitalizacion_usuario_registrado_por");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Notas.NotaClinica", b =>
+                {
+                    b.HasOne("Vitalify.Domain.Usuarios.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("AutorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_nota_clinica_usuario_autor_id");
+
+                    b.HasOne("Vitalify.Domain.Hospitalizaciones.Hospitalizacion", null)
+                        .WithMany()
+                        .HasForeignKey("HospitalizacionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_nota_clinica_hospitalizacion_hospitalizacion_id");
+
+                    b.HasOne("Vitalify.Domain.Pacientes.Paciente", null)
+                        .WithMany()
+                        .HasForeignKey("PacienteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_nota_clinica_paciente_paciente_id");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Notas.NotaClinicaVersion", b =>
+                {
+                    b.HasOne("Vitalify.Domain.Notas.NotaClinica", null)
+                        .WithMany()
+                        .HasForeignKey("NotaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_nota_clinica_version_nota_clinica_nota_id");
                 });
 
             modelBuilder.Entity("Vitalify.Domain.Notificaciones.DispositivoMovil", b =>

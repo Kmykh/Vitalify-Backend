@@ -75,6 +75,9 @@ internal sealed class ConfiguracionAlertaClinica : IEntityTypeConfiguration<Aler
         builder.HasIndex(a => a.PacienteId);
         builder.HasIndex(a => a.CreadaEn);
 
+        // Historial del episodio y espera tras atender (fase 7): la última atendida de un tipo.
+        builder.HasIndex(a => new { a.HospitalizacionId, a.Tipo, a.AtendidaEn });
+
         // Nada clínico se borra en cascada.
         builder.HasOne<Hospitalizacion>().WithMany().HasForeignKey(a => a.HospitalizacionId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Paciente>().WithMany().HasForeignKey(a => a.PacienteId).OnDelete(DeleteBehavior.Restrict);

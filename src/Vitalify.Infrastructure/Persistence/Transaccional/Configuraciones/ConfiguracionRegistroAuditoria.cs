@@ -19,6 +19,7 @@ internal sealed class ConfiguracionRegistroAuditoria : IEntityTypeConfiguration<
 
         builder.HasIndex(r => r.Fecha);
         builder.HasIndex(r => r.UsuarioId);
+        builder.HasIndex(r => new { r.Accion, r.Fecha });
 
         // La auditoría se conserva aunque el usuario se elimine.
         builder.HasOne<Usuario>().WithMany().HasForeignKey(r => r.UsuarioId).OnDelete(DeleteBehavior.SetNull);

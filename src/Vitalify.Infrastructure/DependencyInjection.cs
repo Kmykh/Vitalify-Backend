@@ -91,6 +91,7 @@ public static class DependencyInjection
         services.AddScoped<IRepositorioServicios, RepositorioServicios>();
         services.AddScoped<IRepositorioProgramacion, RepositorioProgramacion>();
         services.AddScoped<IRepositorioAlertas, RepositorioAlertas>();
+        services.AddScoped<IRepositorioNotas, RepositorioNotas>();
         services.AddScoped<IRepositorioDispositivosMoviles, RepositorioDispositivosMoviles>();
         services.AddScoped<ITurnoVigente, TurnoVigenteEnBase>();
         services.AddSingleton<IBitacoraFallos, BitacoraFallosEnLog>();

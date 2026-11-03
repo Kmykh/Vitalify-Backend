@@ -16,6 +16,53 @@ internal sealed class RepositorioLecturas(HistorialDbContext db) : IRepositorioL
             .OrderBy(l => l.MedidoEn)
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyList<GrupoLecturas>> AgruparAsync(
+        Guid hospitalizacionId, DateTime desde, DateTime hasta, int segundos, CancellationToken ct = default)
+    {
+        string C(string propiedad) => ConsultasAgregadas.Columna<LecturaSignos>(db, propiedad);
+        // El orden de las variables es el de GrupoLecturas: tres columnas (promedio, mínimo, máximo) por variable.
+        var variables = new[] { nameof(LecturaSignos.Fc), nameof(LecturaSignos.Fr), nameof(LecturaSignos.Spo2), nameof(LecturaSignos.Temperatura), nameof(LecturaSignos.Pas), nameof(LecturaSignos.Pad) }
+            .Select(v => $"round(avg({C(v)})::numeric, 1), min({C(v)})::numeric, max({C(v)})::numeric");
+        var sql = $"""
+            SELECT {ConsultasAgregadas.InicioDeGrupo(C(nameof(LecturaSignos.MedidoEn)))} AS inicio, count(*)::int,
+                   {string.Join(", ", variables)}, bool_or({C(nameof(LecturaSignos.Caida))})
+            FROM {ConsultasAgregadas.Tabla<LecturaSignos>(db)}
+            WHERE {C(nameof(LecturaSignos.HospitalizacionId))} = @hospitalizacion
+              AND {C(nameof(LecturaSignos.MedidoEn))} >= @desde AND {C(nameof(LecturaSignos.MedidoEn))} <= @hasta
+            GROUP BY 1
+            ORDER BY 1
+            """;
+        return await ConsultasAgregadas.LeerAsync(db, sql,
+            l => new GrupoLecturas(
+                l.GetDateTime(0), l.GetInt32(1),
+                ConsultasAgregadas.Estadistica(l, 2), ConsultasAgregadas.Estadistica(l, 5), ConsultasAgregadas.Estadistica(l, 8),
+                ConsultasAgregadas.Estadistica(l, 11), ConsultasAgregadas.Estadistica(l, 14), ConsultasAgregadas.Estadistica(l, 17),
+                l.GetBoolean(20)),
+            ct,
+            new Npgsql.NpgsqlParameter("hospitalizacion", hospitalizacionId), new Npgsql.NpgsqlParameter("desde", desde),
+            new Npgsql.NpgsqlParameter("hasta", hasta), new Npgsql.NpgsqlParameter("segundos", segundos));
+    }
+
+    public async Task<ExtremosSignos> ObtenerExtremosAsync(Guid hospitalizacionId, CancellationToken ct = default)
+    {
+        string C(string propiedad) => ConsultasAgregadas.Columna<LecturaSignos>(db, propiedad);
+        // El orden de las variables es el de ExtremosSignos: tres columnas (mínimo, máximo, cantidad) por variable.
+        var variables = new[] { nameof(LecturaSignos.Fc), nameof(LecturaSignos.Fr), nameof(LecturaSignos.Spo2), nameof(LecturaSignos.Temperatura), nameof(LecturaSignos.Pas), nameof(LecturaSignos.Pad) }
+            .Select(v => $"min({C(v)})::numeric, max({C(v)})::numeric, count({C(v)})::int");
+        var sql = $"""
+            SELECT {string.Join(", ", variables)}
+            FROM {ConsultasAgregadas.Tabla<LecturaSignos>(db)}
+            WHERE {C(nameof(LecturaSignos.HospitalizacionId))} = @hospitalizacion
+            """;
+        var filas = await ConsultasAgregadas.LeerAsync(db, sql,
+            l => new ExtremosSignos(
+                ConsultasAgregadas.Rango(l, 0), ConsultasAgregadas.Rango(l, 3), ConsultasAgregadas.Rango(l, 6),
+                ConsultasAgregadas.Rango(l, 9), ConsultasAgregadas.Rango(l, 12), ConsultasAgregadas.Rango(l, 15)),
+            ct,
+            new Npgsql.NpgsqlParameter("hospitalizacion", hospitalizacionId));
+        return filas.Single();
+    }
+
     public void Agregar(LecturaSignos lectura) => db.Lecturas.Add(lectura);
 }
 

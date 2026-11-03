@@ -91,7 +91,8 @@ internal static class ConfiguracionTelemetria
 
     /// <summary>
     /// Sección <c>Alertas</c>: <c>Alertas__SegundosSinSenal</c> (180), <c>Alertas__Escalamiento__MinutosAlta</c> (5),
-    /// <c>Alertas__Escalamiento__MinutosMedia</c> (15) y <c>Alertas__SegundosVigilancia</c> (30; 0 apaga el vigilante).
+    /// <c>Alertas__Escalamiento__MinutosMedia</c> (15), <c>Alertas__SegundosVigilancia</c> (30; 0 apaga el vigilante) y
+    /// <c>Alertas__MinutosEsperaTrasAtender</c> (30; 0 la desactiva).
     /// </summary>
     public static OpcionesAlertas CargarOpcionesAlertas(IConfiguration configuration)
     {
@@ -102,7 +103,10 @@ internal static class ConfiguracionTelemetria
             new ReglasEscalamiento(
                 TimeSpan.FromMinutes((double)Numero(escalamiento, "MinutosAlta", 5, minimo: 0)),
                 TimeSpan.FromMinutes((double)Numero(escalamiento, "MinutosMedia", 15, minimo: 0))),
-            TimeSpan.FromSeconds((double)Numero(s, "SegundosVigilancia", 30, minimo: 0)));
+            TimeSpan.FromSeconds((double)Numero(s, "SegundosVigilancia", 30, minimo: 0)))
+        {
+            EsperaTrasAtender = TimeSpan.FromMinutes((double)Numero(s, "MinutosEsperaTrasAtender", 30, minimo: 0)),
+        };
     }
 
     /// <summary>

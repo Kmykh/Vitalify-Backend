@@ -13,6 +13,36 @@ internal sealed class RepositorioHospitalizaciones(TransaccionalDbContext db) : 
     public Task<Hospitalizacion?> ObtenerActivaDePacienteAsync(Guid pacienteId, CancellationToken ct = default) =>
         db.Hospitalizaciones.SingleOrDefaultAsync(h => h.PacienteId == pacienteId && h.Estado == EstadoHospitalizacion.Activa, ct);
 
+    public Task<Hospitalizacion?> ObtenerPorIdAsync(Guid hospitalizacionId, CancellationToken ct = default) =>
+        db.Hospitalizaciones.AsNoTracking().SingleOrDefaultAsync(h => h.Id == hospitalizacionId, ct);
+
+    public Task<Hospitalizacion?> ObtenerUltimaDePacienteAsync(Guid pacienteId, CancellationToken ct = default) =>
+        db.Hospitalizaciones.AsNoTracking()
+            .Where(h => h.PacienteId == pacienteId)
+            .OrderByDescending(h => h.Estado == EstadoHospitalizacion.Activa).ThenByDescending(h => h.IngresoEn)
+            .FirstOrDefaultAsync(ct);
+
+    public async Task<IReadOnlyList<EpisodioLectura>> ListarEpisodiosAsync(Guid pacienteId, CancellationToken ct = default) =>
+        await (from h in db.Hospitalizaciones.AsNoTracking()
+               where h.PacienteId == pacienteId
+               join c in db.Camas on h.CamaId equals c.Id
+               join s in db.Servicios on c.ServicioId equals s.Id
+               orderby h.IngresoEn descending
+               select new EpisodioLectura(
+                   h.Id, h.PacienteId, h.Estado, h.IngresoEn, h.EgresoEn, h.MotivoEgreso, h.ObservacionEgreso, h.DiagnosticoIngreso,
+                   h.EscalaSpo2, c.Id, c.Codigo, s.Id, s.Codigo, s.Nombre))
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<SensorEpisodioLectura>> ListarSensoresAsync(IReadOnlyCollection<Guid> hospitalizaciones, CancellationToken ct = default) =>
+        hospitalizaciones.Count == 0
+            ? []
+            : await (from a in db.AsignacionesDispositivo.AsNoTracking()
+                     where hospitalizaciones.Contains(a.HospitalizacionId)
+                     join d in db.Dispositivos on a.DispositivoId equals d.Id
+                     orderby a.AsignadoEn
+                     select new SensorEpisodioLectura(a.HospitalizacionId, d.Id, d.Codigo, a.AsignadoEn, a.LiberadoEn, a.MotivoLiberacion))
+                .ToListAsync(ct);
+
     public Task<bool> CamaOcupadaAsync(Guid camaId, CancellationToken ct = default) =>
         db.Hospitalizaciones.AnyAsync(h => h.CamaId == camaId && h.Estado == EstadoHospitalizacion.Activa, ct);
 

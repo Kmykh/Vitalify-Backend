@@ -84,12 +84,18 @@ internal sealed class RepositorioAlertas(TransaccionalDbContext db) : IRepositor
         return new Pagina<AlertaConCama>(filas.Select(x => new AlertaConCama(x.Alerta, x.Cama)).ToList(), pagina, tamano, total);
     }
 
-    public async Task<IReadOnlyList<AlertaConCama>> ListarDePacienteAsync(Guid pacienteId, Guid servicioId, CancellationToken ct = default) =>
-        (await ConCama().Where(x => x.Alerta.PacienteId == pacienteId && x.Alerta.ServicioId == servicioId)
-            .OrderByDescending(x => x.Alerta.CreadaEn)
+    public async Task<IReadOnlyList<AlertaConCama>> ListarDeHospitalizacionAsync(Guid hospitalizacionId, CancellationToken ct = default) =>
+        (await ConCama().Where(x => x.Alerta.HospitalizacionId == hospitalizacionId)
+            .OrderByDescending(x => x.Alerta.CreadaEn).ThenBy(x => x.Alerta.Id)
             .ToListAsync(ct))
         .Select(x => new AlertaConCama(x.Alerta, x.Cama))
         .ToList();
+
+    public Task<AlertaClinica?> ObtenerUltimaAtendidaAsync(Guid hospitalizacionId, TipoAlerta tipo, CancellationToken ct = default) =>
+        db.Alertas.AsNoTracking()
+            .Where(a => a.HospitalizacionId == hospitalizacionId && a.Tipo == tipo && a.Estado == EstadoAlerta.Atendida)
+            .OrderByDescending(a => a.AtendidaEn)
+            .FirstOrDefaultAsync(ct);
 
     public async Task<IReadOnlyList<AlertaConCama>> ListarParaEntregaAsync(
         IReadOnlyCollection<Guid> hospitalizaciones, DateTime atendidasDesde, CancellationToken ct = default) =>
