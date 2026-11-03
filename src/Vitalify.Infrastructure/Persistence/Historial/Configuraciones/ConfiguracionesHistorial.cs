@@ -6,8 +6,8 @@ using Vitalify.Domain.Telemetria;
 namespace Vitalify.Infrastructure.Persistence.Historial.Configuraciones;
 
 /// <summary>
-/// Pensada para ser hypertable de TimescaleDB (fase 7): la clave primaria incluye la columna de tiempo y, además,
-/// deduplica los reenvíos de MQTT (QoS 1).
+/// La clave primaria incluye la columna de tiempo: deduplica los reenvíos de MQTT (QoS 1) y, si el historial pasara a
+/// TimescaleDB, la tabla podría ser una hypertable sin cambiar la clave.
 /// </summary>
 internal sealed class ConfiguracionLecturaSignos : IEntityTypeConfiguration<LecturaSignos>
 {

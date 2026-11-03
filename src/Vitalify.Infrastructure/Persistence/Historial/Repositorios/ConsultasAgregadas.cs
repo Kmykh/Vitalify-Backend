@@ -10,8 +10,8 @@ namespace Vitalify.Infrastructure.Persistence.Historial.Repositorios;
 
 /// <summary>
 /// Agregaciones por intervalo de tiempo en SQL. EF Core no traduce <c>date_bin</c>, así que el grupo se calcula con
-/// <c>floor(epoch / segundos)</c>: es PostgreSQL estándar y funciona igual en TimescaleDB (donde podría cambiarse por
-/// <c>time_bucket</c>). Las tablas y columnas salen del modelo de EF, no se escriben a mano; los valores van siempre
+/// <c>floor(epoch / segundos)</c>: es PostgreSQL estándar (si el historial pasara a TimescaleDB, funcionaría igual o
+/// podría cambiarse por <c>time_bucket</c>). Las tablas y columnas salen del modelo de EF, no se escriben a mano; los valores van siempre
 /// como parámetros.
 /// </summary>
 internal static class ConsultasAgregadas

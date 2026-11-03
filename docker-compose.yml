@@ -16,6 +16,5 @@ services:
       - .env
     restart: unless-stopped
 
-  # El broker MQTT de los wearables vive en el proyecto IoT (IOT/tesis_V01/broker).
-  # Fase 7: aquí se agregará `timescaledb` (historial de signos vitales, reemplaza a Supabase
-  # para HistorialDbContext).
+  # El broker MQTT de los wearables vive en el proyecto IoT (IOT/tesis_V01/broker). La base es Supabase (las dos
+  # cadenas de conexión del .env). Para producción: docker-compose.prod.yml y docs/despliegue.md.

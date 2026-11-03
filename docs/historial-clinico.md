@@ -43,7 +43,7 @@ Cuando cambia el puntaje de un paciente (HU18 E2), el dashboard recibe `riesgoAc
   | Signos | `1m`, `5m`, `15m`, `1h` |
   | Riesgo | `5m`, `15m`, `1h` (una evaluación cada ~10 s; un minuto no resume nada) |
 
-- **Cálculo en la base.** Lo agregado se calcula con SQL, con `floor(epoch / segundos)`. EF Core 8 no traduce `date_bin`. Es PostgreSQL estándar y funciona igual en TimescaleDB.
+- **Cálculo en la base.** Lo agregado se calcula con SQL, con `floor(epoch / segundos)`. EF Core 8 no traduce `date_bin`. Es PostgreSQL estándar: si el historial pasara a TimescaleDB, funcionaría igual.
 - **Quién lo lee.** Cualquier médico o enfermera (`PersonalClinico`), aunque el paciente sea de otro servicio, porque pudo cambiar de servicio. Cada consulta queda auditada como `ConsultaHistorialPaciente`, con el id del paciente y del episodio: historial, resumen, alertas, observaciones, notas y versiones. El administrador recibe 403.
 
 ## Endpoints del historial

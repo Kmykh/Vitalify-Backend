@@ -7,7 +7,7 @@ namespace Vitalify.Application.Telemetria;
 
 /// <summary>
 /// Interpreta el JSON que publica el firmware (<c>docs/contrato-telemetria.md</c>). Lo usan todos los adaptadores
-/// de entrada (endpoint de desarrollo y, en la fase 7, MQTT), para que el contrato se interprete en un solo lugar.
+/// de entrada (endpoint de desarrollo, simulador y MQTT), para que el contrato se interprete en un solo lugar.
 /// </summary>
 public static class MensajeTelemetria
 {

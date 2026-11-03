@@ -4,7 +4,7 @@ using Vitalify.Domain.Telemetria;
 
 namespace Vitalify.Application.Puertos;
 
-/// <summary>Historial de lecturas (esquema <c>vitalify_historial</c>; en la fase 7, TimescaleDB).</summary>
+/// <summary>Historial de lecturas (esquema <c>vitalify_historial</c>).</summary>
 public interface IRepositorioLecturas
 {
     Task<bool> ExisteAsync(string codigoDispositivo, DateTime medidoEn, CancellationToken ct = default);

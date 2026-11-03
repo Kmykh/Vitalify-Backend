@@ -250,4 +250,4 @@ El CI (`.github/workflows/ci.yml`) ejecuta restore, build y todas las pruebas, i
 | 4    | Cálculo de NEWS2 y MEWS con el wearable real por MQTT |
 | 5    | Vinculación por QR, comandos al wearable y asistente de toma manual |
 | 6    | Servicios y turnos, alertas clínicas con escalamiento, SignalR, push (FCM) y entrega de turno |
-| 7    | A: historial del paciente para el médico, notas clínicas y auditoría (este estado) · B: TimescaleDB y despliegue |
+| 7    | A: historial del paciente para el médico, notas clínicas y auditoría · B: producción con Supabase y Mosquitto con TLS (este estado) |

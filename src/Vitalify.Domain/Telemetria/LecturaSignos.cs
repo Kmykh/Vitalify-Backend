@@ -5,7 +5,7 @@ namespace Vitalify.Domain.Telemetria;
 /// <summary>
 /// Una lectura aceptada en el historial. Se identifica por <c>(CodigoDispositivo, MedidoEn)</c>, lo que la hace
 /// idempotente ante los reenvíos de MQTT (QoS 1). Guarda los ids del paciente y la hospitalización como valores:
-/// el historial vive en otro esquema (y en la fase 7 en otra base) y no tiene claves foráneas.
+/// el historial vive en otro esquema (y podría pasar a otra base) y no tiene claves foráneas.
 /// </summary>
 public sealed class LecturaSignos
 {

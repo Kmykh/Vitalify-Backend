@@ -7,9 +7,10 @@ namespace Vitalify.Infrastructure.Persistence.Historial;
 /// <summary>
 /// Historial clínico: lecturas, estado actual por hospitalización, incidencias de telemetría, observaciones del
 /// personal clínico y evaluaciones de riesgo (NEWS2/MEWS).
-/// En la fase 7 se moverá a TimescaleDB: por eso tiene su propia cadena de conexión
-/// (<c>ConnectionStrings:Historial</c>), no usa nada propio de Supabase y no tiene claves foráneas hacia el
-/// esquema transaccional (guarda los ids como valores).
+/// Vive en Supabase, en su propio esquema, con su propia cadena de conexión (<c>ConnectionStrings:Historial</c>). No usa
+/// nada propio de Supabase y no tiene claves foráneas hacia el esquema transaccional (guarda los ids como valores): si
+/// algún día crece más de lo que admite el plan, puede pasar a otra base (por ejemplo TimescaleDB) cambiando solo esa
+/// cadena.
 /// </summary>
 public class HistorialDbContext(DbContextOptions<HistorialDbContext> options) : DbContext(options)
 {

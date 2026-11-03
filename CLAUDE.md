@@ -14,7 +14,7 @@ Se usa [Conventional Commits](https://www.conventionalcommits.org/es/) en españ
 
 ## Fases
 
-0 base · 1 usuarios, JWT y RBAC · 2 pacientes y sensores · 3 ingesta simulada · 4 NEWS2/MEWS con el wearable real · 5 vinculación por QR y toma manual · 6 alertas, turnos y notificaciones (SignalR y push) · 7 A: historial del paciente, notas clínicas y auditoría; B: TimescaleDB y despliegue.
+0 base · 1 usuarios, JWT y RBAC · 2 pacientes y sensores · 3 ingesta simulada · 4 NEWS2/MEWS con el wearable real · 5 vinculación por QR y toma manual · 6 alertas, turnos y notificaciones (SignalR y push) · 7 A: historial del paciente, notas clínicas y auditoría; B: producción con Supabase y Mosquitto con TLS.
 
 Hechas:
 - Fase 1 (HU01 a HU04): registro, login JWT, RBAC y cierre de sesión.
@@ -26,7 +26,7 @@ Hechas:
 - Fase 6 (HU15, HU16, HU20, HU21 en el backend y HU23): servicios y turnos, alertas clínicas con escalamiento, SignalR, push por FCM y entrega de turno; además, el rechazo de lecturas anteriores a la vinculación y la vigencia de la toma según NEWS2. Ver la sección de la fase 6.
 - Fase 7, parte A (HU19, HU22 y el backend de HU17 y HU18): historial del paciente para el médico, notas clínicas con versiones, consulta de la auditoría, monitoreados ordenados por riesgo y espera tras atender una alerta de riesgo (AL-E9). Ver la sección de la fase 7.
 
-Falta la parte B de la fase 7 (TimescaleDB y despliegue). Los avisos de la fase 5 **no** crean alertas; la preocupación clínica sí (fase 6). **No usar datos simulados para verificar lo que ya puede verificarse con el wearable real.**
+Falta la parte B de la fase 7 (producción con Supabase y Mosquitto con TLS). **TimescaleDB ya no se usa**: el historial se queda en Supabase. Los avisos de la fase 5 **no** crean alertas; la preocupación clínica sí (fase 6). **No usar datos simulados para verificar lo que ya puede verificarse con el wearable real.**
 
 ## Comandos
 
@@ -86,9 +86,9 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
 - Un índice con nombre propio debe llevar `.HasDatabaseName(...)`. `HasIndex(expr, nombre)` solo nombra el índice en el modelo de EF: sin `HasDatabaseName`, la convención le pone el nombre por defecto y choca con otros índices sobre la misma columna.
 - Los filtros de `HasFilter` son SQL literal: se escriben con los nombres de columna en snake_case (`estado = 'Activa'`, `liberado_en IS NULL`).
 - Enums guardados como texto (`HasConversion<string>()`). Ninguna clave foránea borra en cascada los datos clínicos (`Restrict`).
-- **`HistorialDbContext` pasará a TimescaleDB en la fase 7.** Solo cambiará su cadena de conexión y se agregará una migración. Por eso no debe usar nada propio de Supabase y los casos de uso deben acceder al historial por sus propios puertos (`IRepositorioLecturas`, `IRepositorioEstadoSignos`, `IRepositorioIncidencias`, `IUnidadDeTrabajoHistorial`).
+- **`HistorialDbContext` se queda en Supabase** (decisión de la fase 7: TimescaleDB ya no se usa). Podría pasar a otra base, por ejemplo TimescaleDB, cambiando solo `ConnectionStrings__Historial`. Por eso no debe usar nada propio de Supabase y los casos de uso deben acceder al historial por sus propios puertos (`IRepositorioLecturas`, `IRepositorioEstadoSignos`, `IRepositorioIncidencias`, `IUnidadDeTrabajoHistorial`).
   - No hay claves foráneas entre esquemas: el historial guarda `hospitalizacion_id`, `paciente_id` y `codigo_dispositivo` como valores.
-  - `lectura_signos` tiene la clave `(codigo_dispositivo, medido_en)`, que incluye la columna de tiempo, como exige una hypertable.
+  - `lectura_signos` tiene la clave `(codigo_dispositivo, medido_en)`, que incluye la columna de tiempo (como exigiría una hypertable).
   - Migraciones de `HistorialDbContext`: `Inicial`, `Fase3_Telemetria`, `Fase4_MotorClinico` (`observacion_enfermeria` y `evaluacion_riesgo`) `Fase5_TomaManual` (columnas opcionales del asistente; `checklist_pa`, `lecturas_pa` y `contexto` son `jsonb` con `ConversoresJson`) y `Fase6_VigenciaToma` (`observacion_enfermeria.vigente_hasta` y `evaluacion_riesgo.proxima_toma_manual_en`).
 - `CadenaDeConexion.Obtener` lee la cadena y acepta tanto el formato clave=valor de Npgsql como una URI `postgresql://`, que convierte agregando `SSL Mode=Require`. En ambos formatos usa `Maximum Pool Size=5` si la cadena no lo fija. El pool es pequeño porque el pooler gratuito de Supabase admite pocas conexiones.
 - `FabricasDeDiseno.cs` tiene los `IDesignTimeDbContextFactory` que usa `dotnet ef`. Cargan el `.env` igual que la API.
@@ -264,7 +264,7 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
   - `EpisodiosPaciente.ElegirAsync` elige el episodio: `hospitalizacionId` (debe ser del paciente, si no 404 `hospitalizacion-no-encontrada`) o la activa, o la última (`paciente-sin-hospitalizaciones` si nunca estuvo).
   - `VentanaHistorial` (dominio) resuelve el rango: por defecto el episodio completo; sin `agrupar`, máximo 7 días (400; sin rango, el error va en `agrupar`); agrupado, el episodio completo.
   - Las observaciones no tienen tope y empiezan `FrecuenciaTomaManual.TopeVigencia` (12 h) antes del ingreso, porque una toma puede registrarse con su hora real.
-- **Agrupar** (`IntervaloAgrupacion`): signos `1m|5m|15m|1h`, riesgo `5m|15m|1h`. Se agrega en SQL con `ConsultasAgregadas` (`floor(epoch / segundos)`, ADO.NET con parámetros; tablas y columnas salen del modelo de EF). EF 8 no traduce `date_bin`. Es PostgreSQL estándar, así que vale para TimescaleDB.
+- **Agrupar** (`IntervaloAgrupacion`): signos `1m|5m|15m|1h`, riesgo `5m|15m|1h`. Se agrega en SQL con `ConsultasAgregadas` (`floor(epoch / segundos)`, ADO.NET con parámetros; tablas y columnas salen del modelo de EF). EF 8 no traduce `date_bin`. Es PostgreSQL estándar (valdría también en TimescaleDB).
 - **Acceso y auditoría:**
   - El historial lo lee `PersonalClinico` de **cualquier** servicio.
   - `AuditoriaHistorial` registra cada consulta (hospitalizaciones, signos, riesgo, observaciones, resumen, alertas del paciente, notas y versiones) como `ConsultaHistorialPaciente`, con ids.
