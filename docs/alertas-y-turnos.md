@@ -102,7 +102,7 @@ Si el servicio no tiene médicos activos, se avisa a todos los médicos activos.
 **Cierre:**
 - `riesgo`, `caida` y `preocupacion-clinica` **no se cierran solas**: las cierra una persona.
 - `sin-senal` se cierra sola cuando vuelve una lectura, y `toma-pendiente`, cuando se registra la toma. En ambos casos queda `nota_atencion = "Resuelta automáticamente"`.
-- Si una alerta se atiende y el paciente sigue en riesgo, la evaluación siguiente abre una alerta nueva. Así queda registrado que el problema continúa.
+- **Espera tras atender (fase 7):** al atender una alerta de `riesgo`, durante `Alertas__MinutosEsperaTrasAtender` (30 min) no se abre otra del mismo tipo, salvo que **suba** la prioridad o el nivel respecto de la atendida. Al terminar la espera, si el paciente sigue en el mismo nivel, sí se abre una nueva: el problema continúa. Sin esta regla, la evaluación siguiente (10 s después) reabría la alerta mientras el equipo ya estaba actuando. Con 0 se desactiva.
 
 **Dónde se engancha:**
 - Las alertas de riesgo y de preocupación salen del evento `RiesgoEvaluado`, que se publica al guardar cada evaluación (de una lectura o de una observación).
@@ -142,7 +142,7 @@ Cuando empieza un turno (el vigilante detecta los turnos que empezaron desde su 
   - Por defecto devuelve las abiertas del servicio del usuario, ordenadas por prioridad y antigüedad.
   - `estado` es `abiertas` (por defecto), `pendiente`, `en-atencion`, `atendida` o `todas`.
   - Otro `servicioId` da 403.
-- `GET /api/v1/pacientes/{id}/alertas`: todas las alertas del paciente en el servicio del usuario, de la más reciente a la más antigua, con los tiempos de respuesta en segundos (`segundosHastaTomada` y `segundosHastaAtendida`, desde la creación) y la cantidad de notificaciones.
+- `GET /api/v1/pacientes/{id}/alertas?hospitalizacionId=`: las alertas de un episodio (por defecto el activo o el último), de la más reciente a la más antigua, con los tiempos de respuesta en segundos (`segundosHastaTomada` y `segundosHastaAtendida`, desde la creación) y la cantidad de notificaciones. Desde la fase 7 es parte del historial: la lee cualquier servicio y queda auditada (ver [historial-clinico.md](historial-clinico.md)).
 - `GET /api/v1/pacientes/monitoreados` agrega `alertasAbiertas`: `{ "cantidad": 1, "prioridadMaxima": "alta" }`.
 
 ## Notificaciones
@@ -227,6 +227,7 @@ Es la única respuesta de esta fase que trae el nombre del paciente, porque es u
 | `Alertas__Escalamiento__MinutosAlta` | 5 | Escalamiento de las alertas altas |
 | `Alertas__Escalamiento__MinutosMedia` | 15 | Escalamiento de las alertas medias |
 | `Alertas__SegundosVigilancia` | 30 | Intervalo del vigilante (0 lo apaga) |
+| `Alertas__MinutosEsperaTrasAtender` | 30 | Tras atender una alerta de riesgo, minutos sin abrir otra del mismo nivel (0 la desactiva) |
 | `Clinico__MinutosToleranciaToma` | 30 | Tolerancia de la toma manual |
 | `Push__Habilitado` | `false` | Envía el push por FCM; si está apagado, solo va al log |
 | `Push__RutaCredencialesFirebase` | — | JSON de la cuenta de servicio, fuera del repositorio |

@@ -35,12 +35,15 @@ Control de acceso basado en roles (RBAC) de Vitalify. Cada rol tiene permisos di
 | Regenerar el QR de un sensor | `POST /dispositivos/{id}/qr` | **G** | **G** | **G** | `AdministradorOPersonalClinico` (no devuelve el código: solo lo muestra el wearable) |
 | Pacientes monitoreados (HU07), con última lectura y señal | `GET /pacientes/monitoreados` | — | L | L | `PersonalClinico` |
 | Signos vitales actuales (HU10, HU11 y HU12) | `GET /pacientes/{id}/signos/actual` | — | L | L | `PersonalClinico` |
-| Historial de lecturas del wearable (gráficos del dashboard) | `GET /pacientes/{id}/signos/historial` | — | L | L | `PersonalClinico` |
+| Historial del paciente (HU19, fase 7): episodios, signos, riesgo, tomas manuales y resumen | `GET /pacientes/{id}/hospitalizaciones`, `.../signos/historial`, `.../riesgo/historial`, `.../observaciones`, `.../resumen` | — | L | L | `PersonalClinico`, de cualquier servicio; cada consulta se audita (`ConsultaHistorialPaciente`) |
+| Notas clínicas (HU22, fase 7) | `POST /pacientes/{id}/notas`, `PUT /notas/{id}` · `GET /pacientes/{id}/notas`, `GET /notas/{id}/versiones` | — | **G** | **G** | `PersonalClinico`; solo el autor corrige y solo dentro de las 24 h; no hay borrado |
+| Consulta de la auditoría de seguridad (fase 7) | `GET /auditoria` | L | — | — | `SoloAdministrador`; solo acciones e ids, sin el texto del detalle |
 | Riesgo NEWS2 y MEWS (fase 4) | `GET /pacientes/{id}/riesgo` | — | L | L | `PersonalClinico` |
 | Toma manual (asistente: presión, conciencia, oxígeno, FR, contexto, preocupación) | `POST /pacientes/{id}/observaciones` | — | **G** | **G** | `PersonalClinico` |
 | Guía de toma manual | `GET /guias/toma-manual` | — | L | L | `PersonalClinico` |
 | Escala de SpO2 del paciente | `PUT /pacientes/{id}/escala-spo2` | — | **G** | — | `SoloMedico` |
-| Alertas clínicas de su servicio (fase 6) | `GET /alertas`, `GET /pacientes/{id}/alertas` · `POST /alertas/{id}/tomar`, `POST /alertas/{id}/atender` | — | **A** | **A** | `PersonalClinico`, y solo las del servicio del usuario (si no, 403 `alerta-de-otro-servicio`) |
+| Alertas clínicas de su servicio (fase 6) | `GET /alertas` · `POST /alertas/{id}/tomar`, `POST /alertas/{id}/atender` | — | **A** | **A** | `PersonalClinico`, y solo las del servicio del usuario (si no, 403 `alerta-de-otro-servicio`) |
+| Alertas de un episodio del paciente (historial) | `GET /pacientes/{id}/alertas?hospitalizacionId=` | — | L | L | `PersonalClinico`, de cualquier servicio; se audita como `ConsultaHistorialPaciente` |
 | Entrega de turno (reporte de enfermería) | `GET /servicios/{id}/entrega-turno` | — | L | L | `PersonalClinico`, solo de su servicio |
 | Eventos en tiempo real (SignalR) | `/hubs/monitoreo` | — | L | L | `PersonalClinico` (el administrador no puede conectarse) |
 | Token push del celular | `POST /notificaciones/dispositivos`, `DELETE /notificaciones/dispositivos` | — | **G** | **G** | `PersonalClinico`, cada uno solo los suyos |
@@ -67,6 +70,10 @@ Notas:
 - **Servicios y turnos (fase 6):**
   - Cada enfermera y cada médico pertenece a un servicio (`usuario.servicio_id`). Sin servicio, las alertas y la entrega de turno responden 403 `usuario-sin-servicio`.
   - El administrador carga la planilla, que solo contiene ids de usuarios y letras. Se audita como `ProgramacionCargada` y la asignación de servicio como `ServicioAsignado`.
+- **Historial y notas (fase 7):**
+  - El historial lo lee un médico o una enfermera de **cualquier** servicio, porque el paciente pudo cambiar de servicio. Cada consulta queda como `ConsultaHistorialPaciente`, con el id del paciente y del episodio.
+  - Las notas las escriben el médico y la enfermera. Solo el autor las corrige, dentro de las 24 h, y el texto anterior se conserva como versión (NTS 139). Se audita `NotaRegistrada` y `NotaEditada`, sin el texto.
+  - `GET /auditoria` muestra al administrador la acción, el usuario, la fecha, la IP y los ids que menciona cada registro. El detalle no sale, porque puede llevar el motivo de un egreso o el correo de un login fallido.
 - **Alertas (fase 6):**
   - Una enfermera o un médico toma y atiende las alertas de **su** servicio. Si otra persona ya la tomó, tomarla da 409 `alerta-tomada-por-otro`; atenderla sí se permite a cualquiera del servicio.
   - Se audita `AlertaTomada` y `AlertaAtendida` con el id de la alerta. La nota de atención queda en la alerta, no en la auditoría.
@@ -76,16 +83,13 @@ Notas:
 
 La versión de la fase 1 proponía que el administrador gestionara la admisión de pacientes. Se corrigió para que coincida con el backlog: la **enfermera** registra el ingreso, vincula el sensor y da el egreso, y el administrador queda **sin acceso** a los datos de pacientes.
 
-## Módulos futuros (permisos previstos)
+## Módulos previstos y fuera de alcance
 
-Se confirmarán al implementar cada fase.
+Todo lo que preveía esta sección ya está implementado (tiempo real, alertas, historial de puntajes, notas clínicas y consulta de la auditoría), salvo un módulo que queda fuera de alcance:
 
-| Módulo | Fase | Administrador | Médico | Enfermera | Política prevista |
-|---|:---:|:---:|:---:|:---:|---|
-| Historial de puntajes de riesgo | 7 | — | L | L | `PersonalClinico` |
-| Observaciones clínicas (notas) | 7 | — | **G** | **G** | `PersonalClinico`. Cada uno edita solo sus propias notas |
-| Configuración de umbrales de alerta por paciente (la escala de SpO2 ya está en la fase 5) | 7 | — | **G** | L | `SoloMedico` para escribir, `PersonalClinico` para leer |
-| Consulta de la auditoría de seguridad | — | L | — | — | `SoloAdministrador` |
+| Módulo | Decisión | Motivo |
+|---|---|---|
+| Configuración de umbrales de alerta por paciente | Fuera de alcance | NEWS2 (RCP 2017) y MEWS (Subbe 2001) son escalas estandarizadas y validadas: cambiar sus cortes por paciente invalida el puntaje y su respuesta clínica. Lo personalizable ya existe: la escala de SpO2 del paciente (fase 5, `SoloMedico`) |
 
 ## Cómo se aplica
 
@@ -98,7 +102,7 @@ Se confirmarán al implementar cada fase.
 - **Trazabilidad:**
   - Cada 403 queda en `vitalify.auditoria` como `AccesoDenegado`, con el usuario, la ruta y la IP.
   - Las operaciones sobre pacientes se auditan con ids, **sin nombres ni números de documento**: `PacienteIngresado`, `PacienteActualizado`, `PacienteEgresado`, `DispositivoVinculado`, `DispositivoLiberado` y `ConsultaFichaPaciente`.
-  - Desde la fase 6 también `ProgramacionCargada`, `ServicioAsignado`, `AlertaTomada` y `AlertaAtendida`.
+  - Desde la fase 6 también `ProgramacionCargada`, `ServicioAsignado`, `AlertaTomada` y `AlertaAtendida`; desde la fase 7, `ConsultaHistorialPaciente`, `NotaRegistrada` y `NotaEditada`.
 
 ## Evidencia (pruebas de integración)
 
@@ -125,5 +129,9 @@ Se confirmarán al implementar cada fase.
 | Una enfermera de otro servicio recibe 403 al ver o tomar una alerta | `AL_E8_UnaEnfermeraDeOtroServicioRecibe403` |
 | Atender exige una nota y queda auditado | `AL_E7_AtenderSinNotaDa400_YConNotaQuedaAtendidaYAuditada` |
 | Sin token o con el del administrador no se puede conectar al hub | `SignalR_SinTokenOConElTokenDelAdministradorNoSePuedeConectar` |
+| Un médico de otro servicio lee el historial y queda auditado | `HU19_E1_UnMedicoDeOtroServicioVeLaLineaDeTiempoDeSignosRiesgoYAlertas_YQuedaAuditado` |
+| El administrador no ve el historial ni las notas | `ElAdministradorNoVeElHistorialNiLasNotasDeUnPaciente` |
+| Solo el autor corrige una nota, dentro de 24 h, y no se borra | `HU22_E2_ElAutorLaCorrigeDentroDe24h_SeConservaLaVersionAnterior_YNadieLaBorra` |
+| La auditoría muestra al administrador solo acciones e ids, sin el motivo del egreso | `LaAuditoriaMuestraAlAdministradorSoloAccionesEIds_SinElMotivoDelEgreso` |
 
-Las pruebas están en `tests/Vitalify.Api.IntegrationTests/` (`HU03ControlDeAccesoTests.cs`, `PermisosFase2Tests.cs`, `HU05RegistroDePacienteTests.cs`, `TelemetriaExtrasTests.cs`, `HU06VinculacionPorQrTests.cs`, `TomaManualTests.cs`, `Fase6AlertasTests.cs` y `Fase6TurnosTests.cs`).
+Las pruebas están en `tests/Vitalify.Api.IntegrationTests/` (`HU03ControlDeAccesoTests.cs`, `PermisosFase2Tests.cs`, `HU05RegistroDePacienteTests.cs`, `TelemetriaExtrasTests.cs`, `HU06VinculacionPorQrTests.cs`, `TomaManualTests.cs`, `Fase6AlertasTests.cs`, `Fase6TurnosTests.cs` y `Fase7HistorialTests.cs`).

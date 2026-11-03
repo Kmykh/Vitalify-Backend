@@ -170,7 +170,8 @@ Los enlaces están en la guía (`GET /api/v1/guias/toma-manual`, sección `fuent
 | `POST /api/v1/pacientes/{id}/observaciones` | Médico o Enfermera | Toma manual del asistente (`oxigeno`, `conciencia`, `presion`, `fr`, `contexto`, `preocupacionClinica`, `versionGuia`, `observadaEn`) o los campos planos de la fase 4. Recalcula el riesgo y lo devuelve |
 | `GET /api/v1/guias/toma-manual` | Médico o Enfermera | Guía versionada del asistente |
 | `PUT /api/v1/pacientes/{id}/escala-spo2` | Médico | Indica la escala de SpO2 del paciente y recalcula el riesgo |
-| `GET /api/v1/pacientes/monitoreados` | Médico o Enfermera | Por paciente, `ultimoNews2`, `ultimoMews`, `nivelRiesgo`, `evaluacionCompleta`, `senal` y `conexionSensor` |
+| `GET /api/v1/pacientes/monitoreados` | Médico o Enfermera | Por paciente, `ultimoNews2`, `ultimoMews`, `nivelRiesgo`, `evaluacionCompleta`, `senal` y `conexionSensor`, de mayor a menor riesgo (HU18) |
+| `GET /api/v1/pacientes/{id}/riesgo/historial` | Médico o Enfermera | Evaluaciones del episodio, o agrupadas (ver [historial-clinico.md](historial-clinico.md)) |
 
 En la observación, `conciencia` puede ser un objeto con las respuestas del asistente o, como en la fase 4, un texto (`Alerta`, `ConfusionNueva`, `RespondeVoz`, `RespondeDolor` o `NoResponde`). `observadaEn` puede ser de hasta 4 h atrás.
 
