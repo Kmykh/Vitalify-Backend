@@ -88,6 +88,31 @@ public sealed class RepositorioHospitalizacionesEnMemoria : IRepositorioHospital
     public Task<Hospitalizacion?> ObtenerActivaDePacienteAsync(Guid pacienteId, CancellationToken ct = default) =>
         Task.FromResult(Hospitalizaciones.SingleOrDefault(h => h.PacienteId == pacienteId && h.EstaActiva));
 
+    public Task<Hospitalizacion?> ObtenerPorIdAsync(Guid hospitalizacionId, CancellationToken ct = default) =>
+        Task.FromResult(Hospitalizaciones.SingleOrDefault(h => h.Id == hospitalizacionId));
+
+    public Task<Hospitalizacion?> ObtenerUltimaDePacienteAsync(Guid pacienteId, CancellationToken ct = default) =>
+        Task.FromResult(Hospitalizaciones.Where(h => h.PacienteId == pacienteId)
+            .OrderByDescending(h => h.EstaActiva).ThenByDescending(h => h.IngresoEn).FirstOrDefault());
+
+    public Task<IReadOnlyList<EpisodioLectura>> ListarEpisodiosAsync(Guid pacienteId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<EpisodioLectura>>((
+            from h in Hospitalizaciones
+            where h.PacienteId == pacienteId
+            join c in Camas.Camas on h.CamaId equals c.Id
+            join s in Servicios.Servicios on c.ServicioId equals s.Id
+            orderby h.IngresoEn descending
+            select new EpisodioLectura(h.Id, h.PacienteId, h.Estado, h.IngresoEn, h.EgresoEn, h.MotivoEgreso, h.ObservacionEgreso,
+                h.DiagnosticoIngreso, h.EscalaSpo2, c.Id, c.Codigo, s.Id, s.Codigo, s.Nombre)).ToList());
+
+    public Task<IReadOnlyList<SensorEpisodioLectura>> ListarSensoresAsync(IReadOnlyCollection<Guid> hospitalizaciones, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<SensorEpisodioLectura>>((
+            from a in Asignaciones
+            where hospitalizaciones.Contains(a.HospitalizacionId)
+            join d in Dispositivos.Dispositivos on a.DispositivoId equals d.Id
+            orderby a.AsignadoEn
+            select new SensorEpisodioLectura(a.HospitalizacionId, d.Id, d.Codigo, a.AsignadoEn, a.LiberadoEn, a.MotivoLiberacion)).ToList());
+
     public Task<bool> CamaOcupadaAsync(Guid camaId, CancellationToken ct = default) => Task.FromResult(Ocupada(camaId));
 
     public bool Ocupada(Guid camaId) => Hospitalizaciones.Any(h => h.CamaId == camaId && h.EstaActiva);

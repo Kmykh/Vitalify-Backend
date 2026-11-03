@@ -63,8 +63,13 @@ public sealed class RepositorioAlertasEnMemoria(RepositorioHospitalizacionesEnMe
         return Task.FromResult(new Pagina<AlertaConCama>(filas.Skip((pagina - 1) * tamano).Take(tamano).ToList(), pagina, tamano, filas.Count));
     }
 
-    public Task<IReadOnlyList<AlertaConCama>> ListarDePacienteAsync(Guid pacienteId, Guid servicioId, CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<AlertaConCama>>(Alertas.Where(a => a.PacienteId == pacienteId && a.ServicioId == servicioId).Select(ConCama).ToList());
+    public Task<IReadOnlyList<AlertaConCama>> ListarDeHospitalizacionAsync(Guid hospitalizacionId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<AlertaConCama>>(Alertas.Where(a => a.HospitalizacionId == hospitalizacionId)
+            .OrderByDescending(a => a.CreadaEn).Select(ConCama).ToList());
+
+    public Task<AlertaClinica?> ObtenerUltimaAtendidaAsync(Guid hospitalizacionId, TipoAlerta tipo, CancellationToken ct = default) =>
+        Task.FromResult(Alertas.Where(a => a.HospitalizacionId == hospitalizacionId && a.Tipo == tipo && a.Estado == EstadoAlerta.Atendida)
+            .OrderByDescending(a => a.AtendidaEn).FirstOrDefault());
 
     public Task<IReadOnlyList<AlertaConCama>> ListarParaEntregaAsync(IReadOnlyCollection<Guid> ids, DateTime atendidasDesde, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<AlertaConCama>>(Alertas

@@ -80,7 +80,67 @@ public sealed class HistorialEnMemoria
         return Task.FromResult(new Pagina<IncidenciaTelemetria>(filtradas.Skip((pagina - 1) * tamano).Take(tamano).ToList(), pagina, tamano, filtradas.Count));
     }
 
+    public Task<IReadOnlyList<GrupoLecturas>> AgruparAsync(Guid hospitalizacionId, DateTime desde, DateTime hasta, int segundos, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<GrupoLecturas>>(Lecturas
+            .Where(l => l.HospitalizacionId == hospitalizacionId && l.MedidoEn >= desde && l.MedidoEn <= hasta)
+            .GroupBy(l => Grupo(l.MedidoEn, segundos))
+            .OrderBy(g => g.Key)
+            .Select(g => new GrupoLecturas(g.Key, g.Count(),
+                Estadistica(g.Select(l => (decimal?)l.Fc)), Estadistica(g.Select(l => (decimal?)l.Fr)), Estadistica(g.Select(l => (decimal?)l.Spo2)),
+                Estadistica(g.Select(l => l.Temperatura)), Estadistica(g.Select(l => (decimal?)l.Pas)), Estadistica(g.Select(l => (decimal?)l.Pad)),
+                g.Any(l => l.Caida)))
+            .ToList());
+
+    public Task<ExtremosSignos> ObtenerExtremosAsync(Guid hospitalizacionId, CancellationToken ct = default)
+    {
+        var de = Lecturas.Where(l => l.HospitalizacionId == hospitalizacionId).ToList();
+        return Task.FromResult(new ExtremosSignos(
+            Rango(de.Select(l => (decimal?)l.Fc)), Rango(de.Select(l => (decimal?)l.Fr)), Rango(de.Select(l => (decimal?)l.Spo2)),
+            Rango(de.Select(l => l.Temperatura)), Rango(de.Select(l => (decimal?)l.Pas)), Rango(de.Select(l => (decimal?)l.Pad))));
+    }
+
+    /// <summary>Como el SQL: <c>floor(epoch / segundos) * segundos</c>.</summary>
+    private static DateTime Grupo(DateTime instante, int segundos) =>
+        DateTime.UnixEpoch.AddSeconds(Math.Floor((instante - DateTime.UnixEpoch).TotalSeconds / segundos) * segundos);
+
+    private static EstadisticaSerie? Estadistica(IEnumerable<decimal?> valores)
+    {
+        var medidos = valores.Where(v => v is not null).Select(v => v!.Value).ToList();
+        return medidos.Count == 0 ? null : new EstadisticaSerie(Math.Round(medidos.Average(), 1, MidpointRounding.AwayFromZero), medidos.Min(), medidos.Max());
+    }
+
+    private static RangoValor? Rango(IEnumerable<decimal?> valores)
+    {
+        var medidos = valores.Where(v => v is not null).Select(v => v!.Value).ToList();
+        return medidos.Count == 0 ? null : new RangoValor(medidos.Min(), medidos.Max(), medidos.Count);
+    }
+
     public void Agregar(EvaluacionRiesgo evaluacion) => _evaluacionesPendientes.Add(evaluacion);
+
+    public Task<IReadOnlyList<EvaluacionRiesgo>> ListarAsync(Guid hospitalizacionId, DateTime desde, DateTime hasta, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<EvaluacionRiesgo>>(Evaluaciones
+            .Where(e => e.HospitalizacionId == hospitalizacionId && e.EvaluadaEn >= desde && e.EvaluadaEn <= hasta)
+            .OrderBy(e => e.EvaluadaEn).ToList());
+
+    Task<IReadOnlyList<GrupoEvaluaciones>> IRepositorioEvaluaciones.AgruparAsync(
+        Guid hospitalizacionId, DateTime desde, DateTime hasta, int segundos, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<GrupoEvaluaciones>>(Evaluaciones
+            .Where(e => e.HospitalizacionId == hospitalizacionId && e.EvaluadaEn >= desde && e.EvaluadaEn <= hasta)
+            .GroupBy(e => Grupo(e.EvaluadaEn, segundos))
+            .OrderBy(g => g.Key)
+            .Select(g =>
+            {
+                var orden = g.OrderBy(e => e.EvaluadaEn).ToList();
+                return new GrupoEvaluaciones(g.Key, orden.Count, orden.Count(e => e.News2Completo && e.MewsCompleto),
+                    orden.Min(e => e.News2Total), orden.Max(e => e.News2Total), orden[^1].News2Total, orden.Max(e => e.News2Nivel),
+                    orden.Min(e => e.MewsTotal), orden.Max(e => e.MewsTotal), orden[^1].MewsTotal, orden.Max(e => e.MewsNivel));
+            })
+            .ToList());
+
+    Task<IReadOnlyList<ObservacionEnfermeria>> IRepositorioObservaciones.ListarAsync(Guid hospitalizacionId, DateTime desde, DateTime hasta, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<ObservacionEnfermeria>>(Observaciones
+            .Where(o => o.HospitalizacionId == hospitalizacionId && o.ObservadaEn >= desde && o.ObservadaEn <= hasta)
+            .OrderByDescending(o => o.ObservadaEn).ToList());
 
     public Task<EvaluacionRiesgo?> ObtenerUltimaAsync(Guid hospitalizacionId, CancellationToken ct = default) =>
         Task.FromResult(Evaluaciones.Where(e => e.HospitalizacionId == hospitalizacionId).OrderByDescending(e => e.EvaluadaEn).FirstOrDefault());

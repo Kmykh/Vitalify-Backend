@@ -165,8 +165,9 @@ public abstract class PruebaApi(FabricaVitalify fabrica)
     protected async Task<HttpClient> ClienteEnfermeraAsync() => (await ClienteConRolAsync("Enfermera")).Cliente;
 
     /// <summary>
-    /// Paciente ingresado con un sensor recién creado y vinculado hace 6 h (según el reloj de la API): la ingesta rechaza
-    /// lo medido antes de la vinculación vigente, y así las pruebas pueden enviar lecturas atrasadas del búfer.
+    /// Paciente ingresado y con un sensor recién creado vinculado hace 6 h (según el reloj de la API): la ingesta rechaza
+    /// lo medido antes de la vinculación vigente, y así las pruebas pueden enviar lecturas atrasadas del búfer. El
+    /// historial empieza en el ingreso, así que el ingreso también es de hace 6 h.
     /// </summary>
     protected async Task<(HttpClient Enfermera, FichaPacienteDto Ficha, DispositivoDto Sensor, CamaDto Cama)> PacienteConSensorAsync()
     {
@@ -174,9 +175,10 @@ public abstract class PruebaApi(FabricaVitalify fabrica)
         var cama = await administrador.CrearCamaAsync();
         var sensor = await administrador.CrearDispositivoAsync();
         var enfermera = await ClienteEnfermeraAsync();
-        var ficha = await enfermera.IngresarPacienteAsync(cama.Id);
+        FichaPacienteDto ficha;
         using (Fabrica.Reloj.Adelantar(-TimeSpan.FromHours(6)))
         {
+            ficha = await enfermera.IngresarPacienteAsync(cama.Id);
             Assert.Equal(HttpStatusCode.OK, (await enfermera.VincularAsync(ficha.Id, sensor.Id)).StatusCode);
         }
 

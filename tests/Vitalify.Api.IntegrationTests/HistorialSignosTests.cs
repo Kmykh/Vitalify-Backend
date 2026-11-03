@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using Vitalify.Api.IntegrationTests.Infraestructura;
-using Vitalify.Application.Telemetria;
+using Vitalify.Application.Historial;
 using static Vitalify.Api.IntegrationTests.Infraestructura.ClienteApi;
 
 namespace Vitalify.Api.IntegrationTests;
@@ -10,7 +10,7 @@ namespace Vitalify.Api.IntegrationTests;
 public class HistorialSignosTests(FabricaVitalify fabrica) : PruebaApi(fabrica)
 {
     [Fact]
-    public async Task SinParametros_DevuelveLasLecturasDeLaUltimaHoraEnOrdenCronologico()
+    public async Task SinParametros_DevuelveLasLecturasDelEpisodioEnOrdenCronologico()
     {
         var (enfermera, ficha, sensor, _) = await PacienteConSensorAsync();
         var administrador = await ClienteAdministradorAsync();
@@ -21,10 +21,11 @@ public class HistorialSignosTests(FabricaVitalify fabrica) : PruebaApi(fabrica)
 
         var historial = (await enfermera.GetFromJsonAsync<HistorialSignosDto>($"/api/v1/pacientes/{ficha.Id}/signos/historial"))!;
 
-        Assert.Equal([ahora.AddMinutes(-20), ahora.AddSeconds(-10)], historial.Lecturas.Select(l => l.MedidoEn));
-        Assert.Equal((78, true), (historial.Lecturas[0].Fc, historial.Lecturas[0].Caida));
-        Assert.Equal((82, 97, 36.8m), (historial.Lecturas[1].Fc, historial.Lecturas[1].Spo2, historial.Lecturas[1].Temperatura));
-        Assert.Null(historial.Lecturas[1].Fr);
+        Assert.Equal([ahora.AddMinutes(-90), ahora.AddMinutes(-20), ahora.AddSeconds(-10)], historial.Lecturas.Select(l => l.MedidoEn));
+        Assert.Equal((78, true), (historial.Lecturas[1].Fc, historial.Lecturas[1].Caida));
+        Assert.Equal((82, 97, 36.8m), (historial.Lecturas[2].Fc, historial.Lecturas[2].Spo2, historial.Lecturas[2].Temperatura));
+        Assert.Null(historial.Lecturas[2].Fr);
+        Assert.Equal(ficha.HospitalizacionActiva!.Id, historial.HospitalizacionId);
     }
 
     [Fact]
@@ -45,8 +46,8 @@ public class HistorialSignosTests(FabricaVitalify fabrica) : PruebaApi(fabrica)
 
     [Theory]
     [InlineData(-1, -2)]
-    [InlineData(-25, 0)]
-    public async Task UnRangoInvertidoODeMasDe24Horas_Devuelve400(int horasDesde, int horasHasta)
+    [InlineData(-169, 0)]
+    public async Task UnRangoInvertidoODeMasDe7DiasSinAgrupar_Devuelve400(int horasDesde, int horasHasta)
     {
         var (enfermera, ficha, _, _) = await PacienteConSensorAsync();
         var ahora = Fabrica.Reloj.AhoraUtc;

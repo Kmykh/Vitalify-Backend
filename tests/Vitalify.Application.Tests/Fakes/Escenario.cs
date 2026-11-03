@@ -1,7 +1,10 @@
 using Vitalify.Application.Alertas;
+using Vitalify.Application.Auditoria;
 using Vitalify.Application.Camas;
 using Vitalify.Application.Clinica;
 using Vitalify.Application.Dispositivos;
+using Vitalify.Application.Historial;
+using Vitalify.Application.Notas;
 using Vitalify.Application.Pacientes;
 using Vitalify.Application.Sesiones;
 using Vitalify.Application.Telemetria;
@@ -57,6 +60,7 @@ public sealed class Escenario
     public OpcionesAlertas OpcionesAlertas { get; set; } = OpcionesAlertas.PorDefecto;
     public CatalogoTurnos Catalogo { get; } = new(CatalogoTurnos.HorariosPorDefecto, TimeZoneInfo.FindSystemTimeZoneById("America/Lima"));
     public LimitadorSignosTiempoReal Limitador { get; } = new();
+    public RepositorioNotasEnMemoria Notas { get; } = new();
 
     public bool TiempoRealFalla { get => TiempoReal.Falla; set => TiempoReal.Falla = value; }
 
@@ -155,7 +159,7 @@ public sealed class Escenario
     public ObtenerSignosActuales ObtenerSignosActuales() =>
         new(Pacientes, Hospitalizaciones, Historial, Presencia, OpcionesTelemetria.PorDefecto, Reloj);
 
-    public ObtenerHistorialSignos ObtenerHistorialSignos() => new(Pacientes, Hospitalizaciones, Historial, Reloj);
+    public ObtenerHistorialSignos ObtenerHistorialSignos() => new(Episodios(), Historial, AuditoriaHistorial(), Reloj);
 
     public EvaluadorRiesgo Evaluador() => new(Historial, Historial, Historial, OpcionesTelemetria.PorDefecto, Clinicas, Reloj);
 
@@ -186,7 +190,7 @@ public sealed class Escenario
 
     public NotificadorAlertas Notificador() => new(TiempoReal, Push, Moviles, UnidadDeTrabajo, Bitacora, Reloj);
 
-    public ServicioAlertas ServicioAlertas() => new(Alertas, Contextos(), Destinatarios(), Notificador(), UnidadDeTrabajo, Bitacora, Reloj);
+    public ServicioAlertas ServicioAlertas() => new(Alertas, Contextos(), Destinatarios(), Notificador(), UnidadDeTrabajo, Bitacora, OpcionesAlertas, Reloj);
 
     public PublicadorRiesgoEvaluado PublicadorRiesgo() =>
         new([new AlertaDeRiesgoAlEvaluar(ServicioAlertas()), new PublicarRiesgoEnTiempoReal(Contextos(), TiempoReal)], Bitacora);
@@ -216,6 +220,38 @@ public sealed class Escenario
             OpcionesTelemetria.PorDefecto, Clinicas, Reloj);
 
     public ListarIncidencias ListarIncidencias() => new(new ListarIncidenciasValidador(), Historial);
+
+    // ---- Fase 7: historial del paciente, notas y auditoría.
+    public EpisodiosPaciente Episodios() => new(Pacientes, Hospitalizaciones);
+
+    public AuditoriaHistorial AuditoriaHistorial() => new(Auditoria, UnidadDeTrabajo, Reloj);
+
+    public DirectorioProfesionales Directorio() => new(Usuarios);
+
+    public PresentadorNotas PresentadorNotas() => new(Directorio());
+
+    public ListarHospitalizacionesPaciente ListarHospitalizaciones() => new(Pacientes, Hospitalizaciones, AuditoriaHistorial());
+
+    public ObtenerHistorialRiesgo ObtenerHistorialRiesgo() => new(Episodios(), Historial, AuditoriaHistorial(), Reloj);
+
+    public ListarObservacionesPaciente ListarObservaciones() => new(Episodios(), Historial, Directorio(), AuditoriaHistorial(), Reloj);
+
+    public ObtenerResumenPaciente ObtenerResumen() =>
+        new(Episodios(), Hospitalizaciones, Historial, Historial, Historial, Alertas, Notas, PresentadorRiesgo(), PresentadorNotas(),
+            AuditoriaHistorial(), Clinicas, Reloj);
+
+    public ListarAlertasPaciente ListarAlertasPaciente() => new(Episodios(), Alertas, AuditoriaHistorial());
+
+    public RegistrarNota RegistrarNota() =>
+        new(new RegistrarNotaValidador(), Pacientes, Hospitalizaciones, Notas, PresentadorNotas(), Auditoria, UnidadDeTrabajo, Reloj);
+
+    public ListarNotas ListarNotas() => new(Episodios(), Notas, PresentadorNotas(), AuditoriaHistorial());
+
+    public EditarNota EditarNota() => new(new EditarNotaValidador(), Notas, PresentadorNotas(), Auditoria, UnidadDeTrabajo, Reloj);
+
+    public ListarVersionesNota ListarVersionesNota() => new(Notas, AuditoriaHistorial());
+
+    public ListarAuditoria ListarAuditoria() => new(new ListarAuditoriaValidador(), Auditoria);
 
     /// <summary>Lectura del contrato con marca de tiempo relativa a la hora actual del reloj falso.</summary>
     public LecturaTelemetria Lectura(Domain.Telemetria.SignosMedidos signos, string dispositivo = "ESP32-001", int segundos = 0, bool caida = false) =>
