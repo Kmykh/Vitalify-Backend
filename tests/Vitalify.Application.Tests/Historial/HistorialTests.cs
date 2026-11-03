@@ -423,3 +423,38 @@ public class AuditoriaTests
         Assert.Contains("accion", invalida.Error.Detalles.Keys);
     }
 }
+
+public class PriorizacionTests
+{
+    private readonly Escenario _e = new();
+
+    private async Task PacienteAsync(string cama, string documento, string sensor, int fr, int spo2, int fc)
+    {
+        await _e.HaceAsync(TimeSpan.FromMinutes(5), async () =>
+        {
+            var ficha = await _e.IngresarAsync(cama, documento);
+            await _e.VincularAsync(ficha.Id, _e.AgregarDispositivo(sensor));
+            return ficha;
+        });
+        await _e.RegistrarLectura().EjecutarAsync(_e.Lectura(new SignosMedidos(Fc: fc, Fr: fr, Spo2: spo2), dispositivo: sensor));
+    }
+
+    [Fact]
+    public async Task HU18_E1_Los_monitoreados_salen_de_mayor_a_menor_riesgo_y_un_bajo_medio_va_antes_que_un_bajo_con_mas_puntos()
+    {
+        await PacienteAsync("MED-B-01", "11111111", "ESP32-001", fr: 22, spo2: 95, fc: 95); // NEWS2 4, bajo
+        await PacienteAsync("MED-B-02", "22222222", "ESP32-002", fr: 25, spo2: 91, fc: 95); // NEWS2 7, alto
+        await PacienteAsync("MED-B-03", "33333333", "ESP32-003", fr: 16, spo2: 91, fc: 80); // NEWS2 3 con SpO2 en 3, bajo-medio
+        await _e.HaceAsync(TimeSpan.FromMinutes(5), async () =>
+        {
+            var ficha = await _e.IngresarAsync("MED-B-04", "44444444");
+            await _e.VincularAsync(ficha.Id, _e.AgregarDispositivo("ESP32-004"));
+            return ficha;
+        });
+
+        var lista = (await _e.ListarPacientesMonitoreados().EjecutarAsync()).Valor.Items;
+
+        Assert.Equal(["MED-B-02", "MED-B-03", "MED-B-01", "MED-B-04"], lista.Select(p => p.Cama));
+        Assert.Equal(["alto", "bajo-medio", "bajo", "sin-datos"], lista.Select(p => p.NivelRiesgo));
+    }
+}
