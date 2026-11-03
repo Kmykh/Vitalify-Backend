@@ -465,6 +465,136 @@ namespace Vitalify.Infrastructure.Persistence.Historial.Migrations
 
                     b.ToTable("lectura_signos", "vitalify_historial");
                 });
+
+            modelBuilder.Entity("Vitalify.Domain.Telemetria.LecturaSignosResumen", b =>
+                {
+                    b.Property<Guid>("HospitalizacionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("hospitalizacion_id");
+
+                    b.Property<DateTime>("Inicio")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("inicio");
+
+                    b.Property<bool>("Caida")
+                        .HasColumnType("boolean")
+                        .HasColumnName("caida");
+
+                    b.Property<int?>("FcMaximo")
+                        .HasColumnType("integer")
+                        .HasColumnName("fc_maximo");
+
+                    b.Property<int>("FcMediciones")
+                        .HasColumnType("integer")
+                        .HasColumnName("fc_mediciones");
+
+                    b.Property<int?>("FcMinimo")
+                        .HasColumnType("integer")
+                        .HasColumnName("fc_minimo");
+
+                    b.Property<decimal?>("FcPromedio")
+                        .HasColumnType("numeric")
+                        .HasColumnName("fc_promedio");
+
+                    b.Property<int?>("FrMaximo")
+                        .HasColumnType("integer")
+                        .HasColumnName("fr_maximo");
+
+                    b.Property<int>("FrMediciones")
+                        .HasColumnType("integer")
+                        .HasColumnName("fr_mediciones");
+
+                    b.Property<int?>("FrMinimo")
+                        .HasColumnType("integer")
+                        .HasColumnName("fr_minimo");
+
+                    b.Property<decimal?>("FrPromedio")
+                        .HasColumnType("numeric")
+                        .HasColumnName("fr_promedio");
+
+                    b.Property<int>("Lecturas")
+                        .HasColumnType("integer")
+                        .HasColumnName("lecturas");
+
+                    b.Property<Guid>("PacienteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("paciente_id");
+
+                    b.Property<int?>("PadMaximo")
+                        .HasColumnType("integer")
+                        .HasColumnName("pad_maximo");
+
+                    b.Property<int>("PadMediciones")
+                        .HasColumnType("integer")
+                        .HasColumnName("pad_mediciones");
+
+                    b.Property<int?>("PadMinimo")
+                        .HasColumnType("integer")
+                        .HasColumnName("pad_minimo");
+
+                    b.Property<decimal?>("PadPromedio")
+                        .HasColumnType("numeric")
+                        .HasColumnName("pad_promedio");
+
+                    b.Property<int?>("PasMaximo")
+                        .HasColumnType("integer")
+                        .HasColumnName("pas_maximo");
+
+                    b.Property<int>("PasMediciones")
+                        .HasColumnType("integer")
+                        .HasColumnName("pas_mediciones");
+
+                    b.Property<int?>("PasMinimo")
+                        .HasColumnType("integer")
+                        .HasColumnName("pas_minimo");
+
+                    b.Property<decimal?>("PasPromedio")
+                        .HasColumnType("numeric")
+                        .HasColumnName("pas_promedio");
+
+                    b.Property<DateTime>("ResumidoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resumido_en");
+
+                    b.Property<int?>("Spo2Maximo")
+                        .HasColumnType("integer")
+                        .HasColumnName("spo2_maximo");
+
+                    b.Property<int>("Spo2Mediciones")
+                        .HasColumnType("integer")
+                        .HasColumnName("spo2_mediciones");
+
+                    b.Property<int?>("Spo2Minimo")
+                        .HasColumnType("integer")
+                        .HasColumnName("spo2_minimo");
+
+                    b.Property<decimal?>("Spo2Promedio")
+                        .HasColumnType("numeric")
+                        .HasColumnName("spo2_promedio");
+
+                    b.Property<decimal?>("TemperaturaMaximo")
+                        .HasPrecision(4, 1)
+                        .HasColumnType("numeric(4,1)")
+                        .HasColumnName("temperatura_maximo");
+
+                    b.Property<int>("TemperaturaMediciones")
+                        .HasColumnType("integer")
+                        .HasColumnName("temperatura_mediciones");
+
+                    b.Property<decimal?>("TemperaturaMinimo")
+                        .HasPrecision(4, 1)
+                        .HasColumnType("numeric(4,1)")
+                        .HasColumnName("temperatura_minimo");
+
+                    b.Property<decimal?>("TemperaturaPromedio")
+                        .HasColumnType("numeric")
+                        .HasColumnName("temperatura_promedio");
+
+                    b.HasKey("HospitalizacionId", "Inicio")
+                        .HasName("pk_lectura_signos_resumen");
+
+                    b.ToTable("lectura_signos_resumen", "vitalify_historial");
+                });
 #pragma warning restore 612, 618
         }
     }

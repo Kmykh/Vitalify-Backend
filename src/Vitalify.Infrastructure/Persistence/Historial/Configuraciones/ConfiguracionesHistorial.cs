@@ -24,6 +24,31 @@ internal sealed class ConfiguracionLecturaSignos : IEntityTypeConfiguration<Lect
     }
 }
 
+/// <summary>
+/// Resumen de 5 minutos de las lecturas de un episodio cerrado (retención, fase 7). La clave
+/// <c>(hospitalizacion_id, inicio)</c> incluye la columna de tiempo. Los promedios son <c>numeric</c> sin escala fija
+/// para no perder precisión al reagrupar con el promedio ponderado.
+/// </summary>
+internal sealed class ConfiguracionLecturaSignosResumen : IEntityTypeConfiguration<LecturaSignosResumen>
+{
+    public void Configure(EntityTypeBuilder<LecturaSignosResumen> builder)
+    {
+        builder.ToTable("lectura_signos_resumen");
+        builder.HasKey(r => new { r.HospitalizacionId, r.Inicio });
+        foreach (var promedio in new[]
+                 {
+                     nameof(LecturaSignosResumen.FcPromedio), nameof(LecturaSignosResumen.FrPromedio), nameof(LecturaSignosResumen.Spo2Promedio),
+                     nameof(LecturaSignosResumen.TemperaturaPromedio), nameof(LecturaSignosResumen.PasPromedio), nameof(LecturaSignosResumen.PadPromedio),
+                 })
+        {
+            builder.Property(promedio).HasColumnType("numeric");
+        }
+
+        builder.Property(r => r.TemperaturaMinimo).HasPrecision(4, 1);
+        builder.Property(r => r.TemperaturaMaximo).HasPrecision(4, 1);
+    }
+}
+
 internal sealed class ConfiguracionEstadoSignosActual : IEntityTypeConfiguration<EstadoSignosActual>
 {
     public const string ClavePrimaria = "pk_estado_signos_actual";
