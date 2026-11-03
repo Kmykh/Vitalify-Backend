@@ -4,6 +4,7 @@ using Vitalify.Application.Vinculacion;
 using Vitalify.Application.Comun;
 using Vitalify.Application.Puertos;
 using Vitalify.Application.Telemetria;
+using Vitalify.Domain.Alertas;
 using Vitalify.Domain.Auditoria;
 using Vitalify.Domain.Dispositivos;
 using Vitalify.Domain.Telemetria;
@@ -70,7 +71,8 @@ public sealed class ListarPacientesMonitoreados(
             {
                 var ultimaLectura = estadosSignos.GetValueOrDefault(l.HospitalizacionId)?.UltimaLecturaEn;
                 var evaluacion = ultimasEvaluaciones.GetValueOrDefault(l.HospitalizacionId);
-                return new PacienteMonitoreadoDto(
+                var abierta = abiertas.TryGetValue(l.HospitalizacionId, out var resumen) ? resumen : ((int Cantidad, PrioridadAlerta Maxima)?)null;
+                var fila = new PacienteMonitoreadoDto(
                     l.PacienteId, l.NombreCompleto, Domain.Pacientes.Paciente.CalcularEdad(l.FechaNacimiento, hoy), l.CodigoCama,
                     l.Servicio, l.CodigoDispositivo!, l.IngresoEn,
                     UltimoNews2: evaluacion?.News2Total,
@@ -80,10 +82,20 @@ public sealed class ListarPacientesMonitoreados(
                     UltimaLecturaEn: ultimaLectura,
                     Senal: TextosEstado.De(Vigencia.SenalDe(ultimaLectura, ahora, opciones.Vigencia)),
                     ConexionSensor: RegistrarPresenciaDispositivo.Texto(presencia.Obtener(l.CodigoDispositivo!)),
-                    AlertasAbiertas: abiertas.TryGetValue(l.HospitalizacionId, out var resumen)
-                        ? new AlertasAbiertasDto(resumen.Cantidad, Alertas.TextosAlerta.De(resumen.Maxima))
+                    AlertasAbiertas: abierta is { } a
+                        ? new AlertasAbiertasDto(a.Cantidad, Alertas.TextosAlerta.De(a.Maxima))
                         : new AlertasAbiertasDto(0, null));
+                return (Fila: fila, Nivel: evaluacion is null ? 0 : (int)evaluacion.News2Nivel, Alerta: abierta is { } x ? (int)x.Maxima : 0);
             })
+            // HU18: de mayor a menor riesgo. Primero el nivel NEWS2 (un "bajo-medio" va antes que un "bajo" con más
+            // puntos), luego los totales de NEWS2 y MEWS y la alerta abierta más grave; sin evaluación, al final. A igual
+            // riesgo, por cama.
+            .OrderByDescending(x => x.Nivel)
+            .ThenByDescending(x => x.Fila.UltimoNews2 ?? -1)
+            .ThenByDescending(x => x.Fila.UltimoMews ?? -1)
+            .ThenByDescending(x => x.Alerta)
+            .ThenBy(x => x.Fila.Cama, StringComparer.Ordinal)
+            .Select(x => x.Fila)
             .ToList();
 
         return new PacientesMonitoreadosDto(items, items.Count == 0 ? MensajeSinPacientes : null);
