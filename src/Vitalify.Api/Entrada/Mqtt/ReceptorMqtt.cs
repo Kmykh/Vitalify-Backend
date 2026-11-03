@@ -98,7 +98,7 @@ public sealed class ReceptorMqtt(
             {
                 _conectado = false;
                 logger.LogWarning(
-                    "MQTT: no se pudo conectar a {Servidor}:{Puerto} ({Error}). Reintento en {Espera} s. ¿Está corriendo el broker del proyecto IoT?",
+                    "MQTT: no se pudo conectar a {Servidor}:{Puerto} ({Error}). Reintento en {Espera} s. ¿Está corriendo el broker (en desarrollo, el del proyecto IoT)?",
                     opciones.Servidor, opciones.Puerto, ex.Message, espera.TotalSeconds);
                 try
                 {
