@@ -77,6 +77,9 @@ public class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
             ["Simulador__Habilitado"] = "false",
             ["Seed__DatosDemo"] = "false",
             ["Mqtt__Habilitado"] = "false",
+            // La configuración va por variables del proceso: se restablece lo que otra fábrica pudo dejar (TLS sin validar).
+            ["Mqtt__UsarTls"] = "false",
+            ["Mqtt__ValidarCertificado"] = "true",
             ["Clinico__AjusteTemperaturaSensor"] = "0",
             ["Vinculacion__SegundosRenovacion"] = "0", // el worker de renovación se prueba llamando al caso de uso
             ["Alertas__SegundosVigilancia"] = "0", // el vigilante también: Fabrica.VigilarAlertasAsync()
