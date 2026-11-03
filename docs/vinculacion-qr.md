@@ -111,7 +111,7 @@ En la observación inicial son obligatorios el oxígeno (sí/no), la conciencia 
 
 ## Broker: cambio necesario en el ACL
 
-El ACL actual (`IOT/tesis_V01/broker/acl`) ya deja al backend escribir en `device/+/comandos` y a cada wearable leer el suyo. Para `solicitar-qr` faltan dos líneas:
+El ACL ya deja al backend escribir en `device/+/comandos` y a cada wearable leer el suyo. Para `solicitar-qr` hacen falta dos líneas. El ACL de producción (`deploy/mosquitto/acl`) ya las tiene; al del broker de desarrollo (`IOT/tesis_V01/broker/acl`) todavía hay que agregárselas:
 
 ```
 user vitalify-backend
