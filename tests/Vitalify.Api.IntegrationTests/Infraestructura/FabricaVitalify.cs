@@ -69,6 +69,7 @@ public class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
             ["Vinculacion__SegundosRenovacion"] = "0", // el worker de renovación se prueba llamando al caso de uso
             ["Alertas__SegundosVigilancia"] = "0", // el vigilante también: Fabrica.VigilarAlertasAsync()
             ["Push__Habilitado"] = "false",
+            ["Historial__RetencionHabilitada"] = "false", // la retención también: Fabrica.ResumirHistorialAsync()
         };
         foreach (var (clave, valor) in await ConfiguracionAdicionalAsync())
         {
@@ -130,6 +131,13 @@ public class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
     {
         await using var scope = Services.CreateAsyncScope();
         return await scope.ServiceProvider.GetRequiredService<Application.Alertas.VigilarAlertas>().EjecutarAsync(ultimaRevision);
+    }
+
+    /// <summary>Corre una vez lo que hace el worker de retención del historial (a las 03:00 de Lima).</summary>
+    public async Task<Application.Historial.ResultadoRetencion> ResumirHistorialAsync()
+    {
+        await using var scope = Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<Application.Historial.ResumirLecturasAntiguas>().EjecutarAsync();
     }
 
     /// <summary>Corre una vez lo que hace el worker de renovación de códigos.</summary>
@@ -210,6 +218,15 @@ public sealed class FabricaVitalifyAislada : FabricaVitalify;
 public sealed class ColeccionApiAislada : ICollectionFixture<FabricaVitalifyAislada>
 {
     public const string Nombre = "api-aislada";
+}
+
+/// <summary>Base propia para la retención: resume (y borra las crudas de) todo episodio egresado hace más de 30 días.</summary>
+public sealed class FabricaVitalifyRetencion : FabricaVitalify;
+
+[CollectionDefinition(Nombre)]
+public sealed class ColeccionApiRetencion : ICollectionFixture<FabricaVitalifyRetencion>
+{
+    public const string Nombre = "api-retencion";
 }
 
 /// <summary>La API en entorno Production (su propio contenedor), para lo que solo existe en Development.</summary>
