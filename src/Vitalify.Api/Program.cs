@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Vitalify.Api.Configuracion;
 using Vitalify.Api.Entrada.Alertas;
 using Vitalify.Api.Entrada.Desarrollo;
+using Vitalify.Api.Entrada.Historial;
 using Vitalify.Api.Entrada.Mqtt;
 using Vitalify.Api.Entrada.Simulador;
 using Vitalify.Api.Seguridad;
@@ -49,6 +50,7 @@ builder.Services.AddSimuladorTelemetria(builder.Configuration);
 builder.Services.AddReceptorMqtt(builder.Configuration);
 builder.Services.AddTiempoReal();
 builder.Services.AddHostedService<VigilanteAlertasWorker>();
+builder.Services.AddHostedService<RetencionHistorialWorker>();
 
 var app = builder.Build();
 

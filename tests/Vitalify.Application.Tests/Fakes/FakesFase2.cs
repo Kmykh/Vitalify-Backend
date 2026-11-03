@@ -95,6 +95,11 @@ public sealed class RepositorioHospitalizacionesEnMemoria : IRepositorioHospital
         Task.FromResult(Hospitalizaciones.Where(h => h.PacienteId == pacienteId)
             .OrderByDescending(h => h.EstaActiva).ThenByDescending(h => h.IngresoEn).FirstOrDefault());
 
+    public Task<IReadOnlyDictionary<Guid, DateTime?>> ObtenerEgresosAsync(IReadOnlyCollection<Guid> hospitalizaciones, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyDictionary<Guid, DateTime?>>(Hospitalizaciones
+            .Where(h => hospitalizaciones.Contains(h.Id))
+            .ToDictionary(h => h.Id, h => h.EgresoEn));
+
     public Task<IReadOnlyList<EpisodioLectura>> ListarEpisodiosAsync(Guid pacienteId, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<EpisodioLectura>>((
             from h in Hospitalizaciones

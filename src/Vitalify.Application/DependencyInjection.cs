@@ -129,6 +129,7 @@ public static class DependencyInjection
         services.AddScoped<QuitarDispositivoMovil>();
 
         // Fase 7: historial del paciente para el médico, notas clínicas y consulta de la auditoría.
+        services.AddScoped<ResumirLecturasAntiguas>();
         services.AddScoped<EpisodiosPaciente>();
         services.AddScoped<AuditoriaHistorial>();
         services.AddScoped<DirectorioProfesionales>();

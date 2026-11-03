@@ -2,10 +2,12 @@ using System.Globalization;
 using Microsoft.Extensions.Configuration;
 using Vitalify.Application.Alertas;
 using Vitalify.Application.Clinica;
+using Vitalify.Application.Historial;
 using Vitalify.Application.Telemetria;
 using Vitalify.Application.Vinculacion;
 using Vitalify.Domain.Comun;
 using Vitalify.Domain.Alertas;
+using Vitalify.Domain.Historial;
 using Vitalify.Domain.Telemetria;
 using Vitalify.Domain.Turnos;
 using Vitalify.Infrastructure.Notificaciones;
@@ -107,6 +109,21 @@ internal static class ConfiguracionTelemetria
         {
             EsperaTrasAtender = TimeSpan.FromMinutes((double)Numero(s, "MinutosEsperaTrasAtender", 30, minimo: 0)),
         };
+    }
+
+    /// <summary>
+    /// Sección <c>Historial</c>: <c>Historial__DiasRetencionCrudo</c> (30: días desde el egreso que se guardan crudas las
+    /// lecturas antes de resumirlas), <c>Historial__HoraRetencion</c> (<c>03:00</c>, hora local de
+    /// <c>Turnos__ZonaHoraria</c>) y <c>Historial__RetencionHabilitada</c> (true; false apaga el worker).
+    /// </summary>
+    public static OpcionesHistorial CargarOpcionesHistorial(IConfiguration configuration)
+    {
+        var s = configuration.GetSection("Historial");
+        var dias = Numero(s, "DiasRetencionCrudo", 30, minimo: 1);
+        var habilitada = !bool.TryParse(s["RetencionHabilitada"], out var h) || h;
+        var zona = Zona(string.IsNullOrWhiteSpace(configuration["Turnos:ZonaHoraria"]) ? "America/Lima" : configuration["Turnos:ZonaHoraria"]!.Trim());
+        return new OpcionesHistorial(
+            new PoliticaRetencion(TimeSpan.FromDays((double)dias)), Hora(s, "HoraRetencion", new TimeOnly(3, 0)), zona, habilitada);
     }
 
     /// <summary>

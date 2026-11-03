@@ -232,6 +232,10 @@ public sealed class Escenario
 
     public ListarHospitalizacionesPaciente ListarHospitalizaciones() => new(Pacientes, Hospitalizaciones, AuditoriaHistorial());
 
+    public OpcionesHistorial OpcionesHistorial { get; set; } = OpcionesHistorial.PorDefecto;
+
+    public ResumirLecturasAntiguas ResumirLecturasAntiguas() => new(Historial, Hospitalizaciones, OpcionesHistorial, Bitacora, Reloj);
+
     public ObtenerHistorialRiesgo ObtenerHistorialRiesgo() => new(Episodios(), Historial, AuditoriaHistorial(), Reloj);
 
     public ListarObservacionesPaciente ListarObservaciones() => new(Episodios(), Historial, Directorio(), AuditoriaHistorial(), Reloj);

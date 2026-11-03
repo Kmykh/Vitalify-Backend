@@ -18,6 +18,9 @@ public interface IRepositorioHospitalizaciones
     /// <summary>Todos los episodios del paciente, del más reciente al más antiguo.</summary>
     Task<IReadOnlyList<EpisodioLectura>> ListarEpisodiosAsync(Guid pacienteId, CancellationToken ct = default);
 
+    /// <summary>Fecha de egreso de cada hospitalización (null si sigue activa). Las que no existen no aparecen.</summary>
+    Task<IReadOnlyDictionary<Guid, DateTime?>> ObtenerEgresosAsync(IReadOnlyCollection<Guid> hospitalizaciones, CancellationToken ct = default);
+
     /// <summary>Sensores que estuvieron vinculados a esas hospitalizaciones, en orden de vinculación.</summary>
     Task<IReadOnlyList<SensorEpisodioLectura>> ListarSensoresAsync(IReadOnlyCollection<Guid> hospitalizaciones, CancellationToken ct = default);
 

@@ -66,6 +66,7 @@ public static class DependencyInjection
         services.AddSingleton(ConfiguracionTelemetria.CargarOpciones(configuration));
         services.AddSingleton(ConfiguracionTelemetria.CargarRangos(configuration));
         services.AddScoped<IRepositorioLecturas, RepositorioLecturas>();
+        services.AddSingleton(ConfiguracionTelemetria.CargarOpcionesHistorial(configuration));
         services.AddScoped<IRepositorioEstadoSignos, RepositorioEstadoSignos>();
         services.AddScoped<IRepositorioIncidencias, RepositorioIncidencias>();
         services.AddScoped<IUnidadDeTrabajoHistorial, UnidadDeTrabajoHistorial>();

@@ -33,6 +33,18 @@ internal sealed class RepositorioHospitalizaciones(TransaccionalDbContext db) : 
                    h.EscalaSpo2, c.Id, c.Codigo, s.Id, s.Codigo, s.Nombre))
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyDictionary<Guid, DateTime?>> ObtenerEgresosAsync(IReadOnlyCollection<Guid> hospitalizaciones, CancellationToken ct = default)
+    {
+        if (hospitalizaciones.Count == 0)
+        {
+            return new Dictionary<Guid, DateTime?>();
+        }
+
+        return await db.Hospitalizaciones.AsNoTracking()
+            .Where(h => hospitalizaciones.Contains(h.Id))
+            .ToDictionaryAsync(h => h.Id, h => h.EgresoEn, ct);
+    }
+
     public async Task<IReadOnlyList<SensorEpisodioLectura>> ListarSensoresAsync(IReadOnlyCollection<Guid> hospitalizaciones, CancellationToken ct = default) =>
         hospitalizaciones.Count == 0
             ? []

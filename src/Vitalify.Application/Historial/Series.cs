@@ -41,22 +41,32 @@ public sealed record LecturaHistorialDto(
 }
 
 /// <summary>Lecturas de un intervalo: promedio, mínimo y máximo por variable (null si no se midió) y si hubo una caída.</summary>
+/// <param name="Resumido">Sale del resumen de 5 min de un episodio cerrado: con <c>agrupar=1m</c>, el grupo dura 5 min.</param>
 public sealed record GrupoSignosDto(
     DateTime Inicio, DateTime Fin, int Lecturas, EstadisticaSerie? Fc, EstadisticaSerie? Spo2, EstadisticaSerie? Temperatura,
-    EstadisticaSerie? Fr, EstadisticaSerie? Pas, EstadisticaSerie? Pad, bool Caida)
+    EstadisticaSerie? Fr, EstadisticaSerie? Pas, EstadisticaSerie? Pad, bool Caida, bool Resumido = false)
 {
-    public static GrupoSignosDto Desde(GrupoLecturas g, IntervaloAgrupacion intervalo) =>
-        new(g.Inicio, g.Inicio + intervalo.Duracion, g.Lecturas, g.Fc, g.Spo2, g.Temperatura, g.Fr, g.Pas, g.Pad, g.Caida);
+    public static GrupoSignosDto Desde(GrupoLecturas g, IntervaloAgrupacion intervalo)
+    {
+        var duracion = g.Resumido && intervalo.Duracion < PoliticaRetencion.IntervaloResumen ? PoliticaRetencion.IntervaloResumen : intervalo.Duracion;
+        return new(g.Inicio, g.Inicio + duracion, g.Lecturas, g.Fc, g.Spo2, g.Temperatura, g.Fr, g.Pas, g.Pad, g.Caida, g.Resumido);
+    }
 }
 
 /// <summary>Historial de signos: <see cref="Lecturas"/> sin agrupar, o <see cref="Grupos"/> (y lecturas vacía) si se agrupó.</summary>
+/// <param name="ResumidoHasta">
+/// Si el episodio ya pasó por la retención, hasta dónde las lecturas crudas se reemplazaron por resúmenes de 5 min: sin
+/// <c>agrupar</c> no aparecen (usa <c>agrupar</c>). Null si no se resumió nada.
+/// </param>
 public sealed record HistorialSignosDto(
     Guid PacienteId, Guid HospitalizacionId, DateTime Desde, DateTime Hasta, IReadOnlyList<LecturaHistorialDto> Lecturas,
-    string? Agrupar = null, IReadOnlyList<GrupoSignosDto>? Grupos = null);
+    string? Agrupar = null, IReadOnlyList<GrupoSignosDto>? Grupos = null, DateTime? ResumidoHasta = null);
 
 /// <summary>
 /// Lecturas del wearable de un episodio (HU19): por defecto el episodio activo o el último, completo. Sin agrupar, como
-/// máximo 7 días; agrupadas, el episodio completo. Solo lee el historial: no recalcula estados ni puntajes.
+/// máximo 7 días; agrupadas, el episodio completo. Solo lee el historial: no recalcula estados ni puntajes. Si el
+/// episodio ya pasó por la retención, lo agrupado sale del resumen de 5 min y <see cref="HistorialSignosDto.ResumidoHasta"/>
+/// lo indica.
 /// </summary>
 public sealed class ObtenerHistorialSignos(
     EpisodiosPaciente episodios, IRepositorioLecturas lecturas, AuditoriaHistorial auditoria, IReloj reloj)
@@ -83,17 +93,19 @@ public sealed class ObtenerHistorialSignos(
         }
 
         var (desde, hasta) = (ventana.Valor.Desde, ventana.Valor.Hasta);
+        var resumidoHasta = hospitalizacion.EstaActiva ? null : await lecturas.ObtenerResumidoHastaAsync(hospitalizacion.Id, ct);
         HistorialSignosDto dto;
         if (intervalo.Valor is { } agrupar)
         {
             var grupos = await lecturas.AgruparAsync(hospitalizacion.Id, desde, hasta, agrupar.Segundos, ct);
             dto = new HistorialSignosDto(consulta.PacienteId, hospitalizacion.Id, desde, hasta, [], agrupar.Codigo,
-                grupos.Select(g => GrupoSignosDto.Desde(g, agrupar)).ToList());
+                grupos.Select(g => GrupoSignosDto.Desde(g, agrupar)).ToList(), resumidoHasta);
         }
         else
         {
             var filas = await lecturas.ListarPorHospitalizacionAsync(hospitalizacion.Id, desde, hasta, ct);
-            dto = new HistorialSignosDto(consulta.PacienteId, hospitalizacion.Id, desde, hasta, filas.Select(LecturaHistorialDto.Desde).ToList());
+            dto = new HistorialSignosDto(
+                consulta.PacienteId, hospitalizacion.Id, desde, hasta, filas.Select(LecturaHistorialDto.Desde).ToList(), ResumidoHasta: resumidoHasta);
         }
 
         var auditado = await auditoria.RegistrarAsync(consulta.PacienteId, hospitalizacion.Id, "signos/historial", consulta.UsuarioId, consulta.Ip, ct);

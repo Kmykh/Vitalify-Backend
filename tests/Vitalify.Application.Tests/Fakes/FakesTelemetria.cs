@@ -58,6 +58,37 @@ public sealed class HistorialEnMemoria
 
     public void Agregar(LecturaSignos lectura) => _lecturasPendientes.Add(lectura);
 
+    /// <summary>Hospitalizaciones resumidas por la retención, con el fin del último grupo de 5 min.</summary>
+    public Dictionary<Guid, DateTime> Resumidas { get; } = [];
+
+    /// <summary>Hospitalizaciones cuyo resumen falla (simula un error de la base).</summary>
+    public HashSet<Guid> ResumenFalla { get; } = [];
+
+    public Task<DateTime?> ObtenerResumidoHastaAsync(Guid hospitalizacionId, CancellationToken ct = default) =>
+        Task.FromResult(Resumidas.TryGetValue(hospitalizacionId, out var hasta) ? hasta : (DateTime?)null);
+
+    public Task<IReadOnlyList<Guid>> ListarHospitalizacionesConLecturasCrudasAsync(DateTime antesDe, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<Guid>>(Lecturas.Where(l => l.MedidoEn < antesDe).Select(l => l.HospitalizacionId).Distinct().ToList());
+
+    /// <summary>Quita las crudas de la hospitalización y anota hasta dónde quedó resumida (el SQL real se prueba en integración).</summary>
+    public Task<LecturasResumidas> ResumirAsync(Guid hospitalizacionId, DateTime resumidoEn, CancellationToken ct = default)
+    {
+        if (ResumenFalla.Contains(hospitalizacionId))
+        {
+            throw new InvalidOperationException("La base no respondió.");
+        }
+
+        var crudas = Lecturas.Where(l => l.HospitalizacionId == hospitalizacionId).ToList();
+        var grupos = crudas.Select(l => Grupo(l.MedidoEn, 300)).Distinct().ToList();
+        Lecturas.RemoveAll(l => l.HospitalizacionId == hospitalizacionId);
+        if (grupos.Count > 0)
+        {
+            Resumidas[hospitalizacionId] = grupos.Max().AddMinutes(5);
+        }
+
+        return Task.FromResult(new LecturasResumidas(crudas.Count, grupos.Count));
+    }
+
     public Task<EstadoSignosActual?> ObtenerAsync(Guid hospitalizacionId, CancellationToken ct = default) =>
         Task.FromResult(Estados.Concat(_estadosPendientes).SingleOrDefault(e => e.HospitalizacionId == hospitalizacionId));
 

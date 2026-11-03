@@ -19,9 +19,10 @@ public sealed record SensorEpisodioLectura(
 public sealed record EstadisticaSerie(decimal Promedio, decimal Minimo, decimal Maximo);
 
 /// <summary>Lecturas del wearable de un intervalo de tiempo, resumidas por variable (null si no hubo ninguna).</summary>
+/// <param name="Resumido">Sale de los resúmenes de 5 min de un episodio cerrado (las crudas ya no existen).</param>
 public sealed record GrupoLecturas(
     DateTime Inicio, int Lecturas, EstadisticaSerie? Fc, EstadisticaSerie? Fr, EstadisticaSerie? Spo2, EstadisticaSerie? Temperatura,
-    EstadisticaSerie? Pas, EstadisticaSerie? Pad, bool Caida);
+    EstadisticaSerie? Pas, EstadisticaSerie? Pad, bool Caida, bool Resumido = false);
 
 /// <summary>Mínimo y máximo de una variable, y cuántas mediciones hubo.</summary>
 public sealed record RangoValor(decimal Minimo, decimal Maximo, int Mediciones);

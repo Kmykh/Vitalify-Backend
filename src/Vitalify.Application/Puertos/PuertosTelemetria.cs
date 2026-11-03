@@ -14,15 +14,35 @@ public interface IRepositorioLecturas
 
     /// <summary>
     /// Lecturas de la hospitalización entre ambos límites, agrupadas cada <paramref name="segundos"/> (alineado a la
-    /// época UNIX), del grupo más antiguo al más reciente. Solo aparecen los grupos con lecturas. Se agrega en la base.
+    /// época UNIX), del grupo más antiguo al más reciente. Solo aparecen los grupos con lecturas. Se agrega en la base,
+    /// con las crudas y con los resúmenes de 5 min de las que ya se resumieron (<see cref="GrupoLecturas.Resumido"/>):
+    /// un grupo resumido nunca es menor que 5 min, aunque se pidan grupos de 1 min.
     /// </summary>
     Task<IReadOnlyList<GrupoLecturas>> AgruparAsync(Guid hospitalizacionId, DateTime desde, DateTime hasta, int segundos, CancellationToken ct = default);
 
-    /// <summary>Mínimo y máximo de cada variable en toda la hospitalización.</summary>
+    /// <summary>Mínimo y máximo de cada variable en toda la hospitalización (crudas y resumidas).</summary>
     Task<ExtremosSignos> ObtenerExtremosAsync(Guid hospitalizacionId, CancellationToken ct = default);
+
+    /// <summary>Fin del último grupo resumido de la hospitalización (null si no se resumió nada).</summary>
+    Task<DateTime?> ObtenerResumidoHastaAsync(Guid hospitalizacionId, CancellationToken ct = default);
+
+    /// <summary>Hospitalizaciones que tienen lecturas crudas medidas antes de <paramref name="antesDe"/>.</summary>
+    Task<IReadOnlyList<Guid>> ListarHospitalizacionesConLecturasCrudasAsync(DateTime antesDe, CancellationToken ct = default);
+
+    /// <summary>
+    /// Pasa todas las lecturas crudas de la hospitalización a resúmenes de 5 min y las borra. Cada tramo (un día) se
+    /// resume y se borra en una sola sentencia: nunca se borra una lectura que no quedó resumida. Si un grupo ya
+    /// estaba resumido, lo combina (promedio ponderado). No necesita <see cref="IUnidadDeTrabajoHistorial"/>.
+    /// </summary>
+    Task<LecturasResumidas> ResumirAsync(Guid hospitalizacionId, DateTime resumidoEn, CancellationToken ct = default);
 
     void Agregar(LecturaSignos lectura);
 }
+
+/// <summary>Resultado de resumir las lecturas de una hospitalización.</summary>
+/// <param name="Lecturas">Lecturas crudas borradas (todas quedaron en algún grupo).</param>
+/// <param name="Grupos">Grupos de 5 min escritos.</param>
+public sealed record LecturasResumidas(int Lecturas, int Grupos);
 
 public interface IRepositorioEstadoSignos
 {
