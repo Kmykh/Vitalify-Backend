@@ -61,6 +61,8 @@ public static class DependencyInjection
         services.AddScoped<IRepositorioPacientes, RepositorioPacientes>();
         services.AddScoped<IRepositorioHospitalizaciones, RepositorioHospitalizaciones>();
         services.AddScoped<IUnidadDeTrabajo, UnidadDeTrabajo>();
+        services.AddScoped<IMedidorAlmacenamiento, MedidorAlmacenamiento>();
+        services.AddSingleton(ConfiguracionTelemetria.CargarOpcionesSistema(configuration));
 
         // Telemetría: historial en HistorialDbContext (vitalify_historial), resolución de dispositivos con caché.
         services.AddSingleton(ConfiguracionTelemetria.CargarOpciones(configuration));

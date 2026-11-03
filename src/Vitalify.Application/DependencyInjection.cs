@@ -130,6 +130,7 @@ public static class DependencyInjection
 
         // Fase 7: historial del paciente para el médico, notas clínicas y consulta de la auditoría.
         services.AddScoped<ResumirLecturasAntiguas>();
+        services.AddScoped<Sistema.ConsultarAlmacenamiento>();
         services.AddScoped<EpisodiosPaciente>();
         services.AddScoped<AuditoriaHistorial>();
         services.AddScoped<DirectorioProfesionales>();

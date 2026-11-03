@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Vitalify.Application.Alertas;
 using Vitalify.Application.Clinica;
 using Vitalify.Application.Historial;
+using Vitalify.Application.Sistema;
 using Vitalify.Application.Telemetria;
 using Vitalify.Application.Vinculacion;
 using Vitalify.Domain.Comun;
@@ -125,6 +126,10 @@ internal static class ConfiguracionTelemetria
         return new OpcionesHistorial(
             new PoliticaRetencion(TimeSpan.FromDays((double)dias)), Hora(s, "HoraRetencion", new TimeOnly(3, 0)), zona, habilitada);
     }
+
+    /// <summary>Sección <c>Sistema</c>: <c>Sistema__LimiteAlmacenamientoMb</c> (500, el plan gratuito de Supabase).</summary>
+    public static OpcionesSistema CargarOpcionesSistema(IConfiguration configuration) =>
+        new((long)Numero(configuration.GetSection("Sistema"), "LimiteAlmacenamientoMb", 500, minimo: 1) * OpcionesSistema.BytesPorMb);
 
     /// <summary>
     /// Sección <c>Push</c>: <c>Push__Habilitado</c> (false) y <c>Push__RutaCredencialesFirebase</c>, que debe existir si se
