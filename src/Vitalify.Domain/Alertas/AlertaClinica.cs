@@ -149,6 +149,19 @@ public sealed class AlertaClinica
         return subio;
     }
 
+    /// <summary>
+    /// Después de atender una alerta de riesgo, durante <paramref name="espera"/> no se abre otra salvo que suba la
+    /// prioridad o el nivel respecto de esta. Evita que la evaluación siguiente (10 s después) la reabra mientras el
+    /// equipo ya está actuando. Al terminar la espera, si el paciente sigue en riesgo, sí se abre una nueva.
+    /// </summary>
+    public bool SilenciaNuevaAlerta(PrioridadAlerta prioridad, string? nivelRiesgo, DateTime ahora, TimeSpan espera) =>
+        Tipo == TipoAlerta.Riesgo
+        && Estado == EstadoAlerta.Atendida
+        && AtendidaEn is { } atendidaEn
+        && ahora - atendidaEn < espera
+        && prioridad <= Prioridad
+        && RangoNivel(nivelRiesgo) <= RangoNivel(NivelRiesgo);
+
     /// <summary>¿Cambiarían los valores? Para no guardar en cada lectura lo mismo.</summary>
     public bool Cambiaria(PrioridadAlerta prioridad, string? nivelRiesgo, int? news2, int? mews) =>
         prioridad > Prioridad || RangoNivel(nivelRiesgo) > RangoNivel(NivelRiesgo) || (news2 is not null && news2 != News2) || (mews is not null && mews != Mews);
