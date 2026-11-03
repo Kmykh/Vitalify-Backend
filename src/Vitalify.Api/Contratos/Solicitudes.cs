@@ -224,3 +224,13 @@ public sealed record AtenderAlertaSolicitud(string? Nota);
 /// <param name="Token">Token de registro de FCM (<c>FirebaseMessaging.instance.getToken()</c>).</param>
 /// <param name="Plataforma"><c>Android</c>, <c>Ios</c> o <c>Web</c>.</param>
 public sealed record DispositivoMovilSolicitud(string? Token, string? Plataforma);
+
+/// <summary>Nota clínica nueva (HU22).</summary>
+/// <param name="Tipo"><c>Evolucion</c>, <c>Enfermeria</c> o <c>Interconsulta</c>.</param>
+/// <param name="Texto">De 5 a 4000 caracteres.</param>
+public sealed record RegistrarNotaSolicitud(string? Tipo, string? Texto);
+
+/// <summary>Corrección de una nota: solo su autor y dentro de las 24 h.</summary>
+/// <param name="Tipo">Opcional: si falta, se mantiene.</param>
+/// <param name="Texto">De 5 a 4000 caracteres.</param>
+public sealed record EditarNotaSolicitud(string? Tipo, string? Texto);
