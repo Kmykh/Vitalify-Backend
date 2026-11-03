@@ -1,0 +1,16 @@
+# Permisos por tópico (formato acl_file de Mosquitto). Es el ACL del broker del proyecto IoT (IOT/tesis_V01/broker/acl)
+# con las dos líneas de las solicitudes de los wearables (device/{codigo}/solicitudes, por ejemplo "solicitar-qr").
+
+# Backend: lee la telemetría, el estado y las solicitudes de todos los wearables y les envía comandos.
+user vitalify-backend
+topic read device/+/telemetria
+topic read device/+/estado
+topic read device/+/solicitudes
+topic write device/+/comandos
+
+# Wearables: el usuario MQTT es el código del dispositivo (%u). Cada uno solo publica en sus propios tópicos y solo
+# lee sus propios comandos: un sensor no puede hacerse pasar por otro.
+pattern write device/%u/telemetria
+pattern write device/%u/estado
+pattern write device/%u/solicitudes
+pattern read device/%u/comandos

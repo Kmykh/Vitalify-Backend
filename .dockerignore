@@ -13,3 +13,6 @@ tests/
 *.md
 Dockerfile
 docker-compose*.yml
+# Despliegue: no forma parte de la imagen de la API (y deploy/mosquitto/secretos nunca debe entrar en ella).
+deploy/
+scripts/

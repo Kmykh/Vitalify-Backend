@@ -490,3 +490,6 @@ $RECYCLE.BIN/
 *firebase*.json
 *-firebase-adminsdk-*.json
 credenciales/
+
+# Claves MQTT de producción (passwd de Mosquitto, creado con mosquitto_passwd en el servidor): nunca van al repositorio.
+deploy/mosquitto/secretos/
