@@ -40,13 +40,20 @@ builder.Services.AddProblemDetails(o => o.CustomizeProblemDetails = ctx =>
 builder.Services.AddExceptionHandler<ManejadorGlobalDeExcepciones>();
 builder.Services.AddSwaggerVitalify();
 builder.Services.AddCorsVitalify(builder.Configuration);
+builder.Services.AddProxyVitalify(builder.Configuration, builder.Environment);
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddAutenticacionVitalify();
 builder.Services.AddAutorizacionVitalify();
 builder.Services.AddLimitesDeSolicitudes(builder.Configuration);
-builder.Services.AddSimuladorTelemetria(builder.Configuration);
+// El simulador solo existe en Development: en otro entorno ni siquiera se registra (aunque Simulador__Habilitado=true).
+var simuladorIgnorado = !builder.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("Simulador:Habilitado");
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.AddSimuladorTelemetria(builder.Configuration);
+}
+
 builder.Services.AddReceptorMqtt(builder.Configuration, builder.Environment);
 builder.Services.AddTiempoReal();
 builder.Services.AddHostedService<VigilanteAlertasWorker>();
@@ -54,10 +61,25 @@ builder.Services.AddHostedService<RetencionHistorialWorker>();
 
 var app = builder.Build();
 
+if (simuladorIgnorado)
+{
+    app.Logger.LogWarning("Simulador__Habilitado=true se ignora: el simulador de telemetría solo existe en Development.");
+}
+
+// Primero: la IP real del cliente y el esquema (https) que vio el proxy. El límite de logins, la autenticación, la
+// auditoría y la redirección a HTTPS dependen de ellos.
+app.UseForwardedHeaders();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
-if (app.Environment.IsDevelopment())
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+    app.UseHttpsRedirection();
+}
+
+// Swagger: siempre en Development; fuera de él, solo con Swagger__Habilitado=true.
+if (app.Configuration.GetValue("Swagger:Habilitado", app.Environment.IsDevelopment()))
 {
     app.UseSwagger();
     app.UseSwaggerUI(o =>
@@ -73,7 +95,7 @@ app.UseAuthorization();
 app.UseRateLimiter();
 
 app.MapControllers();
-app.MapHub<HubMonitoreo>(HubMonitoreo.Ruta);
+app.MapTiempoReal();
 
 // Adaptador de entrada temporal de la telemetría: la ruta no existe fuera de Development.
 if (app.Environment.IsDevelopment())
