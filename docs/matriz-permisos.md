@@ -38,6 +38,7 @@ Control de acceso basado en roles (RBAC) de Vitalify. Cada rol tiene permisos di
 | Historial del paciente (HU19, fase 7): episodios, signos, riesgo, tomas manuales y resumen | `GET /pacientes/{id}/hospitalizaciones`, `.../signos/historial`, `.../riesgo/historial`, `.../observaciones`, `.../resumen` | — | L | L | `PersonalClinico`, de cualquier servicio; cada consulta se audita (`ConsultaHistorialPaciente`) |
 | Notas clínicas (HU22, fase 7) | `POST /pacientes/{id}/notas`, `PUT /notas/{id}` · `GET /pacientes/{id}/notas`, `GET /notas/{id}/versiones` | — | **G** | **G** | `PersonalClinico`; solo el autor corrige y solo dentro de las 24 h; no hay borrado |
 | Consulta de la auditoría de seguridad (fase 7) | `GET /auditoria` | L | — | — | `SoloAdministrador`; solo acciones e ids, sin el texto del detalle |
+| Almacenamiento de la base (fase 7, producción) | `GET /sistema/almacenamiento` | L | — | — | `SoloAdministrador`; solo tamaños de tablas, ningún dato de pacientes |
 | Riesgo NEWS2 y MEWS (fase 4) | `GET /pacientes/{id}/riesgo` | — | L | L | `PersonalClinico` |
 | Toma manual (asistente: presión, conciencia, oxígeno, FR, contexto, preocupación) | `POST /pacientes/{id}/observaciones` | — | **G** | **G** | `PersonalClinico` |
 | Guía de toma manual | `GET /guias/toma-manual` | — | L | L | `PersonalClinico` |
@@ -108,6 +109,9 @@ Todo lo que preveía esta sección ya está implementado (tiempo real, alertas, 
 
 | Escenario | Prueba |
 |---|---|
+| El administrador ve el tamaño de cada tabla; el personal clínico recibe 403 | `ElAdministradorVeElTamanoDeCadaTablaParaVigilarLos500Mb`, `ElPersonalClinicoNoVeElAlmacenamiento` |
+| Detrás del proxy, el límite de logins y la auditoría usan la IP real solo si el proxy es conocido | `DesdeUnProxyConocido_ElLimiteDeLoginsSeCuentaPorLaIpDeXForwardedFor_YAsiSeAudita`, `DesdeUnProxyDesconocido_XForwardedForSeIgnora_YElLimiteSeCuentaPorSuIp` |
+| En Production no existen las rutas de desarrollo, el simulador ni Swagger | `EnProduccionNoExistenLasRutasDeDesarrolloNiElSimuladorNiSwagger` |
 | HU03 E1: una enfermera pide un endpoint de administración y recibe 403 | `HU03_E1_EnfermeraEnEndpointExclusivoDeAdministracion_Devuelve403` |
 | HU03 E2: un médico con JWT válido accede a un recurso de su rol (`GET /pacientes/monitoreados`) | `HU03_E2_MedicoConJwtValidoEnUnRecursoDeSuRol_AccedeCon200` |
 | El administrador no accede al monitoreo clínico | `ElAdministradorNoAccedeAlMonitoreoClinico` |

@@ -37,7 +37,12 @@ Lo que no esté en ninguna de las dos queda como faltante.
 - Con cada lectura del wearable que hace avanzar el estado del paciente, cada ~10 s. Las lecturas atrasadas del búfer offline no disparan una evaluación.
 - Con cada observación registrada.
 
-Cada evaluación queda en `vitalify_historial.evaluacion_riesgo` con los valores usados, para ver la tendencia.
+**Qué se guarda** en `vitalify_historial.evaluacion_riesgo`, con los valores usados, para ver la tendencia:
+
+- Las evaluaciones de una toma manual o de un cambio de escala de SpO2: siempre.
+- Las del wearable (8640 al día por paciente): solo si respecto de la última guardada cambió el total o el nivel de NEWS2 o de MEWS, cambió si están completos o cambió la próxima toma manual, o si ya pasaron **5 minutos** (`EvaluacionRiesgo.AportaRespectoDe`). Así la tendencia no pierde ningún cambio y la tabla crece unas 12 filas por hora en un paciente estable, en lugar de 360.
+
+`RiesgoEvaluado` se publica con **cada** evaluación, se guarde o no. Las alertas reaccionan al instante (por ejemplo, al terminar la espera tras atender, AL-E9) y el tablero recibe el puntaje al día. Si la evaluación no se guardó, el evento lleva el id de la última guardada, que tiene el mismo puntaje. `GET /riesgo` muestra la última guardada: el mismo puntaje, con valores de hasta 5 min antes.
 
 ## Tablas
 

@@ -69,6 +69,11 @@ Todos los episodios, del más reciente al más antiguo. Cada uno trae:
 
 Cambio respecto de la fase 6: antes, por defecto se devolvía la última hora y como máximo 24 h, solo del episodio activo. El dashboard web envía `desde` y `hasta`, así que no le afecta.
 
+**Episodios ya resumidos** (ver [Retención del historial](#retención-del-historial)):
+- Con `agrupar`, los grupos salen del resumen de 5 min, con los mismos promedios, mínimos y máximos que daban las lecturas crudas, y traen `resumido: true`. Con `agrupar=1m`, un grupo resumido dura 5 min.
+- Sin `agrupar`, `lecturas` llega vacía porque las crudas ya no existen.
+- En los dos casos, `resumidoHasta` indica hasta cuándo se resumió.
+
 ### `GET /api/v1/pacientes/{id}/riesgo/historial?hospitalizacionId=&desde=&hasta=&agrupar=`
 
 - **Sin `agrupar`:** `evaluaciones` trae cada evaluación con NEWS2 y MEWS: total, nivel, `completo`, puntos por parámetro, `faltantes` y los valores usados. El desglose se recalcula al leer, como en `GET /riesgo`.
@@ -111,6 +116,19 @@ Algunas aclaraciones:
 
 - **Por qué los extremos van separados:** la temperatura del sensor es de piel (DS18B20) y la de la toma manual es central. Juntarlas daría un mínimo engañoso.
 - **El tiempo medio hasta atendida** solo cuenta las alertas que cerró una persona, no las resueltas automáticamente.
+
+## Retención del historial
+
+El plan gratuito de Supabase tiene 500 MB, y un wearable manda 8640 lecturas al día. Por eso `RetencionHistorialWorker` corre **una vez al día a las 03:00 de Lima** (`Historial__HoraRetencion`, en la zona de `Turnos__ZonaHoraria`) y llama a `ResumirLecturasAntiguas`:
+
+- **Qué resume:** las lecturas crudas de cada episodio **finalizado** cuyo egreso tiene más de `Historial__DiasRetencionCrudo` días (30). Pasan a `vitalify_historial.lectura_signos_resumen`: un grupo cada 5 min, con promedio, mínimo, máximo y cantidad de mediciones por variable, la cantidad de lecturas y si hubo una caída.
+- **Qué nunca toca:** una hospitalización activa, ni un episodio egresado hace menos de 30 días. Por eso ninguna lectura de menos de 30 días se toca. Se resume el episodio completo de una vez: nunca queda mitad crudo y mitad resumido.
+- **La única excepción a "no borrar":** las crudas se borran en la **misma sentencia** que las resume (`DELETE ... RETURNING` dentro de un `INSERT`), un día por sentencia. Nunca se borra una lectura que no quedó resumida. Si un grupo ya existía, se combina con el promedio ponderado.
+- **Fallos:** si un episodio falla, queda en la bitácora y sigue con los demás. Es idempotente: un episodio resumido ya no tiene crudas y no vuelve a aparecer.
+- **Lo que no cambia:** las evaluaciones de riesgo, las tomas manuales y las alertas no se resumen ni se borran. `resumen.extremos.sensor` usa las crudas y las resumidas.
+- **Configuración:** `Historial__RetencionHabilitada=false` apaga el worker. En las pruebas está apagado y se llama con `Fabrica.ResumirHistorialAsync()`.
+
+El tamaño de cada tabla se consulta en `GET /api/v1/sistema/almacenamiento` (solo el administrador). Ver [despliegue.md](despliegue.md#espacio-en-supabase-plan-gratuito-500-mb).
 
 ## Notas clínicas (HU22)
 

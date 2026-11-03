@@ -25,8 +25,9 @@ Hechas:
 - Adelantado de la fase 6 a pedido del usuario: `GET /pacientes/{id}/signos/historial`, para los gráficos del dashboard React de prueba en `../Web` (que envía `desde` y `hasta`). En la fase 7 pasó a las reglas del historial.
 - Fase 6 (HU15, HU16, HU20, HU21 en el backend y HU23): servicios y turnos, alertas clínicas con escalamiento, SignalR, push por FCM y entrega de turno; además, el rechazo de lecturas anteriores a la vinculación y la vigencia de la toma según NEWS2. Ver la sección de la fase 6.
 - Fase 7, parte A (HU19, HU22 y el backend de HU17 y HU18): historial del paciente para el médico, notas clínicas con versiones, consulta de la auditoría, monitoreados ordenados por riesgo y espera tras atender una alerta de riesgo (AL-E9). Ver la sección de la fase 7.
+- Fase 7, parte B: producción con Supabase como única base y Mosquitto con TLS en el mismo servidor que la API (Caddy, retención del historial, almacenamiento, proxy). Ver la sección de producción y `docs/despliegue.md`.
 
-Falta la parte B de la fase 7 (producción con Supabase y Mosquitto con TLS). **TimescaleDB ya no se usa**: el historial se queda en Supabase. Los avisos de la fase 5 **no** crean alertas; la preocupación clínica sí (fase 6). **No usar datos simulados para verificar lo que ya puede verificarse con el wearable real.**
+**TimescaleDB ya no se usa**: el historial se queda en Supabase. **HiveMQ Cloud tampoco**: el broker es el Mosquitto del IoT, desplegado junto a la API. Los avisos de la fase 5 **no** crean alertas; la preocupación clínica sí (fase 6). **No usar datos simulados para verificar lo que ya puede verificarse con el wearable real.**
 
 ## Comandos
 
@@ -38,6 +39,9 @@ dotnet test --filter "FullyQualifiedName~HU04"                         # los esc
 dotnet test tests/Vitalify.Domain.Tests                                # un proyecto
 dotnet run --project src/Vitalify.Api        # http://localhost:5080/swagger
 docker compose up --build                    # http://localhost:8080
+docker compose -f docker-compose.prod.yml up -d --build      # producción: api + caddy + mosquitto (DOMINIO en el .env; docs/despliegue.md)
+DOMINIO=vitalify.localhost docker compose -f docker-compose.prod.yml up -d --build   # lo mismo en la laptop, con la CA local de Caddy
+docker compose -f docker-compose.prod.yml config --quiet    # validar; sin --quiet imprime el .env, no usarlo
 
 cd ../IOT/tesis_V01/broker && docker compose up -d                 # broker Mosquitto del IoT (el backend lo lee con Mqtt__*)
 Simulador__Habilitado=true dotnet run --project src/Vitalify.Api   # telemetría simulada, solo en Development y sin hardware
@@ -89,8 +93,9 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
 - **`HistorialDbContext` se queda en Supabase** (decisión de la fase 7: TimescaleDB ya no se usa). Podría pasar a otra base, por ejemplo TimescaleDB, cambiando solo `ConnectionStrings__Historial`. Por eso no debe usar nada propio de Supabase y los casos de uso deben acceder al historial por sus propios puertos (`IRepositorioLecturas`, `IRepositorioEstadoSignos`, `IRepositorioIncidencias`, `IUnidadDeTrabajoHistorial`).
   - No hay claves foráneas entre esquemas: el historial guarda `hospitalizacion_id`, `paciente_id` y `codigo_dispositivo` como valores.
   - `lectura_signos` tiene la clave `(codigo_dispositivo, medido_en)`, que incluye la columna de tiempo (como exigiría una hypertable).
-  - Migraciones de `HistorialDbContext`: `Inicial`, `Fase3_Telemetria`, `Fase4_MotorClinico` (`observacion_enfermeria` y `evaluacion_riesgo`) `Fase5_TomaManual` (columnas opcionales del asistente; `checklist_pa`, `lecturas_pa` y `contexto` son `jsonb` con `ConversoresJson`) y `Fase6_VigenciaToma` (`observacion_enfermeria.vigente_hasta` y `evaluacion_riesgo.proxima_toma_manual_en`).
-- `CadenaDeConexion.Obtener` lee la cadena y acepta tanto el formato clave=valor de Npgsql como una URI `postgresql://`, que convierte agregando `SSL Mode=Require`. En ambos formatos usa `Maximum Pool Size=5` si la cadena no lo fija. El pool es pequeño porque el pooler gratuito de Supabase admite pocas conexiones.
+  - Migraciones de `HistorialDbContext`: `Inicial`, `Fase3_Telemetria`, `Fase4_MotorClinico` (`observacion_enfermeria` y `evaluacion_riesgo`) `Fase5_TomaManual` (columnas opcionales del asistente; `checklist_pa`, `lecturas_pa` y `contexto` son `jsonb` con `ConversoresJson`) `Fase6_VigenciaToma` (`observacion_enfermeria.vigente_hasta` y `evaluacion_riesgo.proxima_toma_manual_en`) y `Fase7_Retencion` (`lectura_signos_resumen`, clave `(hospitalizacion_id, inicio)`; promedios `numeric` sin escala).
+- `CadenaDeConexion.Obtener` lee la cadena y acepta tanto el formato clave=valor de Npgsql como una URI `postgresql://`, que convierte agregando `SSL Mode=Require`. En ambos formatos usa `Maximum Pool Size=5` si la cadena no lo fija. El pool es pequeño porque el pooler gratuito de Supabase admite pocas conexiones. Agrega `Application Name` `vitalify-transaccional` o `vitalify-historial` (un pool por contexto) y `ValidarPresupuesto` impide arrancar si las dos cadenas apuntan a la misma base y sus pools suman más de 10.
+- SQL a mano (ADO.NET con parámetros, `ConsultasAgregadas`): agregaciones, retención y `MedidorAlmacenamiento`. Las tablas y columnas salen del modelo de EF.
 - `FabricasDeDiseno.cs` tiene los `IDesignTimeDbContextFactory` que usa `dotnet ef`. Cargan el `.env` igual que la API.
 - `IUnidadDeTrabajo.GuardarCambiosAsync` traduce cada índice único a su `Conflicto` (tabla `ConflictosPorIndice` en `UnidadDeTrabajo`):
   - `ux_usuario_correo` → `correo-en-uso`;
@@ -112,7 +117,8 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
 
 - **Nunca se escriben contraseñas ni cadenas de conexión en archivos versionados.** Van solo en `.env`, en la raíz, que está en `.gitignore` y `.dockerignore`. No usar `dotnet user-secrets` ni ponerlas en `appsettings*.json`. `.env.example` es la plantilla sin datos reales.
 - `Program.cs` llama a `DotNetEnv.Env.NoClobber().TraversePath().Load()` antes de crear el builder: una variable de entorno ya definida gana sobre el `.env`. Las pruebas de integración dependen de esto para apuntar a su contenedor. Las variables `ConnectionStrings__X` se leen como `ConnectionStrings:X`. En Docker, `docker-compose.yml` pasa el mismo archivo con `env_file`.
-- Variables del `.env`: `ConnectionStrings__Transaccional`, `ConnectionStrings__Historial`, `Jwt__Emisor`, `Jwt__Audiencia`, `Jwt__Clave` (32 o más caracteres; si no, la API no arranca), `Jwt__MinutosAccessToken`, `Jwt__MinutosInactividad`, `Jwt__HorasMaximasSesion`, `Seed__AdminCorreo`, `Seed__AdminNombre`, `Seed__AdminContrasena` y `Seed__DatosDemo` (`true` crea el servicio `MEDICINA-B`, camas `MED-B-01` a `MED-B-06` y sensores `ESP32-001` a `ESP32-004`, solo en Development). Las de la fase 6 (`Turnos__*`, `Alertas__*`, `Clinico__MinutosToleranciaToma`, `Push__*`) están en `.env.example`.
+- Variables del `.env`: `ConnectionStrings__Transaccional`, `ConnectionStrings__Historial`, `Jwt__Emisor`, `Jwt__Audiencia`, `Jwt__Clave` (32 o más caracteres; si no, la API no arranca), `Jwt__MinutosAccessToken`, `Jwt__MinutosInactividad`, `Jwt__HorasMaximasSesion`, `Seed__AdminCorreo`, `Seed__AdminNombre`, `Seed__AdminContrasena` y `Seed__DatosDemo` (`true` crea el servicio `MEDICINA-B`, camas `MED-B-01` a `MED-B-06` y sensores `ESP32-001` a `ESP32-004`, solo en Development). Las de la fase 6 (`Turnos__*`, `Alertas__*`, `Clinico__MinutosToleranciaToma`, `Push__*`) y las de producción (`DOMINIO`, `Cors__Origenes`, `Proxy__RedesConocidas`, `Swagger__Habilitado`, `Mqtt__UsarTls`, `Mqtt__ValidarCertificado`, `Historial__*`, `Sistema__LimiteAlmacenamientoMb`) están en `.env.example`.
+- **Las claves MQTT de producción** van en `deploy/mosquitto/secretos/passwd` (hash de `mosquitto_passwd`), que está en `.gitignore` y `.dockerignore`. Nunca en el repositorio.
 - **El JSON de la cuenta de servicio de Firebase nunca va al repositorio**: `Push__RutaCredencialesFirebase` apunta fuera de él y el `.gitignore` excluye `*firebase*.json`, `*-firebase-adminsdk-*.json` y `credenciales/`.
 - Nunca escribir en el log contraseñas, tokens ni valores del `.env`.
 
@@ -187,6 +193,7 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
   - El estado va a `RegistrarPresenciaDispositivo` → `IPresenciaDispositivos` (en memoria), que se ve como `conexionSensor` en monitoreados y en signos.
   - Si está habilitado, `/health` incluye `mqtt`.
   - Configuración: `Mqtt__Habilitado`, `Mqtt__Servidor`, `Mqtt__Puerto`, `Mqtt__Usuario` y `Mqtt__Clave` (= `MQTT_BACKEND_CLAVE` de `../IOT/tesis_V01/broker/.env`). Si la API corre en Docker, `docker-compose.yml` usa `host.docker.internal` como servidor.
+  - TLS (fase 7): `Mqtt__UsarTls` (false) usa `WithTlsOptions` con el servidor como SNI. `Mqtt__ValidarCertificado` (true) solo puede ser false en Development: `OpcionesMqtt.Cargar(configuration, esDesarrollo)` falla si no. El chequeo `mqtt` de `/health` describe el broker (host, puerto, TLS), nunca el usuario ni la clave.
 - **Motor clínico** (`Domain/Clinica`, `Application/Clinica`, `docs/motor-clinico.md`):
   - `CalculadoraNews2` (RCP 2017) y `CalculadoraMews` (Subbe 2001) son tablas puras con pruebas en cada límite.
   - `EvaluarRiesgoAlRegistrarLectura` se engancha a `LecturaRegistrada`; las lecturas atrasadas no evalúan.
@@ -194,6 +201,7 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
   - Lo que falta suma 0 y queda en `faltantes`, con `completo: false`. **Un puntaje parcial es una cota inferior.**
   - `Clinico__AjusteTemperaturaSensor` (°C, 0 por defecto) corrige la temperatura de piel del DS18B20 antes de puntuar.
   - Las evaluaciones se guardan en `evaluacion_riesgo`; el desglose por parámetro se recalcula al leer.
+  - Fase 7: las del wearable solo se guardan si `EvaluacionRiesgo.AportaRespectoDe(anterior)` (cambio de total, nivel o completitud de NEWS2 o MEWS, de la próxima toma, o 5 min). Las de toma manual o cambio de escala, siempre. `RiesgoEvaluado` se publica con cada evaluación, guardada o no (`EvaluacionId` = la última guardada); si no, AL-E9 se reabriría tarde.
   - Endpoints: `GET /pacientes/{id}/riesgo` y `POST /pacientes/{id}/observaciones` (`PersonalClinico`).
 - **Contrato con el firmware:** `ContratoFirmwareTests` usa los JSON exactos de `IOT/tesis_V01/tesis/pruebas/pruebas.cpp`. Si cambia el firmware, cambia esa prueba.
 
@@ -278,6 +286,19 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
 - **HU18:** `ListarPacientesMonitoreados` ordena por nivel NEWS2, totales de NEWS2 y MEWS, alerta abierta más grave y cama.
 - **Fuera de alcance:** umbrales de alerta por paciente (NEWS2 y MEWS son escalas estandarizadas; lo personalizable es la escala de SpO2).
 
+## Producción (fase 7, parte B)
+
+- **Doc:** `docs/despliegue.md` (paso a paso en una VM Linux, DuckDNS, claves MQTT, cron del certificado, operación) y la sección "Firmware en producción" de `docs/contrato-telemetria.md`.
+- **`docker-compose.prod.yml`:** `api` (sin puertos, `env_file: .env`, Production), `caddy` (80/443, `deploy/caddy/Caddyfile`: `{$DOMINIO}` → `api:8080`) y `mosquitto` (8883 publicado; 1883 solo en la red interna `172.30.57.0/24`). Sin PostgreSQL: la base es Supabase.
+- **Mosquitto** (`deploy/mosquitto`): `iniciar.sh` espera el certificado de Caddy (volumen `caddy_datos` en solo lectura), lo copia con `copiar-cert.sh` a `/mosquitto/certs` con permisos del usuario `mosquitto` (Mosquitto 2 suelta los privilegios antes de cargarlo) y exige `secretos/passwd`. El ACL es el del IoT más `solicitudes`. `scripts/recargar-cert-mosquitto.sh` (cron semanal) copia y manda `SIGHUP`; `scripts/agregar-wearable-mqtt.sh CODIGO` crea la clave de un wearable.
+- **Proxy** (`Configuracion/ProxyVitalify.cs`): `UseForwardedHeaders` es lo primero del pipeline (X-Forwarded-For y X-Forwarded-Proto, `ForwardLimit=1`); solo desde `Proxy__RedesConocidas` (CIDR separados por comas; sin configurar, ningún proxy). Fuera de Development: `UseHsts` (365 días) y `UseHttpsRedirection` al 443.
+- **CORS** (`CorsVitalify`): `Cors:Origenes` (lista en appsettings.Development o `Cors__Origenes` con comas; `*` no arranca). La API REST no admite credenciales; el hub usa `PoliticaSignalR` con `AllowCredentials` (el cliente JS de SignalR negocia con `withCredentials`).
+- **SignalR:** KeepAlive 15 s, ClientTimeout 30 s, WebSockets, SSE y long polling (`MapTiempoReal`).
+- **Solo Development:** el simulador ni se registra fuera de Development (aunque `Simulador__Habilitado=true`, que se avisa en el log), `POST /dev/telemetria` y Swagger (salvo `Swagger__Habilitado=true`).
+- **Retención** (`Application/Historial/Retencion.cs`, `Domain/Historial/RetencionHistorial.cs`): `RetencionHistorialWorker` corre a las 03:00 de `Turnos__ZonaHoraria` (`ProgramaDiario`) y llama a `ResumirLecturasAntiguas`. Resume las crudas de los episodios **egresados** hace más de `Historial__DiasRetencionCrudo` (30) días en `lectura_signos_resumen` (5 min) y las borra en la misma sentencia (CTE `DELETE ... RETURNING` + `INSERT ... ON CONFLICT`), un día por sentencia. Es la única excepción a "no borrar". `AgruparAsync` y `ObtenerExtremosAsync` unen crudas y resumidas; `HistorialSignosDto.ResumidoHasta` y `GrupoSignosDto.Resumido` lo indican.
+- **Almacenamiento:** `GET /api/v1/sistema/almacenamiento` (`SoloAdministrador`, `IMedidorAlmacenamiento`): `pg_database_size` y `pg_total_relation_size` por tabla de los dos esquemas, con el límite `Sistema__LimiteAlmacenamientoMb` (500).
+- Supabase pausa un proyecto gratuito tras 7 días sin actividad (anotado en el README).
+
 ## Pruebas de integración
 
 - `tests/Vitalify.Api.IntegrationTests` usa `WebApplicationFactory` y un PostgreSQL 17 en Testcontainers. `FabricaVitalify` pasa la configuración como variables de entorno y aplica las migraciones antes de arrancar la API.
@@ -285,6 +306,8 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
   - Casi todas las clases comparten un contenedor (colección `api`). Usan correos, códigos y DNI únicos (`ClienteApi.NuevoDni()`) y no dependen del orden.
   - Las pruebas que necesitan partir de una base vacía usan la colección `api-aislada` (`FabricaVitalifyAislada`), que tiene su propio contenedor.
   - La colección `api-mqtt` (`FabricaVitalifyMqtt`) levanta además un Mosquitto real (`eclipse-mosquitto:2`, con anónimos permitidos). `PublicarAsync` publica como el ESP32 y `EsperarAsync` espera la ingesta asíncrona.
+  - La colección `api-mqtt-tls` (`FabricaVitalifyMqttTls`) es lo mismo con TLS en 8883 y un certificado autofirmado generado en la prueba: es la única con `Mqtt__ValidarCertificado=false`.
+  - La colección `api-retencion` (`FabricaVitalifyRetencion`) tiene su propio contenedor: la retención resume todos los episodios que cumplan la regla, también los de otras pruebas.
   - Las colecciones no corren en paralelo (`Infraestructura/Ensamblado.cs`), porque la configuración va por variables de entorno del proceso. Una fábrica derivada agrega contenedores y variables con `ConfiguracionAdicionalAsync`.
 - **Fase 5:**
   - `Fabrica.Comandos` envuelve al publicador real y registra cada comando (tópico, JSON y si va retenido). Con MQTT, además lo publica en el broker.
@@ -298,13 +321,14 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
   - `Fabrica.Push` registra cada push (`DeAlerta(id)`); los tokens de `Fabrica.Push.NoRegistrados` responden "no registrado".
   - `Fabrica.VigilarAlertasAsync()` corre el vigilante una vez; en las fábricas está apagado con `Alertas__SegundosVigilancia=0`.
   - Para el escalamiento y la falta de señal, adelanta el reloj **después** de iniciar sesión: el JWT se valida con el reloj real.
+- **Fase 7, parte B:** `Fabrica.ResumirHistorialAsync()` corre la retención una vez (en las fábricas está apagada con `Historial__RetencionHabilitada=false`); para que un episodio cumpla los 30 días, adelanta el reloj (`Reloj.Adelantar(TimeSpan.FromDays(31))`). Las fábricas ponen `Proxy__RedesConocidas=10.99.0.0/16` (`FabricaVitalify.RedProxy`, `IpProxy`): `CrearCliente(ip)` con una IP de esa red y `X-Forwarded-For` simula llegar por el proxy.
 - **Fase 7:** `PacienteConSensorAsync` ingresa **y** vincula 6 h antes (el historial empieza en el ingreso). Para que una lectura evalúe el riesgo como si llegara en tiempo real, envíala con el reloj adelantado a su hora (`Fase7HistorialTests.EnviarHaceAsync`): el motor usa la hora de la API para la vigencia.
 - **Atajos** en `ClienteApi`: `CrearCamaAsync`, `CrearDispositivoAsync`, `IngresarPacienteAsync`, `VincularAsync`, `EgresarAsync`, `RegistrarTelemetriaAsync` (entra por `/dev/telemetria`), `Ts` y `Ms`. En `PruebaApi`: `ClienteAdministradorAsync`, `ClienteEnfermeraAsync`, `ClienteMedicoAsync` y `PacienteConSensorAsync`.
 - **Fábrica:**
   - `FabricaVitalify.ConsultarHistorialAsync` lee `HistorialDbContext`.
   - `SolicitudesNuevaLectura` registra las solicitudes de nueva lectura.
-  - `FabricaVitalifyProduccion` (colección `api-produccion`) arranca en Production, para probar lo que solo existe en Development.
-- **`tests/Vitalify.Api.Tests`:** pruebas unitarias de los adaptadores de entrada (determinismo del simulador; el worker solo llama al puerto).
+  - `FabricaVitalifyProduccion` (colección `api-produccion`) arranca en Production, para probar lo que solo existe en Development. Sus clientes entran como en el servidor (por el proxy conocido, con `X-Forwarded-Proto: https`); si no, la API los redirige a HTTPS. Arranca con `Simulador__Habilitado=true` para comprobar que se ignora.
+- **`tests/Vitalify.Api.Tests`:** pruebas unitarias de los adaptadores de entrada (determinismo del simulador; el worker solo llama al puerto), de `OpcionesMqtt`, del proxy y CORS (`InternalsVisibleTo`) y de `CadenaDeConexion`.
 - `RelojAjustable` reemplaza a `IReloj`: `using (Fabrica.Reloj.Adelantar(...))` y se restablece al salir del bloque.
 - Cada `CrearCliente()` usa una IP distinta (encabezado `X-Ip-Prueba`), para que el límite de login no se comparta entre pruebas.
 - Hay una prueba por escenario, con el nombre `HUxx_Ey_...`.
@@ -314,7 +338,7 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
 - Rutas versionadas: `api/v1/...`. Los controladores van en `Controllers/V1`.
 - Errores: `ManejadorGlobalDeExcepciones` (`IExceptionHandler`) y `AddProblemDetails` con `traceId`. Todo error sale como ProblemDetails y el detalle y el stack trace solo se muestran en Development.
 - `/health` usa los checks `transaccional` e `historial` (AspNetCore.HealthChecks.NpgSql, registrados en `AddInfrastructure`) y responde un JSON propio (`RespuestaHealth`).
-- Swagger solo en Development, con comentarios XML y el botón Authorize. Cada endpoint lleva `[ProducesResponseType]` y comentarios XML.
+- Swagger solo en Development (o con `Swagger__Habilitado=true`), con comentarios XML y el botón Authorize. Cada endpoint lleva `[ProducesResponseType]` y comentarios XML.
 - No poner `[Produces("application/json")]` en los controladores: sobrescribe el `application/problem+json` de los errores.
-- Logs con `ILogger` en JSON por consola. Los orígenes de CORS se configuran en `Cors:OrigenesPermitidos` (appsettings).
+- Logs con `ILogger` en JSON por consola. Los orígenes de CORS se configuran en `Cors:Origenes` (appsettings.Development o `Cors__Origenes` en el `.env`; nunca `*`).
 - La configuración de la API está en `src/Vitalify.Api/Configuracion/`.

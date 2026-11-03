@@ -150,6 +150,10 @@ Cuando empieza un turno (el vigilante detecta los turnos que empezaron desde su 
 ### Tiempo real (SignalR)
 
 - **Hub:** `/hubs/monitoreo` (fuera de `/api/v1`). Se autentica con el mismo access token. Como el navegador no puede mandar encabezados en WebSocket, acepta `?access_token=` en el query **solo en esa ruta**. Solo pueden conectarse la enfermera y el médico.
+- **Conexión (fase 7):**
+  - Transportes: WebSockets (lo preferido; Caddy los reenvía en producción) y, si algo los bloquea, Server-Sent Events o long polling.
+  - El servidor envía un ping cada 15 s y corta al cliente que calla 30 s, así que el cliente debe usar `serverTimeoutInMilliseconds` ≥ 30000 (el valor por defecto lo cumple).
+  - CORS: solo el hub admite credenciales (el cliente JavaScript negocia con `withCredentials`), y solo para los orígenes de `Cors__Origenes`.
 - **Grupos:** al conectarse, el usuario entra a `usuario:{id}` y a `servicio:{servicioId}`; el médico, además, a `medicos:{servicioId}`. Hoy todos los eventos van al grupo del servicio, y los otros dos quedan listos para avisos personales.
 
 **Eventos:**
