@@ -70,7 +70,8 @@ public sealed class ObtenerResumenPaciente(
         var ultima = await evaluaciones.ObtenerUltimaAsync(hospitalizacion.Id, ct);
         var riesgo = ultima is null ? null : await presentadorRiesgo.PresentarAsync(ultima, ct);
 
-        var tomas = await observaciones.ListarAsync(hospitalizacion.Id, hospitalizacion.IngresoEn, hospitalizacion.EgresoEn ?? ahora, ct);
+        var tomas = await observaciones.ListarAsync(
+            hospitalizacion.Id, ListarObservacionesPaciente.InicioPorDefecto(hospitalizacion), hospitalizacion.EgresoEn ?? ahora, ct);
         var extremos = new ExtremosEpisodioDto(await lecturas.ObtenerExtremosAsync(hospitalizacion.Id, ct), Extremos(tomas));
 
         var delEpisodio = await alertas.ListarDeHospitalizacionAsync(hospitalizacion.Id, ct);

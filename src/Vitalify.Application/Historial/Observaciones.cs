@@ -48,19 +48,28 @@ public sealed class ListarObservacionesPaciente(
             return elegido.Error;
         }
 
+        // Sin el límite de 7 días de las series: las tomas son pocas.
         var hospitalizacion = elegido.Valor.Hospitalizacion;
-        var ventana = EpisodiosPaciente.Ventana(hospitalizacion, reloj.AhoraUtc, consulta.Desde, consulta.Hasta, agrupado: true);
-        if (!ventana.EsExito)
+        var desde = consulta.Desde?.ToUniversalTime() ?? InicioPorDefecto(hospitalizacion);
+        var hasta = consulta.Hasta?.ToUniversalTime() ?? hospitalizacion.EgresoEn ?? reloj.AhoraUtc;
+        if (desde > hasta)
         {
-            return ventana.Error;
+            return ErroresComunes.ValidacionDeCampo("hasta", "hasta debe ser posterior a desde.");
         }
 
-        var filas = await observaciones.ListarAsync(hospitalizacion.Id, ventana.Valor.Desde, ventana.Valor.Hasta, ct);
+        var filas = await observaciones.ListarAsync(hospitalizacion.Id, desde, hasta, ct);
         var profesionales = await directorio.ObtenerAsync(filas.Select(o => o.RegistradaPor), ct);
         var auditado = await auditoria.RegistrarAsync(consulta.PacienteId, hospitalizacion.Id, "observaciones", consulta.UsuarioId, consulta.Ip, ct);
         return auditado.EsExito
-            ? new ObservacionesPacienteDto(consulta.PacienteId, hospitalizacion.Id, ventana.Valor.Desde, ventana.Valor.Hasta,
+            ? new ObservacionesPacienteDto(consulta.PacienteId, hospitalizacion.Id, desde, hasta,
                 filas.Select(o => ObservacionHistorialDto.Desde(o, DirectorioProfesionales.De(profesionales, o.RegistradaPor))).ToList())
             : auditado.Error;
     }
+
+    /// <summary>
+    /// Una toma se puede registrar con su hora real hasta 12 h atrás, así que la del ingreso puede ser anterior a este:
+    /// por defecto el rango empieza ese margen antes, para no perderla.
+    /// </summary>
+    public static DateTime InicioPorDefecto(Domain.Hospitalizaciones.Hospitalizacion hospitalizacion) =>
+        hospitalizacion.IngresoEn - FrecuenciaTomaManual.TopeVigencia;
 }
