@@ -5,7 +5,8 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 namespace Vitalify.Api.Configuracion;
 
 /// <summary>
-/// Respuesta JSON de <c>/health</c> con el estado global y el de cada check (<c>transaccional</c>, <c>historial</c>).
+/// Respuesta JSON de <c>/health</c> con el estado global y el de cada check (<c>transaccional</c>, <c>historial</c> y,
+/// si el receptor está habilitado, <c>mqtt</c> con su broker). Ninguna descripción lleva claves ni cadenas de conexión.
 /// </summary>
 internal static class RespuestaHealth
 {
@@ -26,6 +27,7 @@ internal static class RespuestaHealth
                 e => new
                 {
                     estado = e.Value.Status.ToString(),
+                    descripcion = e.Value.Description,
                     duracionMs = Math.Round(e.Value.Duration.TotalMilliseconds),
                     error = mostrarErrores ? e.Value.Exception?.Message : null,
                 }),

@@ -2,10 +2,13 @@ using System.Globalization;
 using Microsoft.Extensions.Configuration;
 using Vitalify.Application.Alertas;
 using Vitalify.Application.Clinica;
+using Vitalify.Application.Historial;
+using Vitalify.Application.Sistema;
 using Vitalify.Application.Telemetria;
 using Vitalify.Application.Vinculacion;
 using Vitalify.Domain.Comun;
 using Vitalify.Domain.Alertas;
+using Vitalify.Domain.Historial;
 using Vitalify.Domain.Telemetria;
 using Vitalify.Domain.Turnos;
 using Vitalify.Infrastructure.Notificaciones;
@@ -91,7 +94,8 @@ internal static class ConfiguracionTelemetria
 
     /// <summary>
     /// Sección <c>Alertas</c>: <c>Alertas__SegundosSinSenal</c> (180), <c>Alertas__Escalamiento__MinutosAlta</c> (5),
-    /// <c>Alertas__Escalamiento__MinutosMedia</c> (15) y <c>Alertas__SegundosVigilancia</c> (30; 0 apaga el vigilante).
+    /// <c>Alertas__Escalamiento__MinutosMedia</c> (15), <c>Alertas__SegundosVigilancia</c> (30; 0 apaga el vigilante) y
+    /// <c>Alertas__MinutosEsperaTrasAtender</c> (30; 0 la desactiva).
     /// </summary>
     public static OpcionesAlertas CargarOpcionesAlertas(IConfiguration configuration)
     {
@@ -102,8 +106,30 @@ internal static class ConfiguracionTelemetria
             new ReglasEscalamiento(
                 TimeSpan.FromMinutes((double)Numero(escalamiento, "MinutosAlta", 5, minimo: 0)),
                 TimeSpan.FromMinutes((double)Numero(escalamiento, "MinutosMedia", 15, minimo: 0))),
-            TimeSpan.FromSeconds((double)Numero(s, "SegundosVigilancia", 30, minimo: 0)));
+            TimeSpan.FromSeconds((double)Numero(s, "SegundosVigilancia", 30, minimo: 0)))
+        {
+            EsperaTrasAtender = TimeSpan.FromMinutes((double)Numero(s, "MinutosEsperaTrasAtender", 30, minimo: 0)),
+        };
     }
+
+    /// <summary>
+    /// Sección <c>Historial</c>: <c>Historial__DiasRetencionCrudo</c> (30: días desde el egreso que se guardan crudas las
+    /// lecturas antes de resumirlas), <c>Historial__HoraRetencion</c> (<c>03:00</c>, hora local de
+    /// <c>Turnos__ZonaHoraria</c>) y <c>Historial__RetencionHabilitada</c> (true; false apaga el worker).
+    /// </summary>
+    public static OpcionesHistorial CargarOpcionesHistorial(IConfiguration configuration)
+    {
+        var s = configuration.GetSection("Historial");
+        var dias = Numero(s, "DiasRetencionCrudo", 30, minimo: 1);
+        var habilitada = !bool.TryParse(s["RetencionHabilitada"], out var h) || h;
+        var zona = Zona(string.IsNullOrWhiteSpace(configuration["Turnos:ZonaHoraria"]) ? "America/Lima" : configuration["Turnos:ZonaHoraria"]!.Trim());
+        return new OpcionesHistorial(
+            new PoliticaRetencion(TimeSpan.FromDays((double)dias)), Hora(s, "HoraRetencion", new TimeOnly(3, 0)), zona, habilitada);
+    }
+
+    /// <summary>Sección <c>Sistema</c>: <c>Sistema__LimiteAlmacenamientoMb</c> (500, el plan gratuito de Supabase).</summary>
+    public static OpcionesSistema CargarOpcionesSistema(IConfiguration configuration) =>
+        new((long)Numero(configuration.GetSection("Sistema"), "LimiteAlmacenamientoMb", 500, minimo: 1) * OpcionesSistema.BytesPorMb);
 
     /// <summary>
     /// Sección <c>Push</c>: <c>Push__Habilitado</c> (false) y <c>Push__RutaCredencialesFirebase</c>, que debe existir si se

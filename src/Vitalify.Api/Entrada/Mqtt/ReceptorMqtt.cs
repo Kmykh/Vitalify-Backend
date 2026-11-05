@@ -1,3 +1,4 @@
+using System.Security.Authentication;
 using System.Text;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using MQTTnet;
@@ -82,8 +83,8 @@ public sealed class ReceptorMqtt(
                     _conectado = true;
                     espera = TimeSpan.FromSeconds(2);
                     logger.LogInformation(
-                        "MQTT conectado a {Servidor}:{Puerto} como {ClientId} (sesión previa: {SesionPrevia}); suscrito a {Telemetria}, {Estado} y {Solicitudes}.",
-                        opciones.Servidor, opciones.Puerto, opciones.ClientId, resultado.IsSessionPresent,
+                        "MQTT conectado a {Servidor}:{Puerto} (TLS: {Tls}) como {ClientId} (sesión previa: {SesionPrevia}); suscrito a {Telemetria}, {Estado} y {Solicitudes}.",
+                        opciones.Servidor, opciones.Puerto, opciones.UsarTls, opciones.ClientId, resultado.IsSessionPresent,
                         OpcionesMqtt.TopicoTelemetria, OpcionesMqtt.TopicoEstado, ContratoComandos.TopicoSolicitudes);
                 }
 
@@ -97,7 +98,7 @@ public sealed class ReceptorMqtt(
             {
                 _conectado = false;
                 logger.LogWarning(
-                    "MQTT: no se pudo conectar a {Servidor}:{Puerto} ({Error}). Reintento en {Espera} s. ¿Está corriendo el broker del proyecto IoT?",
+                    "MQTT: no se pudo conectar a {Servidor}:{Puerto} ({Error}). Reintento en {Espera} s. ¿Está corriendo el broker (en desarrollo, el del proyecto IoT)?",
                     opciones.Servidor, opciones.Puerto, ex.Message, espera.TotalSeconds);
                 try
                 {
@@ -189,6 +190,21 @@ public sealed class ReceptorMqtt(
         if (opciones.Usuario is not null)
         {
             builder = builder.WithCredentials(opciones.Usuario, opciones.Clave);
+        }
+
+        if (opciones.UsarTls)
+        {
+            builder = builder.WithTlsOptions(tls =>
+            {
+                tls.UseTls()
+                    .WithTargetHost(opciones.Servidor)
+                    .WithSslProtocols(SslProtocols.Tls12 | SslProtocols.Tls13);
+                if (!opciones.ValidarCertificado)
+                {
+                    // Solo en Development (OpcionesMqtt lo impide en otro entorno): un broker con certificado autofirmado.
+                    tls.WithCertificateValidationHandler(_ => true);
+                }
+            });
         }
 
         return builder.Build();
@@ -297,20 +313,27 @@ public sealed class ReceptorMqtt(
     }
 }
 
-/// <summary><c>/health</c> incluye <c>mqtt</c> cuando el receptor está habilitado.</summary>
+/// <summary>
+/// <c>/health</c> incluye <c>mqtt</c> cuando el receptor está habilitado: el estado de la conexión y a qué broker (host,
+/// puerto y si usa TLS). Nunca el usuario ni la clave.
+/// </summary>
 internal sealed class ChequeoMqtt(ReceptorMqtt receptor, OpcionesMqtt opciones) : IHealthCheck
 {
-    public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default) =>
-        Task.FromResult(receptor.Conectado
-            ? HealthCheckResult.Healthy($"Conectado a {opciones.Servidor}:{opciones.Puerto}.")
-            : HealthCheckResult.Unhealthy($"Sin conexión con el broker {opciones.Servidor}:{opciones.Puerto}."));
+    public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
+    {
+        var broker = $"{opciones.Servidor}:{opciones.Puerto}{(opciones.UsarTls ? " (TLS)" : string.Empty)}";
+        var datos = new Dictionary<string, object> { ["servidor"] = opciones.Servidor, ["puerto"] = opciones.Puerto, ["tls"] = opciones.UsarTls };
+        return Task.FromResult(receptor.Conectado
+            ? HealthCheckResult.Healthy($"Conectado a {broker}.", data: datos)
+            : HealthCheckResult.Unhealthy($"Sin conexión con el broker {broker}.", data: datos));
+    }
 }
 
 internal static class RegistroMqtt
 {
-    public static IServiceCollection AddReceptorMqtt(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddReceptorMqtt(this IServiceCollection services, IConfiguration configuration, IHostEnvironment entorno)
     {
-        var opciones = OpcionesMqtt.Cargar(configuration);
+        var opciones = OpcionesMqtt.Cargar(configuration, entorno.IsDevelopment());
         services.AddSingleton(opciones);
         services.AddSingleton<ColaComandosMqtt>();
         services.AddSingleton<ReceptorMqtt>();

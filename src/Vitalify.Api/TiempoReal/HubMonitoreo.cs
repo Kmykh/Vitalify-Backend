@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http.Connections;
 using System.Collections.Concurrent;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
@@ -113,11 +114,33 @@ public sealed class NotificadorSignalR(IHubContext<HubMonitoreo> hub, Conexiones
 
 internal static class RegistroTiempoReal
 {
+    /// <summary>
+    /// Ping del servidor cada 15 s y desconexión si el cliente calla 30 s: detrás del proxy (Caddy) una conexión
+    /// WebSocket sin tráfico no se corta, y un cliente que perdió la red se detecta pronto. El cliente debe usar un
+    /// <c>serverTimeout</c> de al menos 30 s (el doble del KeepAlive).
+    /// </summary>
+    public static readonly TimeSpan KeepAlive = TimeSpan.FromSeconds(15);
+
+    public static readonly TimeSpan TiempoMaximoCliente = TimeSpan.FromSeconds(30);
+
     public static IServiceCollection AddTiempoReal(this IServiceCollection services)
     {
-        services.AddSignalR();
+        services.AddSignalR(o =>
+        {
+            o.KeepAliveInterval = KeepAlive;
+            o.ClientTimeoutInterval = TiempoMaximoCliente;
+        });
         services.AddSingleton<ConexionesMonitoreo>();
         services.AddSingleton<INotificadorTiempoReal, NotificadorSignalR>();
         return services;
     }
+
+    /// <summary>
+    /// El hub con WebSockets (lo preferido; Caddy los reenvía sin configuración) y, si un proxy o red los bloquea, Server-Sent
+    /// Events o long polling. Con la política CORS que admite credenciales, que solo usa el hub.
+    /// </summary>
+    public static IEndpointConventionBuilder MapTiempoReal(this IEndpointRouteBuilder app) =>
+        app.MapHub<HubMonitoreo>(HubMonitoreo.Ruta, o =>
+            o.Transports = HttpTransportType.WebSockets | HttpTransportType.ServerSentEvents | HttpTransportType.LongPolling)
+            .RequireCors(Configuracion.CorsVitalify.PoliticaSignalR);
 }

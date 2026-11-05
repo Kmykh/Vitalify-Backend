@@ -8,7 +8,7 @@ namespace Vitalify.Api.Entrada.Desarrollo;
 
 /// <summary>
 /// Adaptador de entrada temporal: recibe el JSON del contrato de telemetría por HTTP y lo pasa al mismo puerto
-/// que usarán el simulador y, en la fase 7, MQTT. Solo existe en Development.
+/// que usan el simulador y el receptor MQTT. Solo existe en Development.
 /// </summary>
 internal static class EndpointTelemetriaDesarrollo
 {

@@ -24,4 +24,9 @@ public enum AccionAuditoria
     AlertaTomada = 20,
     AlertaAtendida = 21,
     ServicioAsignado = 22,
+
+    /// <summary>Consulta del historial, el resumen, las alertas o las notas de un paciente (fase 7).</summary>
+    ConsultaHistorialPaciente = 23,
+    NotaRegistrada = 24,
+    NotaEditada = 25,
 }

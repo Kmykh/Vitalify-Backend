@@ -6,7 +6,7 @@ namespace Vitalify.Application.Telemetria;
 
 /// <summary>
 /// Único puerto de entrada de la telemetría (HU10, HU11 y HU12). Lo llaman el simulador, el endpoint de desarrollo
-/// y, en la fase 7, el adaptador MQTT. El núcleo no sabe quién envió la lectura: solo guarda su origen.
+/// y el receptor MQTT. El núcleo no sabe quién envió la lectura: solo guarda su origen.
 /// </summary>
 public interface IRegistrarLectura
 {

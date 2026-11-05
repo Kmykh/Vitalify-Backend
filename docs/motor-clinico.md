@@ -37,7 +37,12 @@ Lo que no esté en ninguna de las dos queda como faltante.
 - Con cada lectura del wearable que hace avanzar el estado del paciente, cada ~10 s. Las lecturas atrasadas del búfer offline no disparan una evaluación.
 - Con cada observación registrada.
 
-Cada evaluación queda en `vitalify_historial.evaluacion_riesgo` con los valores usados, para ver la tendencia.
+**Qué se guarda** en `vitalify_historial.evaluacion_riesgo`, con los valores usados, para ver la tendencia:
+
+- Las evaluaciones de una toma manual o de un cambio de escala de SpO2: siempre.
+- Las del wearable (8640 al día por paciente): solo si respecto de la última guardada cambió el total o el nivel de NEWS2 o de MEWS, cambió si están completos o cambió la próxima toma manual, o si ya pasaron **5 minutos** (`EvaluacionRiesgo.AportaRespectoDe`). Así la tendencia no pierde ningún cambio y la tabla crece unas 12 filas por hora en un paciente estable, en lugar de 360.
+
+`RiesgoEvaluado` se publica con **cada** evaluación, se guarde o no. Las alertas reaccionan al instante (por ejemplo, al terminar la espera tras atender, AL-E9) y el tablero recibe el puntaje al día. Si la evaluación no se guardó, el evento lleva el id de la última guardada, que tiene el mismo puntaje. `GET /riesgo` muestra la última guardada: el mismo puntaje, con valores de hasta 5 min antes.
 
 ## Tablas
 
@@ -170,7 +175,8 @@ Los enlaces están en la guía (`GET /api/v1/guias/toma-manual`, sección `fuent
 | `POST /api/v1/pacientes/{id}/observaciones` | Médico o Enfermera | Toma manual del asistente (`oxigeno`, `conciencia`, `presion`, `fr`, `contexto`, `preocupacionClinica`, `versionGuia`, `observadaEn`) o los campos planos de la fase 4. Recalcula el riesgo y lo devuelve |
 | `GET /api/v1/guias/toma-manual` | Médico o Enfermera | Guía versionada del asistente |
 | `PUT /api/v1/pacientes/{id}/escala-spo2` | Médico | Indica la escala de SpO2 del paciente y recalcula el riesgo |
-| `GET /api/v1/pacientes/monitoreados` | Médico o Enfermera | Por paciente, `ultimoNews2`, `ultimoMews`, `nivelRiesgo`, `evaluacionCompleta`, `senal` y `conexionSensor` |
+| `GET /api/v1/pacientes/monitoreados` | Médico o Enfermera | Por paciente, `ultimoNews2`, `ultimoMews`, `nivelRiesgo`, `evaluacionCompleta`, `senal` y `conexionSensor`, de mayor a menor riesgo (HU18) |
+| `GET /api/v1/pacientes/{id}/riesgo/historial` | Médico o Enfermera | Evaluaciones del episodio, o agrupadas (ver [historial-clinico.md](historial-clinico.md)) |
 
 En la observación, `conciencia` puede ser un objeto con las respuestas del asistente o, como en la fase 4, un texto (`Alerta`, `ConfusionNueva`, `RespondeVoz`, `RespondeDolor` o `NoResponde`). `observadaEn` puede ser de hasta 4 h atrás.
 

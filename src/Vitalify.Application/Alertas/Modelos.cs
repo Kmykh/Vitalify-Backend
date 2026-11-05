@@ -11,6 +11,12 @@ namespace Vitalify.Application.Alertas;
 public sealed record OpcionesAlertas(TimeSpan SinSenal, ReglasEscalamiento Escalamiento, TimeSpan IntervaloVigilancia)
 {
     public static readonly OpcionesAlertas PorDefecto = new(TimeSpan.FromSeconds(180), ReglasEscalamiento.PorDefecto, TimeSpan.FromSeconds(30));
+
+    /// <summary>
+    /// Tras atender una alerta de riesgo, cuánto tiempo no se abre otra salvo que suba el nivel (30 min;
+    /// <c>Alertas__MinutosEsperaTrasAtender</c>).
+    /// </summary>
+    public TimeSpan EsperaTrasAtender { get; init; } = TimeSpan.FromMinutes(30);
 }
 
 /// <summary>Por qué se notifica.</summary>

@@ -1,0 +1,14 @@
+# Caddy: HTTPS automático para {$DOMINIO} y proxy hacia la API (red interna de Docker, api:8080).
+#
+# - Saca y renueva solo el certificado de Let's Encrypt (puertos 80 y 443 abiertos y el dominio apuntando al servidor).
+#   Con "localhost" o un nombre *.localhost usa su propia CA local (pruebas en la laptop).
+# - Agrega X-Forwarded-For y X-Forwarded-Proto. La API solo les cree a los proxies de Proxy__RedesConocidas (la subred
+#   interna de docker-compose.prod.yml), así que el límite de logins se cuenta por la IP real del cliente.
+# - Reenvía WebSockets (SignalR, /hubs/monitoreo) sin configuración adicional.
+# - El certificado queda en el volumen caddy_datos, que Mosquitto lee en solo lectura para su puerto 8883.
+
+{$DOMINIO} {
+	encode zstd gzip
+	reverse_proxy api:8080
+	log
+}

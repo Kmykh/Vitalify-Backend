@@ -258,6 +258,67 @@ public class Fase6AlertasTests(FabricaVitalify fabrica) : PruebaApi(fabrica)
         Assert.Equal(HttpStatusCode.Forbidden, (await sala.Administrador.GetAsync("/api/v1/alertas")).StatusCode);
     }
 
+    private Task<List<AlertaClinica>> AlertasDeRiesgoAsync(Sala sala) =>
+        Fabrica.ConsultarAsync(db => db.Alertas.AsNoTracking()
+            .Where(a => a.HospitalizacionId == sala.Paciente.HospitalizacionActiva!.Id && a.Tipo == TipoAlerta.Riesgo)
+            .OrderBy(a => a.CreadaEn).ToListAsync());
+
+    private async Task AtenderRiesgoAsync(Sala sala)
+    {
+        var abierta = (await AlertasDeRiesgoAsync(sala)).Single(a => a.EstaAbierta);
+        var atendida = await sala.Enfermera.PostAsJsonAsync($"/api/v1/alertas/{abierta.Id}/atender", new { nota = "Se avisó al médico de guardia." });
+        Assert.Equal(HttpStatusCode.OK, atendida.StatusCode);
+    }
+
+    [Fact]
+    public async Task AL_E9_TrasAtenderNoSeAbreOtraDelMismoNivelDuranteLaEspera_PeroSiSiSube()
+    {
+        var sala = await SalaAsync();
+        await News2CincoAsync(sala);
+        Assert.Equal(PrioridadAlerta.Media, Assert.Single(await AlertasDeRiesgoAsync(sala)).Prioridad);
+        await AtenderRiesgoAsync(sala);
+
+        using (Fabrica.Reloj.Adelantar(TimeSpan.FromSeconds(10)))
+        {
+            await News2CincoAsync(sala);
+        }
+
+        Assert.Single(await AlertasDeRiesgoAsync(sala));
+
+        using (Fabrica.Reloj.Adelantar(TimeSpan.FromSeconds(20)))
+        {
+            await News2SieteAsync(sala);
+        }
+
+        var alertas = await AlertasDeRiesgoAsync(sala);
+        Assert.Equal(2, alertas.Count);
+        Assert.Equal(PrioridadAlerta.Alta, alertas.Single(a => a.EstaAbierta).Prioridad);
+    }
+
+    [Fact]
+    public async Task AL_E9_AlTerminarLaEsperaSeAbreOtraAunqueSigaEnElMismoNivel()
+    {
+        var sala = await SalaAsync();
+        await News2CincoAsync(sala);
+        await AtenderRiesgoAsync(sala);
+
+        using (Fabrica.Reloj.Adelantar(TimeSpan.FromMinutes(29)))
+        {
+            await News2CincoAsync(sala);
+        }
+
+        Assert.Single(await AlertasDeRiesgoAsync(sala));
+
+        using (Fabrica.Reloj.Adelantar(TimeSpan.FromMinutes(31)))
+        {
+            await News2CincoAsync(sala);
+        }
+
+        var alertas = await AlertasDeRiesgoAsync(sala);
+        Assert.Equal(2, alertas.Count);
+        Assert.Equal(PrioridadAlerta.Media, alertas.Single(a => a.EstaAbierta).Prioridad);
+    }
+
     [Fact]
     public async Task LaPreocupacionClinicaAvisaALosMedicosDelServicio()
     {

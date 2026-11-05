@@ -8,6 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Vitalify.Api.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Vitalify.Application\Vitalify.Application.csproj" />
     <ProjectReference Include="..\Vitalify.Infrastructure\Vitalify.Infrastructure.csproj" />
   </ItemGroup>

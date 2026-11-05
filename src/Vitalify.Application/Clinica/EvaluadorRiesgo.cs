@@ -15,7 +15,7 @@ namespace Vitalify.Application.Clinica;
 /// 12 h), y si una evaluación posterior acortó el plazo porque el paciente empeoró, hasta ese plazo.</item>
 /// </list>
 /// Lo que no está en ninguna de las dos fuentes queda como faltante y el puntaje se marca parcial. Cada evaluación
-/// guarda su <see cref="EvaluacionRiesgo.ProximaTomaManualEn"/>. No guarda: el llamador confirma con
+/// guarda su <see cref="EvaluacionRiesgo.ProximaTomaManualEn"/>. Solo la agrega al repositorio: el llamador confirma con
 /// <see cref="IUnidadDeTrabajoHistorial"/> y publica <c>RiesgoEvaluado</c>.
 /// </summary>
 public sealed class EvaluadorRiesgo(
@@ -26,9 +26,36 @@ public sealed class EvaluadorRiesgo(
     OpcionesClinicas opcionesClinicas,
     IReloj reloj)
 {
+    /// <summary>Evalúa y agrega la evaluación siempre (toma manual o cambio de escala).</summary>
     /// <param name="escala">Escala de SpO2 de la hospitalización (la indica el médico; por defecto la 1).</param>
     public async Task<EvaluacionRiesgo> EvaluarAsync(
         Guid hospitalizacionId, Guid pacienteId, OrigenEvaluacion origen, EscalaSpo2 escala, CancellationToken ct = default)
+    {
+        var (evaluacion, _) = await CalcularAsync(hospitalizacionId, pacienteId, origen, escala, ct);
+        evaluaciones.Agregar(evaluacion);
+        return evaluacion;
+    }
+
+    /// <summary>
+    /// Evalúa con una lectura del wearable y la agrega solo si aporta algo respecto de la última guardada
+    /// (<see cref="EvaluacionRiesgo.AportaRespectoDe"/>): un cambio de puntaje, de nivel o de completitud, o 5 min desde
+    /// la anterior. Si no aporta, no se agrega y el puntaje queda respaldado por la última guardada.
+    /// </summary>
+    public async Task<EvaluacionLectura> EvaluarLecturaAsync(
+        Guid hospitalizacionId, Guid pacienteId, EscalaSpo2 escala, CancellationToken ct = default)
+    {
+        var (evaluacion, anterior) = await CalcularAsync(hospitalizacionId, pacienteId, OrigenEvaluacion.Lectura, escala, ct);
+        if (anterior is not null && !evaluacion.AportaRespectoDe(anterior))
+        {
+            return new EvaluacionLectura(evaluacion, false, anterior.Id);
+        }
+
+        evaluaciones.Agregar(evaluacion);
+        return new EvaluacionLectura(evaluacion, true, evaluacion.Id);
+    }
+
+    private async Task<(EvaluacionRiesgo Evaluacion, EvaluacionRiesgo? Anterior)> CalcularAsync(
+        Guid hospitalizacionId, Guid pacienteId, OrigenEvaluacion origen, EscalaSpo2 escala, CancellationToken ct)
     {
         var ahora = reloj.AhoraUtc;
         var estado = await estados.ObtenerAsync(hospitalizacionId, ct);
@@ -46,8 +73,7 @@ public sealed class EvaluadorRiesgo(
             ? FrecuenciaTomaManual.Proxima(toma, ahora, evaluacion.News2())
             : anterior?.ProximaTomaManualEn ?? ahora);
 
-        evaluaciones.Agregar(evaluacion);
-        return evaluacion;
+        return (evaluacion, anterior);
     }
 
     private ParametrosClinicos Combinar(EstadoSignosActual? e, IReadOnlyList<ObservacionEnfermeria> manuales, DateTime ahora)
@@ -83,10 +109,19 @@ public sealed class EvaluadorRiesgo(
     }
 }
 
+/// <summary>Una evaluación del wearable y si se guardó.</summary>
+/// <param name="RespaldoId">La evaluación guardada con ese puntaje: la nueva, o la última guardada si no aportaba nada.</param>
+public sealed record EvaluacionLectura(EvaluacionRiesgo Evaluacion, bool Guardada, Guid RespaldoId);
+
 /// <summary>
 /// Motor clínico de la fase 4 enganchado al punto de extensión de la ingesta: recalcula NEWS2 y MEWS con cada lectura
 /// que hace avanzar el estado del paciente. Las lecturas atrasadas del búfer (más antiguas que la última) no lo
 /// disparan, para que una ráfaga de reenvíos no genere cientos de evaluaciones.
+/// <para>
+/// Si la evaluación no cambia nada y no pasaron 5 min desde la última guardada, no se guarda (el historial ya tiene ese
+/// puntaje), pero <c>RiesgoEvaluado</c> se publica igual: las alertas deben reaccionar a cada evaluación (por ejemplo,
+/// al terminar la espera tras atender, AL-E9) y el tablero recibe el puntaje al día.
+/// </para>
 /// </summary>
 public sealed class EvaluarRiesgoAlRegistrarLectura(
     EvaluadorRiesgo evaluador, IRepositorioEstadoSignos estados, IUnidadDeTrabajoHistorial unidadDeTrabajo, PublicadorRiesgoEvaluado publicador)
@@ -100,10 +135,10 @@ public sealed class EvaluarRiesgoAlRegistrarLectura(
             return;
         }
 
-        var evaluacion = await evaluador.EvaluarAsync(lectura.HospitalizacionId, lectura.PacienteId, OrigenEvaluacion.Lectura, lectura.EscalaSpo2, ct);
-        if ((await unidadDeTrabajo.GuardarCambiosAsync(ct)).EsExito)
+        var evaluada = await evaluador.EvaluarLecturaAsync(lectura.HospitalizacionId, lectura.PacienteId, lectura.EscalaSpo2, ct);
+        if (!evaluada.Guardada || (await unidadDeTrabajo.GuardarCambiosAsync(ct)).EsExito)
         {
-            await publicador.PublicarAsync(evaluacion, ct);
+            await publicador.PublicarAsync(evaluada.Evaluacion, evaluada.RespaldoId, ct);
         }
     }
 }

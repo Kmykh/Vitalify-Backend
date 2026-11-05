@@ -109,6 +109,16 @@ public sealed class RepositorioAuditoriaEnMemoria : IRepositorioAuditoria
     public void Agregar(RegistroAuditoria registro) => Registros.Add(registro);
 
     public IEnumerable<RegistroAuditoria> De(AccionAuditoria accion) => Registros.Where(r => r.Accion == accion);
+
+    public Task<Pagina<RegistroAuditoria>> ListarAsync(FiltroAuditoria filtro, int pagina, int tamano, CancellationToken ct = default)
+    {
+        var filtrados = Registros
+            .Where(r => (filtro.Accion is null || r.Accion == filtro.Accion) && (filtro.UsuarioId is null || r.UsuarioId == filtro.UsuarioId)
+                        && (filtro.Desde is null || r.Fecha >= filtro.Desde) && (filtro.Hasta is null || r.Fecha <= filtro.Hasta))
+            .OrderByDescending(r => r.Fecha)
+            .ToList();
+        return Task.FromResult(new Pagina<RegistroAuditoria>(filtrados.Skip((pagina - 1) * tamano).Take(tamano).ToList(), pagina, tamano, filtrados.Count));
+    }
 }
 
 public sealed class UnidadDeTrabajoFalsa : IUnidadDeTrabajo

@@ -43,6 +43,18 @@ public class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
     /// <summary>Entorno de ASP.NET Core con el que arranca la API.</summary>
     protected virtual string Entorno => "Development";
 
+    /// <summary>Red de los proxies conocidos en las pruebas (<c>Proxy__RedesConocidas</c>).</summary>
+    public const string RedProxy = "10.99.0.0/16";
+
+    /// <summary>La IP con la que llega una solicitud que pasó por el proxy conocido.</summary>
+    public const string IpProxy = "10.99.0.2";
+
+    /// <summary>
+    /// Si los clientes entran como en el servidor: por el proxy conocido, con <c>X-Forwarded-For</c> (su IP) y
+    /// <c>X-Forwarded-Proto: https</c>. Fuera de Development la API redirige a HTTPS lo que no llega así.
+    /// </summary>
+    protected virtual bool ClientesPorElProxy => false;
+
     public async Task InitializeAsync()
     {
         await _postgres.StartAsync();
@@ -65,10 +77,16 @@ public class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
             ["Simulador__Habilitado"] = "false",
             ["Seed__DatosDemo"] = "false",
             ["Mqtt__Habilitado"] = "false",
+            // La configuración va por variables del proceso: se restablece lo que otra fábrica pudo dejar (TLS sin validar).
+            ["Mqtt__UsarTls"] = "false",
+            ["Mqtt__ValidarCertificado"] = "true",
             ["Clinico__AjusteTemperaturaSensor"] = "0",
             ["Vinculacion__SegundosRenovacion"] = "0", // el worker de renovación se prueba llamando al caso de uso
             ["Alertas__SegundosVigilancia"] = "0", // el vigilante también: Fabrica.VigilarAlertasAsync()
             ["Push__Habilitado"] = "false",
+            ["Historial__RetencionHabilitada"] = "false", // la retención también: Fabrica.ResumirHistorialAsync()
+            ["Proxy__RedesConocidas"] = RedProxy, // solo los "proxies" de esta red pueden indicar X-Forwarded-For
+            ["Cors__Origenes"] = "http://localhost:5173",
         };
         foreach (var (clave, valor) in await ConfiguracionAdicionalAsync())
         {
@@ -102,7 +120,18 @@ public class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
     {
         var cliente = CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
         var n = Interlocked.Increment(ref _ultimaIp);
-        cliente.DefaultRequestHeaders.Add(FiltroIpDePrueba.Encabezado, ip ?? $"10.1.{n / 250}.{(n % 250) + 1}");
+        var ipCliente = ip ?? $"10.1.{n / 250}.{(n % 250) + 1}";
+        if (ClientesPorElProxy)
+        {
+            cliente.DefaultRequestHeaders.Add(FiltroIpDePrueba.Encabezado, IpProxy);
+            cliente.DefaultRequestHeaders.Add("X-Forwarded-For", ipCliente);
+            cliente.DefaultRequestHeaders.Add("X-Forwarded-Proto", "https");
+        }
+        else
+        {
+            cliente.DefaultRequestHeaders.Add(FiltroIpDePrueba.Encabezado, ipCliente);
+        }
+
         return cliente;
     }
 
@@ -130,6 +159,13 @@ public class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
     {
         await using var scope = Services.CreateAsyncScope();
         return await scope.ServiceProvider.GetRequiredService<Application.Alertas.VigilarAlertas>().EjecutarAsync(ultimaRevision);
+    }
+
+    /// <summary>Corre una vez lo que hace el worker de retención del historial (a las 03:00 de Lima).</summary>
+    public async Task<Application.Historial.ResultadoRetencion> ResumirHistorialAsync()
+    {
+        await using var scope = Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<Application.Historial.ResumirLecturasAntiguas>().EjecutarAsync();
     }
 
     /// <summary>Corre una vez lo que hace el worker de renovación de códigos.</summary>
@@ -212,10 +248,31 @@ public sealed class ColeccionApiAislada : ICollectionFixture<FabricaVitalifyAisl
     public const string Nombre = "api-aislada";
 }
 
-/// <summary>La API en entorno Production (su propio contenedor), para lo que solo existe en Development.</summary>
+/// <summary>Base propia para la retención: resume (y borra las crudas de) todo episodio egresado hace más de 30 días.</summary>
+public sealed class FabricaVitalifyRetencion : FabricaVitalify;
+
+[CollectionDefinition(Nombre)]
+public sealed class ColeccionApiRetencion : ICollectionFixture<FabricaVitalifyRetencion>
+{
+    public const string Nombre = "api-retencion";
+}
+
+/// <summary>
+/// La API en entorno Production (su propio contenedor), para lo que solo existe en Development. Los clientes entran por
+/// el proxy con HTTPS, como en el servidor. Arranca con <c>Simulador__Habilitado=true</c> para comprobar que se ignora.
+/// </summary>
 public sealed class FabricaVitalifyProduccion : FabricaVitalify
 {
     protected override string Entorno => "Production";
+
+    protected override bool ClientesPorElProxy => true;
+
+    protected override Task<IReadOnlyDictionary<string, string>> ConfiguracionAdicionalAsync() =>
+        Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>
+        {
+            ["Simulador__Habilitado"] = "true",
+            ["Cors__Origenes"] = "https://dashboard.vitalify.test",
+        });
 }
 
 [CollectionDefinition(Nombre)]

@@ -24,12 +24,14 @@ public static class DependencyInjection
     /// Registra los adaptadores de salida: los dos DbContext y sus health checks (<c>transaccional</c> e
     /// <c>historial</c>), los repositorios, la seguridad (hasher, tokens, reloj), la telemetría y las semillas
     /// (administrador y datos de demostración).
-    /// Falla al arrancar si falta una cadena de conexión o la configuración JWT es inválida.
+    /// Falla al arrancar si falta una cadena de conexión, si las dos suman más de 10 conexiones contra la misma base o si la
+    /// configuración JWT es inválida.
     /// </summary>
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         var transaccional = CadenaDeConexion.Obtener(configuration, CadenaDeConexion.Transaccional);
         var historial = CadenaDeConexion.Obtener(configuration, CadenaDeConexion.Historial);
+        CadenaDeConexion.ValidarPresupuesto(transaccional, historial);
 
         services.AddDbContext<TransaccionalDbContext>(o =>
             OpcionesNpgsql.Configurar(o, transaccional, TransaccionalDbContext.Esquema));
@@ -59,11 +61,14 @@ public static class DependencyInjection
         services.AddScoped<IRepositorioPacientes, RepositorioPacientes>();
         services.AddScoped<IRepositorioHospitalizaciones, RepositorioHospitalizaciones>();
         services.AddScoped<IUnidadDeTrabajo, UnidadDeTrabajo>();
+        services.AddScoped<IMedidorAlmacenamiento, MedidorAlmacenamiento>();
+        services.AddSingleton(ConfiguracionTelemetria.CargarOpcionesSistema(configuration));
 
         // Telemetría: historial en HistorialDbContext (vitalify_historial), resolución de dispositivos con caché.
         services.AddSingleton(ConfiguracionTelemetria.CargarOpciones(configuration));
         services.AddSingleton(ConfiguracionTelemetria.CargarRangos(configuration));
         services.AddScoped<IRepositorioLecturas, RepositorioLecturas>();
+        services.AddSingleton(ConfiguracionTelemetria.CargarOpcionesHistorial(configuration));
         services.AddScoped<IRepositorioEstadoSignos, RepositorioEstadoSignos>();
         services.AddScoped<IRepositorioIncidencias, RepositorioIncidencias>();
         services.AddScoped<IUnidadDeTrabajoHistorial, UnidadDeTrabajoHistorial>();
@@ -91,6 +96,7 @@ public static class DependencyInjection
         services.AddScoped<IRepositorioServicios, RepositorioServicios>();
         services.AddScoped<IRepositorioProgramacion, RepositorioProgramacion>();
         services.AddScoped<IRepositorioAlertas, RepositorioAlertas>();
+        services.AddScoped<IRepositorioNotas, RepositorioNotas>();
         services.AddScoped<IRepositorioDispositivosMoviles, RepositorioDispositivosMoviles>();
         services.AddScoped<ITurnoVigente, TurnoVigenteEnBase>();
         services.AddSingleton<IBitacoraFallos, BitacoraFallosEnLog>();

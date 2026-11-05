@@ -69,7 +69,7 @@ public sealed class ServicioObservaciones(
             return guardado.Error;
         }
 
-        await publicador.PublicarAsync(evaluacion, ct);
+        await publicador.PublicarAsync(evaluacion, ct: ct);
         await AlertasDeLaTomaAsync(hospitalizacion, observacion, ct);
         return await presentador.PresentarAsync(evaluacion, ct);
     }
@@ -261,7 +261,7 @@ public sealed class CambiarEscalaSpo2(
             return evaluado.Error;
         }
 
-        await publicador.PublicarAsync(evaluacion, ct);
+        await publicador.PublicarAsync(evaluacion, ct: ct);
 
         return await obtenerRiesgo.DtoAsync(hospitalizacion, ct);
     }

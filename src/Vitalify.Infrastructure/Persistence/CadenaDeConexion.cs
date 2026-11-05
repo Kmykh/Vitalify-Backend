@@ -8,11 +8,16 @@ namespace Vitalify.Infrastructure.Persistence;
 /// Acepta también el formato URI (<c>postgresql://usuario:contraseña@host:puerto/base</c>) que muestra
 /// el botón Connect de Supabase.
 /// Si la cadena no fija el tamaño del pool, usa 5: el pooler gratuito de Supabase admite pocas conexiones.
+/// Cada contexto se identifica con su propio <c>Application Name</c> (<c>vitalify-transaccional</c> y
+/// <c>vitalify-historial</c>): así cada uno tiene su pool y se distingue en <c>pg_stat_activity</c>.
 /// </summary>
 public static class CadenaDeConexion
 {
     public const string Transaccional = "Transaccional";
     public const string Historial = "Historial";
+
+    /// <summary>Conexiones que la API puede abrir en total contra una misma base (los dos pools sumados).</summary>
+    public const int MaximoConexionesPorBase = 10;
 
     private const int PoolMaximoPorDefecto = 5;
 
@@ -25,7 +30,33 @@ public static class CadenaDeConexion
                 $"Falta la cadena de conexión '{nombre}'. Defínela como ConnectionStrings__{nombre} en el archivo .env de la raíz del repositorio.");
         }
 
-        return Normalizar(valor);
+        var builder = new NpgsqlConnectionStringBuilder(Normalizar(valor));
+        if (string.IsNullOrWhiteSpace(builder.ApplicationName))
+        {
+            builder.ApplicationName = $"vitalify-{nombre.ToLowerInvariant()}";
+        }
+
+        return builder.ConnectionString;
+    }
+
+    /// <summary>
+    /// Si las dos cadenas apuntan a la misma base (mismo host, puerto y base de datos), sus <c>Maximum Pool Size</c>
+    /// sumados no pueden pasar de <see cref="MaximoConexionesPorBase"/>: el Session pooler del plan gratuito de Supabase
+    /// admite pocas conexiones y la API no debe acapararlas. Falla al arrancar si se pasa.
+    /// </summary>
+    public static void ValidarPresupuesto(string transaccional, string historial)
+    {
+        var t = new NpgsqlConnectionStringBuilder(transaccional);
+        var h = new NpgsqlConnectionStringBuilder(historial);
+        var mismaBase = string.Equals(t.Host, h.Host, StringComparison.OrdinalIgnoreCase)
+                        && t.Port == h.Port
+                        && string.Equals(t.Database, h.Database, StringComparison.Ordinal);
+        if (mismaBase && t.MaxPoolSize + h.MaxPoolSize > MaximoConexionesPorBase)
+        {
+            throw new InvalidOperationException(
+                $"Las cadenas Transaccional e Historial apuntan a la misma base y sus Maximum Pool Size suman " +
+                $"{t.MaxPoolSize + h.MaxPoolSize}: el máximo es {MaximoConexionesPorBase}. Baja Maximum Pool Size en el .env.");
+        }
     }
 
     public static string Normalizar(string valor)

@@ -54,7 +54,7 @@ public class ConsultasTelemetriaTests
     }
 
     [Fact]
-    public async Task El_historial_por_defecto_trae_la_ultima_hora_en_orden_cronologico()
+    public async Task El_historial_por_defecto_trae_el_episodio_completo_en_orden_cronologico()
     {
         var pacienteId = await _e.HaceAsync(TimeSpan.FromHours(2), PacienteConSensorAsync);
         await _e.RegistrarLectura().EjecutarAsync(_e.Lectura(new(Fc: 70), segundos: -90 * 60));
@@ -63,35 +63,49 @@ public class ConsultasTelemetriaTests
 
         var historial = (await _e.ObtenerHistorialSignos().EjecutarAsync(new(pacienteId))).Valor;
 
-        Assert.Equal([78, 82], historial.Lecturas.Select(l => l.Fc));
-        Assert.True(historial.Lecturas[0].Caida);
-        Assert.Equal((97, "ApiDesarrollo"), (historial.Lecturas[1].Spo2, historial.Lecturas[1].Origen));
-        Assert.Equal((1L, TimeSpan.FromSeconds(10)), (historial.Lecturas[1].Seq, historial.Lecturas[1].RecibidoEn - historial.Lecturas[1].MedidoEn));
-        Assert.Equal(TimeSpan.FromHours(1), historial.Hasta - historial.Desde);
+        Assert.Equal([70, 78, 82], historial.Lecturas.Select(l => l.Fc));
+        Assert.True(historial.Lecturas[1].Caida);
+        Assert.Equal((97, "ApiDesarrollo"), (historial.Lecturas[2].Spo2, historial.Lecturas[2].Origen));
+        Assert.Equal((1L, TimeSpan.FromSeconds(10)), (historial.Lecturas[2].Seq, historial.Lecturas[2].RecibidoEn - historial.Lecturas[2].MedidoEn));
+        Assert.Equal((_e.Reloj.AhoraUtc.AddHours(-2), _e.Reloj.AhoraUtc), (historial.Desde, historial.Hasta));
+        Assert.Null(historial.Grupos);
     }
 
     [Fact]
-    public async Task El_historial_rechaza_un_rango_invertido_o_de_mas_de_24_horas()
+    public async Task El_historial_rechaza_un_rango_invertido_o_de_mas_de_7_dias_sin_agrupar()
     {
-        var pacienteId = await PacienteConSensorAsync();
+        // Un episodio de 10 días: sin agrupar no se puede pedir completo; agrupado, sí.
+        var pacienteId = await _e.HaceAsync(TimeSpan.FromDays(10), PacienteConSensorAsync);
         var ahora = _e.Reloj.AhoraUtc;
 
         var invertido = await _e.ObtenerHistorialSignos().EjecutarAsync(new(pacienteId, ahora, ahora.AddHours(-1)));
-        var largo = await _e.ObtenerHistorialSignos().EjecutarAsync(new(pacienteId, ahora.AddHours(-25), ahora));
+        var largo = await _e.ObtenerHistorialSignos().EjecutarAsync(new(pacienteId, ahora.AddDays(-7).AddSeconds(-1), ahora));
+        var episodioSinAgrupar = await _e.ObtenerHistorialSignos().EjecutarAsync(new(pacienteId));
+        var agrupado = await _e.ObtenerHistorialSignos().EjecutarAsync(new(pacienteId, Agrupar: "1h"));
+        var agrupadoInvalido = await _e.ObtenerHistorialSignos().EjecutarAsync(new(pacienteId, Agrupar: "2h"));
 
         Assert.Contains("hasta", invertido.Error.Detalles.Keys);
         Assert.Contains("desde", largo.Error.Detalles.Keys);
+        Assert.Contains("agrupar", episodioSinAgrupar.Error.Detalles.Keys);
+        Assert.Equal((TimeSpan.FromDays(10), "1h"), (agrupado.Valor.Hasta - agrupado.Valor.Desde, agrupado.Valor.Agrupar));
+        Assert.Contains("agrupar", agrupadoInvalido.Error.Detalles.Keys);
     }
 
     [Fact]
-    public async Task Sin_hospitalizacion_activa_el_historial_no_se_encuentra()
+    public async Task Sin_hospitalizacion_activa_el_historial_es_el_de_la_ultima_y_un_paciente_nunca_hospitalizado_da_404()
     {
         var pacienteId = await PacienteConSensorAsync();
+        await _e.RegistrarLectura().EjecutarAsync(_e.Lectura(new(Fc: 80)));
+        _e.Reloj.Avanzar(TimeSpan.FromMinutes(5));
         await _e.RegistrarEgreso().EjecutarAsync(new(pacienteId, "AltaMedica", null, _e.EnfermeraId, null));
+        var nuncaHospitalizado = Domain.Pacientes.Paciente.Registrar("Ana Torres", Domain.Pacientes.TipoDocumento.Dni, "71234567", new DateOnly(1990, 1, 1), false, _e.Reloj.AhoraUtc);
+        _e.Pacientes.Agregar(nuncaHospitalizado);
 
-        var resultado = await _e.ObtenerHistorialSignos().EjecutarAsync(new(pacienteId));
+        var ultima = await _e.ObtenerHistorialSignos().EjecutarAsync(new(pacienteId));
+        var nunca = await _e.ObtenerHistorialSignos().EjecutarAsync(new(nuncaHospitalizado.Id));
 
-        Assert.Equal((TipoError.NoEncontrado, "sin-hospitalizacion-activa"), (resultado.Error.Tipo, resultado.Error.Codigo));
+        Assert.Equal(80, Assert.Single(ultima.Valor.Lecturas).Fc);
+        Assert.Equal((TipoError.NoEncontrado, "paciente-sin-hospitalizaciones"), (nunca.Error.Tipo, nunca.Error.Codigo));
     }
 
     [Fact]

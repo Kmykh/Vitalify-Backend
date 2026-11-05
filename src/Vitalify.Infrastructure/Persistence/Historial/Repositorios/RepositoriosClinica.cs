@@ -23,6 +23,12 @@ internal sealed class RepositorioObservaciones(HistorialDbContext db) : IReposit
         return guardadas.Concat(pendientes).OrderByDescending(o => o.ObservadaEn).ToList();
     }
 
+    public async Task<IReadOnlyList<ObservacionEnfermeria>> ListarAsync(Guid hospitalizacionId, DateTime desde, DateTime hasta, CancellationToken ct = default) =>
+        await db.Observaciones.AsNoTracking()
+            .Where(o => o.HospitalizacionId == hospitalizacionId && o.ObservadaEn >= desde && o.ObservadaEn <= hasta)
+            .OrderByDescending(o => o.ObservadaEn).ThenBy(o => o.Id)
+            .ToListAsync(ct);
+
     public Task<ObservacionEnfermeria?> ObtenerUltimaTomaAsync(Guid hospitalizacionId, CancellationToken ct = default) =>
         db.Observaciones.AsNoTracking()
             .Where(o => o.HospitalizacionId == hospitalizacionId)
@@ -78,6 +84,40 @@ internal sealed class RepositorioEvaluaciones(HistorialDbContext db) : IReposito
             .ToListAsync(ct);
 
         return ultimas.ToDictionary(e => e.HospitalizacionId);
+    }
+
+    public async Task<IReadOnlyList<EvaluacionRiesgo>> ListarAsync(Guid hospitalizacionId, DateTime desde, DateTime hasta, CancellationToken ct = default) =>
+        await db.Evaluaciones.AsNoTracking()
+            .Where(e => e.HospitalizacionId == hospitalizacionId && e.EvaluadaEn >= desde && e.EvaluadaEn <= hasta)
+            .OrderBy(e => e.EvaluadaEn).ThenBy(e => e.Id)
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<GrupoEvaluaciones>> AgruparAsync(
+        Guid hospitalizacionId, DateTime desde, DateTime hasta, int segundos, CancellationToken ct = default)
+    {
+        string C(string propiedad) => ConsultasAgregadas.Columna<EvaluacionRiesgo>(db, propiedad);
+        var evaluadaEn = C(nameof(EvaluacionRiesgo.EvaluadaEn));
+        string Puntaje(string total, string rango) =>
+            $"min({C(total)}), max({C(total)}), (array_agg({C(total)} ORDER BY {evaluadaEn} DESC))[1], max({rango})";
+        var sql = $"""
+            SELECT {ConsultasAgregadas.InicioDeGrupo(evaluadaEn)} AS inicio, count(*)::int,
+                   (count(*) FILTER (WHERE {C(nameof(EvaluacionRiesgo.News2Completo))} AND {C(nameof(EvaluacionRiesgo.MewsCompleto))}))::int,
+                   {Puntaje(nameof(EvaluacionRiesgo.News2Total), ConsultasAgregadas.RangoDeEnum<NivelRiesgoNews2>(C(nameof(EvaluacionRiesgo.News2Nivel))))},
+                   {Puntaje(nameof(EvaluacionRiesgo.MewsTotal), ConsultasAgregadas.RangoDeEnum<NivelRiesgoMews>(C(nameof(EvaluacionRiesgo.MewsNivel))))}
+            FROM {ConsultasAgregadas.Tabla<EvaluacionRiesgo>(db)}
+            WHERE {C(nameof(EvaluacionRiesgo.HospitalizacionId))} = @hospitalizacion
+              AND {evaluadaEn} >= @desde AND {evaluadaEn} <= @hasta
+            GROUP BY 1
+            ORDER BY 1
+            """;
+        return await ConsultasAgregadas.LeerAsync(db, sql,
+            l => new GrupoEvaluaciones(
+                l.GetDateTime(0), l.GetInt32(1), l.GetInt32(2),
+                l.GetInt32(3), l.GetInt32(4), l.GetInt32(5), (NivelRiesgoNews2)l.GetInt32(6),
+                l.GetInt32(7), l.GetInt32(8), l.GetInt32(9), (NivelRiesgoMews)l.GetInt32(10)),
+            ct,
+            new Npgsql.NpgsqlParameter("hospitalizacion", hospitalizacionId), new Npgsql.NpgsqlParameter("desde", desde),
+            new Npgsql.NpgsqlParameter("hasta", hasta), new Npgsql.NpgsqlParameter("segundos", segundos));
     }
 
     public async Task<IReadOnlyDictionary<Guid, TendenciaRiesgo>> ObtenerTendenciasAsync(

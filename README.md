@@ -40,7 +40,7 @@ Las cadenas de conexión, la clave JWT y los datos del primer administrador se l
    cp .env.example .env
    ```
 2. En Supabase, abre tu proyecto, pulsa **Connect** y elige el método **Session pooler** (puerto 5432, IPv4).
-3. Reemplaza los valores entre `< >` en las dos variables. Por ahora las dos usan la misma cadena:
+3. Reemplaza los valores entre `< >` en las dos variables. Las dos usan la misma cadena: el historial vive en el mismo Supabase, en el esquema `vitalify_historial`, con su propio `HistorialDbContext` (podría pasar a otra base, por ejemplo TimescaleDB, cambiando solo `ConnectionStrings__Historial`):
    ```
    ConnectionStrings__Transaccional=Host=aws-0-<región>.pooler.supabase.com;Port=5432;Database=postgres;Username=postgres.<ref-del-proyecto>;Password=<contraseña>;SSL Mode=Require;Maximum Pool Size=5
    ConnectionStrings__Historial=<la misma cadena>
@@ -48,7 +48,7 @@ Las cadenas de conexión, la clave JWT y los datos del primer administrador se l
    - La contraseña es la **de la base de datos del proyecto**, no la de tu cuenta de Supabase.
    - También puedes pegar la cadena en formato URI tal como la muestra Supabase (`postgresql://postgres.<ref>:<contraseña>@<host>:5432/postgres`). La API la convierte sola y le agrega `SSL Mode=Require` y `Maximum Pool Size=5`. Si la contraseña tiene caracteres especiales dentro de la URI, deben ir codificados (`@` → `%40`, `:` → `%3A`, etc.).
    - Si el valor contiene `#` o espacios, ponlo entre comillas dobles.
-   - El pool es pequeño (5) porque el pooler gratuito de Supabase admite pocas conexiones y hay dos contextos. Si la cadena no incluye `Maximum Pool Size`, la API usa 5 igualmente.
+   - El pool es pequeño (5) porque el pooler gratuito de Supabase admite pocas conexiones y hay dos contextos. Si la cadena no incluye `Maximum Pool Size`, la API usa 5 igualmente. Cada contexto tiene su propio pool (`Application Name` `vitalify-transaccional` y `vitalify-historial`) y, si los dos apuntan a la misma base, la API no arranca cuando sus pools suman más de 10.
 4. Genera la clave para firmar los JWT y pégala en `Jwt__Clave`:
    ```bash
    openssl rand -base64 48
@@ -71,9 +71,9 @@ dotnet ef database update --context TransaccionalDbContext --project src/Vitalif
 dotnet ef database update --context HistorialDbContext     --project src/Vitalify.Infrastructure --startup-project src/Vitalify.Infrastructure
 ```
 
-El esquema `vitalify_historial` guarda la telemetría (fase 3): `lectura_signos`, `estado_signos_actual` e `incidencia_telemetria`; y el motor clínico (fases 4 y 5): `observacion_enfermeria` y `evaluacion_riesgo`.
+El esquema `vitalify_historial` guarda la telemetría (fase 3): `lectura_signos`, `estado_signos_actual` e `incidencia_telemetria`; el motor clínico (fases 4 y 5): `observacion_enfermeria` y `evaluacion_riesgo`; y, desde la fase 7, `lectura_signos_resumen` (las lecturas de los episodios egresados hace más de 30 días, resumidas cada 5 min).
 
-Después, en el **Table Editor** de Supabase aparecen los esquemas `vitalify` y `vitalify_historial`, cada uno con su tabla `__EFMigrationsHistory`. El esquema `vitalify` tiene además `usuario`, `sesion_refresco`, `token_revocado` y `auditoria` (fase 1) y `cama`, `dispositivo`, `paciente`, `hospitalizacion` y `asignacion_dispositivo` (fase 2); `codigo_vinculacion` (fase 5); y `servicio`, `programacion_turno`, `alerta_clinica` y `dispositivo_movil` (fase 6).
+Después, en el **Table Editor** de Supabase aparecen los esquemas `vitalify` y `vitalify_historial`, cada uno con su tabla `__EFMigrationsHistory`. El esquema `vitalify` tiene además `usuario`, `sesion_refresco`, `token_revocado` y `auditoria` (fase 1) y `cama`, `dispositivo`, `paciente`, `hospitalizacion` y `asignacion_dispositivo` (fase 2); `codigo_vinculacion` (fase 5); `servicio`, `programacion_turno`, `alerta_clinica` y `dispositivo_movil` (fase 6); y `nota_clinica` y `nota_clinica_version` (fase 7).
 
 ## Levantar el proyecto
 
@@ -94,6 +94,21 @@ docker compose up --build
 ```
 
 Usa el mismo `.env` (con `env_file`). La API queda en <http://localhost:8080> (`/swagger`, `/api/v1/ping`, `/health`).
+
+### En producción
+
+`docker-compose.prod.yml` levanta la API (en `Production`), **Caddy** (HTTPS automático de Let's Encrypt para `DOMINIO`) y **Mosquitto con TLS** (puerto 8883 para los wearables; la API llega por la red interna). La base sigue siendo Supabase. En el servidor solo se abren los puertos 80, 443 y 8883. El paso a paso para una VM Linux está en [`docs/despliegue.md`](docs/despliegue.md).
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+curl https://<dominio>/health
+```
+
+Detrás del proxy, la API usa la IP real del cliente (`X-Forwarded-For`, solo desde `Proxy__RedesConocidas`), redirige a HTTPS con HSTS, admite los orígenes de `Cors__Origenes` (nunca `*`) y no expone Swagger salvo con `Swagger__Habilitado=true`. El simulador y `POST /dev/telemetria` solo existen en Development.
+
+> **Pausa del plan gratuito de Supabase.** Supabase pausa el proyecto tras **7 días sin actividad**. Con la API desplegada y el wearable enviando datos no pasa: el vigilante de alertas consulta la base cada 30 s y cada lectura escribe en ella. Si el sistema queda apagado más de una semana, reanuda el proyecto desde el panel de Supabase.
+
+**Espacio (500 MB del plan gratuito):** `GET /api/v1/sistema/almacenamiento` da el tamaño de la base y de cada tabla. Cada día a las 03:00 de Lima, la retención resume a 5 min las lecturas de los episodios egresados hace más de 30 días, y `evaluacion_riesgo` guarda una fila del wearable solo si cambia el riesgo o pasaron 5 min.
 
 ## Endpoints
 
@@ -129,9 +144,19 @@ Usa el mismo `.env` (con `env_file`). La API queda en <http://localhost:8080> (`
 | POST | `/api/v1/pacientes/{id}/dispositivo` | Enfermera | Vincula un sensor disponible sin QR (respaldo de la HU06); publica "vinculado" |
 | DELETE | `/api/v1/pacientes/{id}/dispositivo` | Enfermera | Libera el sensor; el wearable recibe "desvinculado" y un QR nuevo |
 | POST | `/api/v1/pacientes/{id}/egreso` | Enfermera | Egreso con motivo; libera el sensor en la misma transacción (HU08) |
-| GET | `/api/v1/pacientes/monitoreados` | Médico o Enfermera | Pacientes con sensor (HU07), con NEWS2, MEWS, nivel de riesgo, `senal`, `conexionSensor` y `alertasAbiertas` |
+| GET | `/api/v1/pacientes/monitoreados` | Médico o Enfermera | Pacientes con sensor (HU07), de mayor a menor riesgo (HU18), con NEWS2, MEWS, nivel de riesgo, `senal`, `conexionSensor` y `alertasAbiertas` |
 | GET | `/api/v1/pacientes/{id}/signos/actual` | Médico o Enfermera | Último valor de cada signo con `vigente`, `pendiente-actualizacion` o `sin-datos` |
-| GET | `/api/v1/pacientes/{id}/signos/historial?desde=&hasta=` | Médico o Enfermera | Lecturas de la hospitalización activa en el rango (por defecto la última hora; máximo 24 h), para los gráficos del dashboard web |
+| GET | `/api/v1/pacientes/{id}/hospitalizaciones` | Médico o Enfermera | Episodios del paciente: ingreso, egreso y motivo, cama, servicio, diagnóstico y sensores usados |
+| GET | `/api/v1/pacientes/{id}/signos/historial?hospitalizacionId=&desde=&hasta=&agrupar=` | Médico o Enfermera | Lecturas del episodio (por defecto el activo o el último, completo); sin agrupar hasta 7 días; `agrupar=1m\|5m\|15m\|1h` da promedio, mínimo y máximo por intervalo |
+| GET | `/api/v1/pacientes/{id}/riesgo/historial?hospitalizacionId=&desde=&hasta=&agrupar=` | Médico o Enfermera | Evaluaciones NEWS2/MEWS con puntos y faltantes; `agrupar=5m\|15m\|1h` da mínimo, máximo, último y peor nivel |
+| GET | `/api/v1/pacientes/{id}/observaciones?hospitalizacionId=&desde=&hasta=` | Médico o Enfermera | Tomas manuales completas con el nombre de quien las registró |
+| GET | `/api/v1/pacientes/{id}/resumen?hospitalizacionId=` | Médico o Enfermera | Vista del médico: paciente, episodio, último riesgo, extremos, alertas por tipo con tiempo medio de respuesta, últimas 5 notas y próxima toma |
+| GET | `/api/v1/pacientes/{id}/notas?hospitalizacionId=` | Médico o Enfermera | Notas clínicas del episodio con su autor (HU22) |
+| POST | `/api/v1/pacientes/{id}/notas` | Médico o Enfermera | Registra una nota (`Evolucion`, `Enfermeria` o `Interconsulta`) en la hospitalización activa |
+| PUT | `/api/v1/notas/{id}` | Autor | Corrige la nota dentro de las 24 h; la versión anterior se conserva |
+| GET | `/api/v1/notas/{id}/versiones` | Médico o Enfermera | Versiones anteriores de la nota |
+| GET | `/api/v1/auditoria?accion=&usuarioId=&desde=&hasta=&pagina=` | Administrador | Auditoría de seguridad: solo acciones e ids |
+| GET | `/api/v1/sistema/almacenamiento` | Administrador | Tamaño de la base y de cada tabla (para vigilar los 500 MB de Supabase) |
 | GET | `/api/v1/telemetria/incidencias?desde=&hasta=&dispositivo=&tipo=` | Administrador | Log de incidencias técnicas de la telemetría |
 | GET | `/api/v1/pacientes/{id}/riesgo` | Médico o Enfermera | NEWS2 y MEWS (total, nivel, completo, puntos y faltantes), `recomendacion`, `proximaTomaManualEn`, `avisos`, `escalaSpo2` y `ultimoBrazoPa` |
 | POST | `/api/v1/pacientes/{id}/observaciones` | Médico o Enfermera | Toma manual con el asistente (presión con 1 a 3 lecturas, conciencia ACVPU por respuestas, oxígeno, FR, contexto y preocupación clínica) y recalcula el riesgo |
@@ -140,7 +165,7 @@ Usa el mismo `.env` (con `env_file`). La API queda en <http://localhost:8080> (`
 | GET | `/api/v1/alertas?estado=&servicioId=&tipo=&desde=&hasta=&pagina=` | Médico o Enfermera | Alertas de su servicio; por defecto las abiertas, por prioridad y antigüedad |
 | POST | `/api/v1/alertas/{id}/tomar` | Médico o Enfermera | La alerta pasa a `en-atencion` |
 | POST | `/api/v1/alertas/{id}/atender` | Médico o Enfermera | Cierra la alerta con una nota obligatoria (5 a 1000 caracteres) |
-| GET | `/api/v1/pacientes/{id}/alertas` | Médico o Enfermera | Alertas del paciente con los tiempos de respuesta |
+| GET | `/api/v1/pacientes/{id}/alertas?hospitalizacionId=` | Médico o Enfermera | Alertas del episodio con los tiempos de respuesta (historial: cualquier servicio, auditado) |
 | POST | `/api/v1/notificaciones/dispositivos` | Médico o Enfermera | Registra el token de FCM del celular (`token`, `plataforma`) |
 | DELETE | `/api/v1/notificaciones/dispositivos` | Médico o Enfermera | Quita el token (al cerrar sesión), con el mismo cuerpo |
 | WS | `/hubs/monitoreo` | Médico o Enfermera | Hub de SignalR: `alertaCreada`, `alertaActualizada`, `riesgoActualizado` y `signosActualizados` |
@@ -149,7 +174,7 @@ Usa el mismo `.env` (con `env_file`). La API queda en <http://localhost:8080> (`
 | GET | `/health` | anónimo | Estado de las conexiones `transaccional` e `historial` (200 o 503) |
 | GET | `/swagger` | anónimo | Documentación OpenAPI (solo en Development). Botón **Authorize**: pega el `accessToken` |
 
-Los errores salen como ProblemDetails en español. Su `type` identifica el caso: `credenciales-invalidas`, `sesion-expirada`, `correo-en-uso`, `acceso-denegado`, etc. Los permisos de cada rol están en [`docs/matriz-permisos.md`](docs/matriz-permisos.md), y las alertas, los turnos y las notificaciones, en [`docs/alertas-y-turnos.md`](docs/alertas-y-turnos.md).
+Los errores salen como ProblemDetails en español. Su `type` identifica el caso: `credenciales-invalidas`, `sesion-expirada`, `correo-en-uso`, `acceso-denegado`, etc. Los permisos de cada rol están en [`docs/matriz-permisos.md`](docs/matriz-permisos.md), las alertas, los turnos y las notificaciones, en [`docs/alertas-y-turnos.md`](docs/alertas-y-turnos.md), y el historial y las notas, en [`docs/historial-clinico.md`](docs/historial-clinico.md).
 
 ### Telemetría con el wearable real (MQTT)
 
@@ -240,5 +265,5 @@ El CI (`.github/workflows/ci.yml`) ejecuta restore, build y todas las pruebas, i
 | 3    | Ingesta simulada de signos vitales            |
 | 4    | Cálculo de NEWS2 y MEWS con el wearable real por MQTT |
 | 5    | Vinculación por QR, comandos al wearable y asistente de toma manual |
-| 6    | Servicios y turnos, alertas clínicas con escalamiento, SignalR, push (FCM) y entrega de turno (este estado) |
-| 7    | TimescaleDB y despliegue                      |
+| 6    | Servicios y turnos, alertas clínicas con escalamiento, SignalR, push (FCM) y entrega de turno |
+| 7    | A: historial del paciente para el médico, notas clínicas y auditoría · B: producción con Supabase y Mosquitto con TLS (este estado) |

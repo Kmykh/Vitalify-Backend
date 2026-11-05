@@ -3,8 +3,10 @@ using System.Globalization;
 namespace Vitalify.Api.Entrada.Mqtt;
 
 /// <summary>
-/// Sección <c>Mqtt</c> (variables <c>Mqtt__*</c> del .env). Debe coincidir con el broker del proyecto IoT
-/// (<c>IOT/tesis_V01/broker</c>): usuario <c>vitalify-backend</c> y su clave de <c>broker/.env</c>.
+/// Sección <c>Mqtt</c> (variables <c>Mqtt__*</c> del .env). Debe coincidir con el broker: en desarrollo, el del proyecto
+/// IoT (<c>IOT/tesis_V01/broker</c>); en producción, el Mosquitto de <c>docker-compose.prod.yml</c>, al que la API llega
+/// por la red interna de Docker (<c>mosquitto:1883</c>, sin TLS). Con <see cref="UsarTls"/> sirve con cualquier broker
+/// con TLS (por ejemplo, uno en la nube).
 /// </summary>
 public sealed record OpcionesMqtt
 {
@@ -26,7 +28,18 @@ public sealed record OpcionesMqtt
 
     public bool SesionPersistente { get; init; } = true;
 
-    public static OpcionesMqtt Cargar(IConfiguration configuration)
+    /// <summary>Conectar con TLS (<c>Mqtt__UsarTls</c>, false por defecto). El nombre del servidor se usa para SNI y para validar el certificado.</summary>
+    public bool UsarTls { get; init; }
+
+    /// <summary>
+    /// Validar el certificado del broker contra las CA del sistema (<c>Mqtt__ValidarCertificado</c>, true por defecto).
+    /// Solo se puede desactivar en Development (por ejemplo, con un certificado autofirmado).
+    /// </summary>
+    public bool ValidarCertificado { get; init; } = true;
+
+    /// <param name="configuration">Configuración de la API (sección <c>Mqtt</c>).</param>
+    /// <param name="esDesarrollo">Solo en Development se acepta <c>Mqtt__ValidarCertificado=false</c>.</param>
+    public static OpcionesMqtt Cargar(IConfiguration configuration, bool esDesarrollo)
     {
         var s = configuration.GetSection(Seccion);
         var opciones = new OpcionesMqtt
@@ -38,7 +51,15 @@ public sealed record OpcionesMqtt
             Clave = string.IsNullOrEmpty(s["Clave"]) ? null : s["Clave"],
             ClientId = string.IsNullOrWhiteSpace(s["ClientId"]) ? "vitalify-backend" : s["ClientId"]!.Trim(),
             SesionPersistente = !bool.TryParse(s["SesionPersistente"], out var persistente) || persistente,
+            UsarTls = bool.TryParse(s["UsarTls"], out var tls) && tls,
+            ValidarCertificado = !bool.TryParse(s["ValidarCertificado"], out var validar) || validar,
         };
+
+        if (!opciones.ValidarCertificado && !esDesarrollo)
+        {
+            throw new InvalidOperationException(
+                "Mqtt__ValidarCertificado=false solo se permite en Development: en producción el certificado del broker siempre se valida.");
+        }
 
         if (opciones.Habilitado && opciones.Usuario is not null && opciones.Clave is null)
         {

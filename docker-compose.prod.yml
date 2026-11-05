@@ -1,0 +1,79 @@
+# Producción de Vitalify en una VM Linux con Docker (paso a paso en docs/despliegue.md):
+#
+#   Internet ──80/443──> caddy (HTTPS automático) ──api:8080──> api ──Supabase (5432, SSL)
+#   wearables ──8883 TLS──> mosquitto <──mosquitto:1883 (interno)── api
+#
+# Puertos abiertos en el servidor: solo 80, 443 y 8883. La API y el 1883 de Mosquitto no se publican.
+# Sin PostgreSQL: la base es Supabase (ConnectionStrings__* del .env).
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# El .env (nunca en git) aporta las variables de la API y DOMINIO, que también usan Caddy y Mosquitto.
+name: vitalify
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vitalify-api:prod
+    env_file:
+      - .env
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      # Mosquitto por la red interna, sin TLS (el TLS es para los wearables, que entran desde fuera por 8883).
+      Mqtt__Habilitado: "true"
+      Mqtt__Servidor: mosquitto
+      Mqtt__Puerto: "1883"
+      Mqtt__UsarTls: "false"
+      # La API solo cree a X-Forwarded-For y X-Forwarded-Proto si vienen de esta subred (la de Caddy).
+      Proxy__RedesConocidas: ${SUBRED_INTERNA:-172.30.57.0/24}
+    depends_on:
+      - mosquitto
+    restart: unless-stopped
+    networks:
+      - interna
+
+  caddy:
+    image: caddy:2.10.0-alpine
+    environment:
+      DOMINIO: ${DOMINIO:?Define DOMINIO en el .env (por ejemplo vitalify.duckdns.org)}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_datos:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - interna
+
+  mosquitto:
+    image: eclipse-mosquitto:2.0.20
+    environment:
+      DOMINIO: ${DOMINIO:?Define DOMINIO en el .env (por ejemplo vitalify.duckdns.org)}
+    entrypoint: ["sh", "/vitalify/iniciar.sh"]
+    ports:
+      - "8883:8883" # solo TLS hacia fuera; el 1883 queda en la red interna
+    volumes:
+      - ./deploy/mosquitto:/vitalify:ro            # mosquitto.conf, acl y scripts (versionados)
+      - ./deploy/mosquitto/secretos:/mosquitto/secretos # passwd, creado con mosquitto_passwd (fuera de git)
+      - mosquitto_datos:/mosquitto/data            # retenidos y sesiones persistentes
+      - caddy_datos:/caddy:ro                      # el certificado de Let's Encrypt que obtiene Caddy
+    restart: unless-stopped
+    networks:
+      - interna
+
+networks:
+  interna:
+    ipam:
+      config:
+        - subnet: ${SUBRED_INTERNA:-172.30.57.0/24}
+
+volumes:
+  caddy_datos:
+  caddy_config:
+  mosquitto_datos:

@@ -4,6 +4,7 @@ using Vitalify.Domain.Auditoria;
 using Vitalify.Domain.Camas;
 using Vitalify.Domain.Dispositivos;
 using Vitalify.Domain.Hospitalizaciones;
+using Vitalify.Domain.Notas;
 using Vitalify.Domain.Notificaciones;
 using Vitalify.Domain.Pacientes;
 using Vitalify.Domain.Servicios;
@@ -36,6 +37,8 @@ public class TransaccionalDbContext(DbContextOptions<TransaccionalDbContext> opt
     public DbSet<ProgramacionTurno> ProgramacionTurnos => Set<ProgramacionTurno>();
     public DbSet<AlertaClinica> Alertas => Set<AlertaClinica>();
     public DbSet<DispositivoMovil> DispositivosMoviles => Set<DispositivoMovil>();
+    public DbSet<NotaClinica> Notas => Set<NotaClinica>();
+    public DbSet<NotaClinicaVersion> VersionesNotas => Set<NotaClinicaVersion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

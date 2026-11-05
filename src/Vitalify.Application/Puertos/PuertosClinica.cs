@@ -11,6 +11,12 @@ public interface IRepositorioEvaluaciones
 
     Task<IReadOnlyDictionary<Guid, EvaluacionRiesgo>> ObtenerUltimasAsync(IReadOnlyCollection<Guid> hospitalizaciones, CancellationToken ct = default);
 
+    /// <summary>Evaluaciones de la hospitalización entre ambos límites (inclusive), de la más antigua a la más reciente.</summary>
+    Task<IReadOnlyList<EvaluacionRiesgo>> ListarAsync(Guid hospitalizacionId, DateTime desde, DateTime hasta, CancellationToken ct = default);
+
+    /// <summary>Evaluaciones agrupadas cada <paramref name="segundos"/>, del grupo más antiguo al más reciente. Se agrega en la base.</summary>
+    Task<IReadOnlyList<GrupoEvaluaciones>> AgruparAsync(Guid hospitalizacionId, DateTime desde, DateTime hasta, int segundos, CancellationToken ct = default);
+
     /// <summary>Primero, máximo y último NEWS2 y MEWS de cada hospitalización entre ambos instantes (entrega de turno).</summary>
     Task<IReadOnlyDictionary<Guid, TendenciaRiesgo>> ObtenerTendenciasAsync(
         IReadOnlyCollection<Guid> hospitalizaciones, DateTime desde, DateTime hasta, CancellationToken ct = default);
@@ -27,6 +33,9 @@ public interface IRepositorioObservaciones
 
     /// <summary>Observaciones de la hospitalización tomadas desde <paramref name="desde"/>, la más reciente primero.</summary>
     Task<IReadOnlyList<ObservacionEnfermeria>> ListarDesdeAsync(Guid hospitalizacionId, DateTime desde, CancellationToken ct = default);
+
+    /// <summary>Observaciones de la hospitalización tomadas entre ambos límites (inclusive), la más reciente primero.</summary>
+    Task<IReadOnlyList<ObservacionEnfermeria>> ListarAsync(Guid hospitalizacionId, DateTime desde, DateTime hasta, CancellationToken ct = default);
 
     /// <summary>La toma manual más reciente de la hospitalización, de cualquier antigüedad.</summary>
     Task<ObservacionEnfermeria?> ObtenerUltimaTomaAsync(Guid hospitalizacionId, CancellationToken ct = default);

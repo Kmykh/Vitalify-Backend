@@ -2,6 +2,7 @@ using System.Globalization;
 using FluentValidation;
 using Vitalify.Application.Clinica;
 using Vitalify.Application.Comun;
+using Vitalify.Application.Historial;
 using Vitalify.Application.Pacientes;
 using Vitalify.Application.Puertos;
 using Vitalify.Domain.Alertas;
@@ -314,23 +315,26 @@ public sealed class ListarAlertas(IValidator<ListarAlertasConsulta> validador, I
     }
 }
 
-/// <summary>Historial de alertas del paciente en el servicio del usuario, con los tiempos de respuesta.</summary>
-public sealed class ListarAlertasPaciente(IRepositorioPacientes pacientes, IRepositorioAlertas alertas, AccesoServicio acceso)
+public sealed record ListarAlertasPacienteConsulta(Guid PacienteId, Guid? HospitalizacionId, Guid UsuarioId, string? Ip);
+
+/// <summary>
+/// Alertas de un episodio del paciente (por defecto el activo o el último), la más reciente primero, con los tiempos de
+/// respuesta. Es parte del historial (HU19): lo lee cualquier médico o enfermera, aunque sea de otro servicio, y queda
+/// auditado como consulta del historial.
+/// </summary>
+public sealed class ListarAlertasPaciente(EpisodiosPaciente episodios, IRepositorioAlertas alertas, AuditoriaHistorial auditoria)
 {
-    public async Task<Resultado<IReadOnlyList<AlertaDto>>> EjecutarAsync(Guid pacienteId, Guid usuarioId, CancellationToken ct = default)
+    public async Task<Resultado<IReadOnlyList<AlertaDto>>> EjecutarAsync(ListarAlertasPacienteConsulta consulta, CancellationToken ct = default)
     {
-        if (await pacientes.ObtenerPorIdAsync(pacienteId, ct) is null)
+        var elegido = await episodios.ElegirAsync(consulta.PacienteId, consulta.HospitalizacionId, ct);
+        if (!elegido.EsExito)
         {
-            return ErroresPaciente.NoEncontrado;
+            return elegido.Error;
         }
 
-        var usuario = await acceso.UsuarioConServicioAsync(usuarioId, ct);
-        if (!usuario.EsExito)
-        {
-            return usuario.Error;
-        }
-
-        var filas = await alertas.ListarDePacienteAsync(pacienteId, usuario.Valor.ServicioId!.Value, ct);
-        return Resultado<IReadOnlyList<AlertaDto>>.Exito(filas.Select(AlertaDto.Desde).ToList());
+        var hospitalizacionId = elegido.Valor.Hospitalizacion.Id;
+        var filas = await alertas.ListarDeHospitalizacionAsync(hospitalizacionId, ct);
+        var auditado = await auditoria.RegistrarAsync(consulta.PacienteId, hospitalizacionId, "alertas", consulta.UsuarioId, consulta.Ip, ct);
+        return auditado.EsExito ? Resultado<IReadOnlyList<AlertaDto>>.Exito(filas.Select(AlertaDto.Desde).ToList()) : auditado.Error;
     }
 }

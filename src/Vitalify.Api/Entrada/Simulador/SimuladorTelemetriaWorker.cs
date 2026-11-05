@@ -6,7 +6,7 @@ namespace Vitalify.Api.Entrada.Simulador;
 /// <summary>
 /// Adaptador de entrada temporal: cada <see cref="OpcionesSimulador.IntervaloSegundos"/> genera una lectura por cada
 /// dispositivo vinculado a una hospitalización activa y la pasa a <see cref="IRegistrarLectura"/>, el mismo puerto que
-/// usará MQTT en la fase 7. Nunca escribe en la base directamente. Si una lectura falla, lo registra y sigue.
+/// usa el receptor MQTT. Nunca escribe en la base directamente. Si una lectura falla, lo registra y sigue.
 /// </summary>
 public sealed class SimuladorTelemetriaWorker(
     IServiceScopeFactory scopes,
