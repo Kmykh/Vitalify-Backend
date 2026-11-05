@@ -10,8 +10,9 @@ namespace Vitalify.Application.Tests.Telemetria;
 /// </summary>
 public class ContratoFirmwareTests
 {
+    /// <summary>Con la FR del MPU6050 (respiracion.h del firmware).</summary>
     private const string Completo =
-        """{"dispositivo":"ESP32-001","ts":"2026-09-30T14:05:10.250Z","seq":18234,"fc":82,"spo2":97,"temp":36.8,"caida":false}""";
+        """{"dispositivo":"ESP32-001","ts":"2026-09-30T14:05:10.250Z","seq":18234,"fc":82,"fr":16,"spo2":97,"temp":36.8,"caida":false}""";
 
     private const string Parcial =
         """{"dispositivo":"ESP32-001","ts":"2026-09-30T14:05:10.250Z","seq":5,"temp":-0.5,"caida":true}""";
@@ -23,7 +24,7 @@ public class ContratoFirmwareTests
 
         Assert.Equal(("ESP32-001", 18234L, false), (lectura.CodigoDispositivo, lectura.Seq, lectura.Caida));
         Assert.Equal(new DateTime(2026, 9, 30, 14, 5, 10, 250, DateTimeKind.Utc), lectura.MedidoEn);
-        Assert.Equal(new SignosMedidos(Fc: 82, Spo2: 97, Temperatura: 36.8m), lectura.Signos);
+        Assert.Equal(new SignosMedidos(Fc: 82, Fr: 16, Spo2: 97, Temperatura: 36.8m), lectura.Signos);
         Assert.Empty(EvaluadorSignos.Evaluar(lectura.Signos, RangosFisiologicos.PorDefecto).Descartes);
     }
 

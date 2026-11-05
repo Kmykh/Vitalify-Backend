@@ -170,7 +170,7 @@ docker compose -f docker-compose.prod.yml up -d --build
    scripts/agregar-wearable-mqtt.sh ESP32-005
    ```
    El script ejecuta `mosquitto_passwd` como el usuario `mosquitto` y después `docker compose kill -s HUP mosquitto`. Mosquitto vuelve a leer el `passwd` sin cortar las conexiones.
-3. En el firmware, el código y esa clave van en `config.h` y `secretos.h` (ver ["Firmware en producción"](contrato-telemetria.md#firmware-en-producción)).
+3. En el firmware, el código va en `config.h`; el dominio (`MQTT_BROKER_TLS`), el puerto 8883 y esa clave, en `secretos.h` (ver ["Firmware en producción"](contrato-telemetria.md#firmware-en-producción)).
 
 Para quitarle el acceso a un wearable: `docker compose -f docker-compose.prod.yml exec -u mosquitto mosquitto mosquitto_passwd -D /mosquitto/secretos/passwd ESP32-005` y la misma recarga (`kill -s HUP`).
 
