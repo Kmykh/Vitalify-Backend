@@ -188,6 +188,7 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
   - Publica en `device/{codigo}/telemetria`, con QoS 1, cada 10 s, y al instante si hay una caída. Usa un búfer offline de 1 h y publica `online`/`offline` (retenido, *last will*) en `device/{codigo}/estado`.
   - **Mide la FR** con el MPU6050 (llega en `fr`, solo con el paciente quieto; `respiracion.h` del firmware). **No mide PAS, PAD ni batería.**
   - El firmware sigue los comandos de vinculación (`vinculacion.h`): muestra el QR, no envía telemetría hasta `vinculado` y descarta el búfer al desvincularse.
+  - En producción, `MQTT_BROKER_TLS` en `secretos.h` lo conecta al dominio por el 8883 con TLS, confiando en ISRG Root X1 y X2 (`raices_tls.h`) y después de tener hora NTP. Sin esa definición usa el broker de la laptop (1883).
 - **`ReceptorMqtt`** (`Api/Entrada/Mqtt`):
   - Entra como `vitalify-backend`, con sesión persistente y client id fijo, y suscribe `telemetria`, `estado` y `solicitudes`. Es la **única conexión MQTT**: también publica los comandos de `ColaComandosMqtt` (no abrir otra).
   - Pasa la telemetría por `MensajeTelemetria` a `IRegistrarLectura` (origen `Mqtt`). El código del JSON debe coincidir con el del tópico.
