@@ -36,7 +36,7 @@ public sealed class PublicadorRiesgoEvaluado(IEnumerable<IManejadorRiesgoEvaluad
         var evento = RiesgoEvaluado.Desde(evaluacion) with
         {
             EvaluacionId = evaluacionGuardadaId ?? evaluacion.Id,
-            Guardada = evaluacionGuardadaId is null,
+            Guardada = evaluacionGuardadaId is null || evaluacionGuardadaId == evaluacion.Id,
         };
         foreach (var manejador in manejadores)
         {
