@@ -387,6 +387,39 @@ public sealed class Fase8ProcesoEnfermeriaTests(FabricaVitalify fabrica) : Prueb
         Assert.DoesNotContain(Fabrica.TiempoReal.Eventos, e => prohibido.IsMatch(e.Json));
     }
 
+    [Fact]
+    public async Task F8_OpenAPI_trae_ejemplos_de_cada_endpoint_nuevo()
+    {
+        using var swagger = JsonDocument.Parse(await Fabrica.CrearCliente().GetStringAsync("/swagger/v1/swagger.json"));
+        var rutas = swagger.RootElement.GetProperty("paths");
+        var sinEjemplo = new List<string>();
+        foreach (var (metodo, ruta) in new[]
+        {
+            ("get", "/api/v1/nnn/catalogo"), ("get", "/api/v1/nnn/diagnosticos/{codigo}/vinculos"), ("put", "/api/v1/nnn/catalogo/{tipo}/{codigo}/verificacion"),
+            ("get", "/api/v1/pacientes/{id}/nnn/sugerencias"), ("get", "/api/v1/alertas/{id}/sugerencias-nnn"), ("get", "/api/v1/pacientes/{id}/plan-cuidados"),
+            ("post", "/api/v1/pacientes/{id}/plan-cuidados/diagnosticos"), ("post", "/api/v1/pacientes/{id}/plan-cuidados/sugerencias/descartar"),
+            ("put", "/api/v1/plan-cuidados/diagnosticos/{id}/estado"), ("post", "/api/v1/plan-cuidados/diagnosticos/{id}/intervenciones"),
+            ("post", "/api/v1/plan-cuidados/intervenciones/{id}/ejecuciones"), ("post", "/api/v1/plan-cuidados/resultados/{id}/valoraciones"),
+            ("get", "/api/v1/plan-cuidados/resultados/{id}/valoracion-sugerida"), ("get", "/api/v1/sistema/indicadores-nnn"),
+        })
+        {
+            var operacion = rutas.GetProperty(ruta).GetProperty(metodo);
+            var exito = operacion.GetProperty("responses").EnumerateObject().First(r => r.Name.StartsWith('2')).Value;
+            var conEjemplo = exito.GetProperty("content").EnumerateObject().Any(c => c.Value.TryGetProperty("example", out _));
+            if (operacion.TryGetProperty("requestBody", out var cuerpo))
+            {
+                conEjemplo &= cuerpo.GetProperty("content").EnumerateObject().Any(c => c.Value.TryGetProperty("example", out _));
+            }
+
+            if (!conEjemplo)
+            {
+                sinEjemplo.Add($"{metodo} {ruta}");
+            }
+        }
+
+        Assert.Empty(sinEjemplo);
+    }
+
     /// <summary>Los diagnósticos NANDA-I de la semilla (código y etiqueta).</summary>
     private static IReadOnlyList<(string Codigo, string Etiqueta)> SemillaNanda() =>
         Infrastructure.Semillas.SemillaCatalogoNnn.LeerArchivo().Diagnosticos.Select(d => (d.Codigo, d.Etiqueta)).ToList();

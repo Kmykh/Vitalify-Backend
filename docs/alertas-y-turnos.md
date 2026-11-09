@@ -164,6 +164,8 @@ Cuando empieza un turno (el vigilante detecta los turnos que empezaron desde su 
 | `alertaActualizada` | Sube, escala, se avisa en el cambio de turno, se toma, se atiende o cambian los valores | Igual, con `motivo` = `subio`, `escalamiento`, `cambio-turno` o `estado` |
 | `riesgoActualizado` | Cada evaluación | `pacienteId`, `hospitalizacionId`, `cama`, `news2`, `mews`, `nivel`, `completo` y `evaluadaEn` |
 | `signosActualizados` | Cada lectura, **como máximo uno cada 5 s por paciente** | `pacienteId`, `hospitalizacionId`, `cama`, `medidoEn`, `fc`, `fr`, `spo2`, `temperatura`, `pas`, `pad` y `caida` |
+| `planActualizado` (fase 8) | Cambió el plan de cuidados: diagnóstico confirmado, descartado o cerrado, intervención agregada o ejecutada, valoración NOC o egreso | `pacienteId` y `hospitalizacionId`; la app vuelve a pedir el plan por REST |
+| `sugerenciasNnn` (fase 8) | Cambiaron las sugerencias NNN del paciente | `pacienteId` y `cantidad`; nunca códigos ni etiquetas de diagnósticos ([nnn.md](nnn.md)) |
 
 - **Sin nombres.** Los eventos nunca llevan el nombre, el DNI ni el diagnóstico: el cliente los pide a la API (`GET /pacientes/{id}`) con su permiso.
 - **`destinatarios`** son los ids a los que se pide atención. Todas las pantallas del servicio se actualizan, pero solo los destinatarios deberían hacer sonar la alarma.

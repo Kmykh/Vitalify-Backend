@@ -14,7 +14,7 @@ Se usa [Conventional Commits](https://www.conventionalcommits.org/es/) en españ
 
 ## Fases
 
-0 base · 1 usuarios, JWT y RBAC · 2 pacientes y sensores · 3 ingesta simulada · 4 NEWS2/MEWS con el wearable real · 5 vinculación por QR y toma manual · 6 alertas, turnos y notificaciones (SignalR y push) · 7 A: historial del paciente, notas clínicas y auditoría; B: producción con Supabase y Mosquitto con TLS.
+0 base · 1 usuarios, JWT y RBAC · 2 pacientes y sensores · 3 ingesta simulada · 4 NEWS2/MEWS con el wearable real · 5 vinculación por QR y toma manual · 6 alertas, turnos y notificaciones (SignalR y push) · 7 A: historial del paciente, notas clínicas y auditoría; B: producción con Supabase y Mosquitto con TLS · 8 proceso de enfermería con la taxonomía NNN.
 
 Hechas:
 - Fase 1 (HU01 a HU04): registro, login JWT, RBAC y cierre de sesión.
@@ -26,6 +26,7 @@ Hechas:
 - Fase 6 (HU15, HU16, HU20, HU21 en el backend y HU23): servicios y turnos, alertas clínicas con escalamiento, SignalR, push por FCM y entrega de turno; además, el rechazo de lecturas anteriores a la vinculación y la vigencia de la toma según NEWS2. Ver la sección de la fase 6.
 - Fase 7, parte A (HU19, HU22 y el backend de HU17 y HU18): historial del paciente para el médico, notas clínicas con versiones, consulta de la auditoría, monitoreados ordenados por riesgo y espera tras atender una alerta de riesgo (AL-E9). Ver la sección de la fase 7.
 - Fase 7, parte B: producción con Supabase como única base y Mosquitto con TLS en el mismo servidor que la API (Caddy, retención del historial, almacenamiento, proxy). Ver la sección de producción y `docs/despliegue.md`.
+- Fase 8: proceso de enfermería con la taxonomía NNN (NANDA-I, NIC y NOC): motor de sugerencias, plan de cuidados, ejecución de intervenciones, valoración NOC e indicadores para la tesis. Ver la sección de la fase 8 y `docs/nnn.md`.
 
 **TimescaleDB ya no se usa**: el historial se queda en Supabase. **HiveMQ Cloud tampoco**: el broker es el Mosquitto del IoT, desplegado junto a la API. Los avisos de la fase 5 **no** crean alertas; la preocupación clínica sí (fase 6). **No usar datos simulados para verificar lo que ya puede verificarse con el wearable real.**
 
@@ -79,14 +80,14 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
 
 | Contexto | Esquema | Cadena | Contenido |
 |---|---|---|---|
-| `TransaccionalDbContext` | `vitalify` | `ConnectionStrings:Transaccional` | usuarios, pacientes, sensores, vinculación, servicios, turnos, alertas y tokens push |
+| `TransaccionalDbContext` | `vitalify` | `ConnectionStrings:Transaccional` | usuarios, pacientes, sensores, vinculación, servicios, turnos, alertas, tokens push, catálogo NNN y plan de cuidados |
 | `HistorialDbContext` | `vitalify_historial` | `ConnectionStrings:Historial` | `lectura_signos`, `estado_signos_actual` e `incidencia_telemetria` (fase 3); `observacion_enfermeria` y `evaluacion_riesgo` (fases 4 y 5) |
 
 - Nunca usar el esquema `public`: Supabase lo expone por su API de datos.
 - Cada contexto guarda su `__EFMigrationsHistory` en su propio esquema (`OpcionesNpgsql.Configurar`) y sus migraciones en `Persistence/<Contexto>/Migrations`.
 - Las configuraciones de entidades (`IEntityTypeConfiguration`) se aplican por namespace: pon las de cada contexto bajo `Persistence.Transaccional` o `Persistence.Historial`.
 - Tablas y columnas en snake_case mediante `ConvencionSnakeCase` (propia). **No usar EFCore.NamingConventions**: también renombra las columnas de `__EFMigrationsHistory` y rompe la tabla que ya existe en Supabase. Antes de aplicar una migración, revisar el SQL con `dotnet ef migrations script`.
-- Migraciones de `TransaccionalDbContext`: `Inicial` (esquema), `Fase1_UsuariosYSesiones` (`usuario`, `sesion_refresco`, `token_revocado`, `auditoria`), `Fase2_PacientesYSensores` (`cama`, `dispositivo`, `paciente`, `hospitalizacion`, `asignacion_dispositivo`) `Fase5_VinculacionQr` (`codigo_vinculacion`, `paciente.confusion_basal` y la escala de SpO2 en `hospitalizacion`; `escala_spo2` tiene default `'Escala1'` para las filas existentes), `Fase6_ServiciosYTurnos` (`servicio`, `programacion_turno`, `usuario.servicio_id` y `cama.servicio_id`; el SQL de movimiento de datos está escrito a mano: crea un servicio por cada texto de `cama.servicio` y su `Down` restaura la columna) `Fase6_Alertas` (`alerta_clinica` y `dispositivo_movil`) y `Fase7_NotasClinicas` (`nota_clinica`, `nota_clinica_version` y los índices `(accion, fecha)` de `auditoria` y `(hospitalizacion_id, tipo, atendida_en)` de `alerta_clinica`).
+- Migraciones de `TransaccionalDbContext`: `Inicial` (esquema), `Fase1_UsuariosYSesiones` (`usuario`, `sesion_refresco`, `token_revocado`, `auditoria`), `Fase2_PacientesYSensores` (`cama`, `dispositivo`, `paciente`, `hospitalizacion`, `asignacion_dispositivo`) `Fase5_VinculacionQr` (`codigo_vinculacion`, `paciente.confusion_basal` y la escala de SpO2 en `hospitalizacion`; `escala_spo2` tiene default `'Escala1'` para las filas existentes), `Fase6_ServiciosYTurnos` (`servicio`, `programacion_turno`, `usuario.servicio_id` y `cama.servicio_id`; el SQL de movimiento de datos está escrito a mano: crea un servicio por cada texto de `cama.servicio` y su `Down` restaura la columna) `Fase6_Alertas` (`alerta_clinica` y `dispositivo_movil`), `Fase7_NotasClinicas` (`nota_clinica`, `nota_clinica_version` y los índices `(accion, fecha)` de `auditoria` y `(hospitalizacion_id, tipo, atendida_en)` de `alerta_clinica`) y `Fase8_ProcesoEnfermeria` (catálogo `nnn_diagnostico`, `nnn_intervencion`, `nnn_resultado`, `nnn_indicador` y `nnn_vinculo`; plan `plan_diagnostico`, `plan_intervencion`, `plan_intervencion_ejecucion`, `plan_resultado`, `plan_resultado_valoracion` y `plan_sugerencia`; solo `CREATE`).
 - Un índice con nombre propio debe llevar `.HasDatabaseName(...)`. `HasIndex(expr, nombre)` solo nombra el índice en el modelo de EF: sin `HasDatabaseName`, la convención le pone el nombre por defecto y choca con otros índices sobre la misma columna.
 - Los filtros de `HasFilter` son SQL literal: se escriben con los nombres de columna en snake_case (`estado = 'Activa'`, `liberado_en IS NULL`).
 - Enums guardados como texto (`HasConversion<string>()`). Ninguna clave foránea borra en cascada los datos clínicos (`Restrict`).
@@ -109,6 +110,10 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
   - `ux_programacion_turno` → `programacion-concurrente`;
   - `ux_dispositivo_movil_token` → `token-push-concurrente`;
   - `ux_nota_clinica_version` → `nota-editada-concurrente`;
+  - `ux_plan_diagnostico_activo` → `diagnostico-ya-activo`;
+  - `ux_plan_intervencion_activa` → `intervencion-ya-planificada`;
+  - `ux_plan_resultado` → `resultado-ya-planificado`;
+  - `ux_plan_sugerencia_pendiente` → `sugerencia-concurrente` (`ServicioSugerenciasNnn` lo ignora: otra sincronización ya la registró);
   - además, los códigos únicos de cama, dispositivo y documento del paciente.
 
   Un índice único nuevo debe agregarse ahí. `DbUpdateConcurrencyException` se traduce a `conflicto-concurrencia`: `dispositivo`, `estado_signos_actual` y `nota_clinica` usan la columna de sistema `xmin` como token de concurrencia.
@@ -301,6 +306,38 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
 - **Almacenamiento:** `GET /api/v1/sistema/almacenamiento` (`SoloAdministrador`, `IMedidorAlmacenamiento`): `pg_database_size` y `pg_total_relation_size` por tabla de los dos esquemas, con el límite `Sistema__LimiteAlmacenamientoMb` (500).
 - Supabase pausa un proyecto gratuito tras 7 días sin actividad (anotado en el README).
 
+## Proceso de enfermería NNN (fase 8)
+
+- **Doc:** `docs/nnn.md` (licencia, ediciones, verificación, reglas con su fundamento, flujo, endpoints e indicadores); permisos en `docs/matriz-permisos.md`. **Vitalify sugiere; la enfermera decide**: nada entra al plan sin que una enfermera lo confirme.
+- **Base normativa (verificada):** Ley 27669, art. 7 a) (cuidado basado en el PAE) y su reglamento, D.S. 004-2002-SA, art. 9 a) (valoración, diagnóstico, planificación, ejecución y evaluación, registrados en la historia clínica). NTS 139: no se borra.
+- **Catálogo** (`Domain/Nnn/CatalogoNnn.cs`):
+  - Solo código, etiqueta corta y edición (`NANDA-I 2024-2026`, `NIC 8a ed.`, `NOC 7a ed.`). **Nunca** definiciones, características ni actividades: el repo es público y NANDA-I/NIC/NOC tienen derechos de autor.
+  - Todo lo sembrado queda `verificado = false` hasta que el administrador lo marca (`PUT /nnn/catalogo/{tipo}/{codigo}/verificacion`).
+  - `SemillaCatalogoNnn` carga `Semillas/nnn-catalogo.2026.11.1.json` (recurso embebido) al arrancar, en todos los entornos. Es idempotente: agrega lo que falta, corrige lo no verificado, nunca toca lo verificado ni borra. El log lleva solo cantidades.
+- **Motor** (`Domain/Nnn/MotorSugerenciasNnn.cs`):
+  - Puro, versión `2026.11.1`. Reglas R1 a R10 más R11 (NIC 7710 si NEWS2 ≥ 5 o algún parámetro en 3).
+  - Los umbrales son los **puntos NEWS2**, no números nuevos, y van en código, no en `appsettings`.
+  - Para agregar una regla: id nuevo, prueba en `tests/Vitalify.Domain.Tests/Fase8` y subir `VersionReglas`.
+  - `ValoracionNocSugerida`: 3 puntos → 1, 2 → 2, 1 → 3, 0 → 5; el 4 lo elige la enfermera.
+- **Plan** (`Domain/Nnn/PlanCuidados.cs`, `Application/Nnn`):
+  - Tablas `plan_diagnostico`, `plan_intervencion`, `plan_intervencion_ejecucion`, `plan_resultado`, `plan_resultado_valoracion` y `plan_sugerencia`. Esta última registra cada sugerencia emitida (pendiente, confirmada, descartada o expirada) para los indicadores.
+  - Un diagnóstico no vuelve a Activo. Descartar exige motivo (5 a 300) y suprime la sugerencia hasta el fin de la guardia.
+  - Una valoración no se edita. Con el código del resultado se valora el resultado completo (`indicador_codigo` null).
+  - No hay DELETE.
+- **Integración:**
+  - `SugerenciasNnnAlEvaluar` recalcula solo con evaluaciones **guardadas** (`RiesgoEvaluado.Guardada`). `SugerenciasNnnAlRegistrarLectura` recalcula con cada caída. Ambos se registran después de los manejadores de alertas.
+  - `AtenderAlerta` acepta `IntervencionesEjecutadas` (`EjecucionesPlan`). `RegistrarEgreso` resuelve los activos con "Egreso" (`CierrePlanCuidados`) en la misma transacción.
+  - El resumen (`ResumenPlanCuidados`) y la entrega de turno (`PlanEnEntregaTurno`) traen el plan.
+- **Roles:**
+  - La enfermera confirma, descarta, resuelve y valora.
+  - El médico lee y solo agrega o registra la NIC 7710 (`ContextoPlanCuidados.ValidarRolAsync`, 403 `nnn-solo-enfermeria`).
+  - El administrador gestiona el catálogo y ve `GET /sistema/indicadores-nnn` (solo agregados).
+- **Datos clínicos:** el código y la etiqueta de un diagnóstico **nunca** van a logs, auditoría, MQTT, push ni SignalR.
+  - Auditoría: `ConfirmarDiagnosticoEnfermeria`, `DescartarSugerenciaNnn`, `CerrarDiagnosticoEnfermeria`, `RegistrarIntervencion`, `ValorarResultado`, `AgregarIntervencionPlan` y `VerificarCatalogoNnn`, solo con ids.
+  - Eventos de SignalR: `planActualizado` (ids) y `sugerenciasNnn` (id y cantidad).
+  - Leer el plan o las sugerencias cuenta como `ConsultaHistorialPaciente`.
+- **OpenAPI:** `EjemplosOpenApiNnn` agrega ejemplos de cuerpo y respuesta a cada endpoint nuevo; una prueba lo verifica.
+
 ## Pruebas de integración
 
 - `tests/Vitalify.Api.IntegrationTests` usa `WebApplicationFactory` y un PostgreSQL 17 en Testcontainers. `FabricaVitalify` pasa la configuración como variables de entorno y aplica las migraciones antes de arrancar la API.
@@ -324,6 +361,7 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
   - `Fabrica.VigilarAlertasAsync()` corre el vigilante una vez; en las fábricas está apagado con `Alertas__SegundosVigilancia=0`.
   - Para el escalamiento y la falta de señal, adelanta el reloj **después** de iniciar sesión: el JWT se valida con el reloj real.
 - **Fase 7, parte B:** `Fabrica.ResumirHistorialAsync()` corre la retención una vez (en las fábricas está apagada con `Historial__RetencionHabilitada=false`); para que un episodio cumpla los 30 días, adelanta el reloj (`Reloj.Adelantar(TimeSpan.FromDays(31))`). Las fábricas ponen `Proxy__RedesConocidas=10.99.0.0/16` (`FabricaVitalify.RedProxy`, `IpProxy`): `CrearCliente(ip)` con una IP de esa red y `X-Forwarded-For` simula llegar por el proxy.
+- **Fase 8:** `Fabrica.TiempoReal` registra cada evento de SignalR y `Fabrica.Logs` cada línea del log (para comprobar que no llevan datos clínicos). `Fabrica.SembrarCatalogoNnnAsync()` vuelve a correr la semilla del catálogo.
 - **Fase 7:** `PacienteConSensorAsync` ingresa **y** vincula 6 h antes (el historial empieza en el ingreso). Para que una lectura evalúe el riesgo como si llegara en tiempo real, envíala con el reloj adelantado a su hora (`Fase7HistorialTests.EnviarHaceAsync`): el motor usa la hora de la API para la vigencia.
 - **Atajos** en `ClienteApi`: `CrearCamaAsync`, `CrearDispositivoAsync`, `IngresarPacienteAsync`, `VincularAsync`, `EgresarAsync`, `RegistrarTelemetriaAsync` (entra por `/dev/telemetria`), `Ts` y `Ms`. En `PruebaApi`: `ClienteAdministradorAsync`, `ClienteEnfermeraAsync`, `ClienteMedicoAsync` y `PacienteConSensorAsync`.
 - **Fábrica:**

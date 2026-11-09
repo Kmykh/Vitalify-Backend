@@ -48,6 +48,14 @@ Control de acceso basado en roles (RBAC) de Vitalify. Cada rol tiene permisos di
 | Entrega de turno (reporte de enfermería) | `GET /servicios/{id}/entrega-turno` | — | L | L | `PersonalClinico`, solo de su servicio |
 | Eventos en tiempo real (SignalR) | `/hubs/monitoreo` | — | L | L | `PersonalClinico` (el administrador no puede conectarse) |
 | Token push del celular | `POST /notificaciones/dispositivos`, `DELETE /notificaciones/dispositivos` | — | **G** | **G** | `PersonalClinico`, cada uno solo los suyos |
+| Catálogo NNN: búsqueda y vínculos (fase 8; sin datos de pacientes) | `GET /nnn/catalogo?tipo=&q=`, `GET /nnn/diagnosticos/{codigo}/vinculos` | L | L | L | `AdministradorOPersonalClinico` |
+| Verificación del catálogo NNN por la enfermera asesora | `PUT /nnn/catalogo/{tipo}/{codigo}/verificacion` | **G** | — | — | `SoloAdministrador`; se audita `VerificarCatalogoNnn` |
+| Sugerencias NNN del motor | `GET /pacientes/{id}/nnn/sugerencias`, `GET /alertas/{id}/sugerencias-nnn` | — | L | L | `PersonalClinico`; se audita como `ConsultaHistorialPaciente` |
+| Plan de cuidados (lectura) | `GET /pacientes/{id}/plan-cuidados?hospitalizacionId=`, `GET /plan-cuidados/resultados/{id}/valoracion-sugerida` | — | L | L | `PersonalClinico`; se audita como `ConsultaHistorialPaciente` |
+| Diagnósticos de enfermería: confirmar, descartar sugerencias, resolver | `POST /pacientes/{id}/plan-cuidados/diagnosticos`, `POST /pacientes/{id}/plan-cuidados/sugerencias/descartar`, `PUT /plan-cuidados/diagnosticos/{id}/estado` | — | — | **G** | `SoloEnfermera` (los diagnósticos NANDA-I son de enfermería) |
+| Intervenciones NIC: agregar y registrar ejecuciones | `POST /plan-cuidados/diagnosticos/{id}/intervenciones`, `POST /plan-cuidados/intervenciones/{id}/ejecuciones` | — | **G** (solo NIC 7710) | **G** | `PersonalClinico`; el médico solo la 7710 (si no, 403 `nnn-solo-enfermeria`) |
+| Valoración de resultados NOC | `POST /plan-cuidados/resultados/{id}/valoraciones` | — | — | **G** | `SoloEnfermera` |
+| Indicadores NNN para la tesis (agregados) | `GET /sistema/indicadores-nnn?desde=&hasta=` | L | — | — | `SoloAdministrador`; solo cantidades y promedios, ningún dato de pacientes |
 | Incidencias de telemetría (datos técnicos, sin datos del paciente) | `GET /telemetria/incidencias` | L | — | — | `SoloAdministrador` |
 | Ingesta de telemetría de desarrollo (solo Development) | `POST /dev/telemetria` | **G** | — | — | `SoloAdministrador` |
 | Estado del servicio | `GET /ping`, `GET /health` | ✓ | ✓ | ✓ | Anónimo |
@@ -79,6 +87,13 @@ Notas:
   - Una enfermera o un médico toma y atiende las alertas de **su** servicio. Si otra persona ya la tomó, tomarla da 409 `alerta-tomada-por-otro`; atenderla sí se permite a cualquiera del servicio.
   - Se audita `AlertaTomada` y `AlertaAtendida` con el id de la alerta. La nota de atención queda en la alerta, no en la auditoría.
   - Los eventos de SignalR y los push llevan el id del paciente, la cama y los puntajes; **nunca** el nombre, el DNI ni el diagnóstico. El nombre lo pide el cliente por la API, con su permiso.
+
+- **Proceso de enfermería NNN (fase 8; `docs/nnn.md`):**
+  - Vitalify sugiere y la enfermera decide: solo ella confirma, descarta o resuelve diagnósticos NANDA-I y valora los resultados NOC.
+  - El médico lee el plan y solo puede agregar o registrar la NIC 7710 (colaboración con el médico).
+  - Se audita `ConfirmarDiagnosticoEnfermeria`, `DescartarSugerenciaNnn`, `CerrarDiagnosticoEnfermeria`, `RegistrarIntervencion`, `ValorarResultado` y `AgregarIntervencionPlan`, solo con ids: **nunca** el código ni la etiqueta del diagnóstico, que son datos clínicos.
+  - Los eventos `planActualizado` y `sugerenciasNnn` de SignalR llevan solo ids y una cantidad. Las observaciones de las ejecuciones son texto clínico y nunca van a los logs.
+  - No hay DELETE: un diagnóstico se resuelve o se descarta con motivo y una valoración se corrige con otra nueva (NTS 139).
 
 ### Cambio respecto de la versión anterior
 
@@ -137,5 +152,9 @@ Todo lo que preveía esta sección ya está implementado (tiempo real, alertas, 
 | El administrador no ve el historial ni las notas | `ElAdministradorNoVeElHistorialNiLasNotasDeUnPaciente` |
 | Solo el autor corrige una nota, dentro de 24 h, y no se borra | `HU22_E2_ElAutorLaCorrigeDentroDe24h_SeConservaLaVersionAnterior_YNadieLaBorra` |
 | La auditoría muestra al administrador solo acciones e ids, sin el motivo del egreso | `LaAuditoriaMuestraAlAdministradorSoloAccionesEIds_SinElMotivoDelEgreso` |
+| El médico no confirma diagnósticos NANDA-I, pero agrega y registra la NIC 7710 | `F8_el_medico_no_confirma_diagnosticos_NANDA_pero_puede_agregar_y_registrar_la_NIC_7710` |
+| Solo el administrador verifica el catálogo y la semilla no pisa lo verificado | `F8_el_catalogo_se_busca_sin_tildes_y_el_administrador_verifica_sin_que_la_semilla_lo_pise` |
+| Los indicadores NNN son agregados y solo del administrador | `F8_los_indicadores_de_la_tesis_son_solo_agregados_y_del_administrador` |
+| Ningún log, auditoría ni evento de SignalR lleva un código o una etiqueta NANDA-I | `F8_ningun_log_auditoria_ni_evento_SignalR_contiene_un_codigo_ni_una_etiqueta_NANDA` |
 
-Las pruebas están en `tests/Vitalify.Api.IntegrationTests/` (`HU03ControlDeAccesoTests.cs`, `PermisosFase2Tests.cs`, `HU05RegistroDePacienteTests.cs`, `TelemetriaExtrasTests.cs`, `HU06VinculacionPorQrTests.cs`, `TomaManualTests.cs`, `Fase6AlertasTests.cs`, `Fase6TurnosTests.cs` y `Fase7HistorialTests.cs`).
+Las pruebas están en `tests/Vitalify.Api.IntegrationTests/` (`HU03ControlDeAccesoTests.cs`, `PermisosFase2Tests.cs`, `HU05RegistroDePacienteTests.cs`, `TelemetriaExtrasTests.cs`, `HU06VinculacionPorQrTests.cs`, `TomaManualTests.cs`, `Fase6AlertasTests.cs`, `Fase6TurnosTests.cs`, `Fase7HistorialTests.cs` y `Fase8ProcesoEnfermeriaTests.cs`).
