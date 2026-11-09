@@ -4,6 +4,7 @@ using Vitalify.Domain.Auditoria;
 using Vitalify.Domain.Camas;
 using Vitalify.Domain.Dispositivos;
 using Vitalify.Domain.Hospitalizaciones;
+using Vitalify.Domain.Nnn;
 using Vitalify.Domain.Notas;
 using Vitalify.Domain.Notificaciones;
 using Vitalify.Domain.Pacientes;
@@ -16,7 +17,8 @@ using Vitalify.Domain.Vinculacion;
 namespace Vitalify.Infrastructure.Persistence.Transaccional;
 
 /// <summary>
-/// Datos transaccionales: usuarios, sesiones, auditoría, camas, dispositivos, pacientes, hospitalizaciones y códigos de vinculación por QR.
+/// Datos transaccionales: usuarios, sesiones, auditoría, camas, dispositivos, pacientes, hospitalizaciones, códigos de vinculación por QR,
+/// alertas, notas y el proceso de enfermería NNN (catálogo y plan de cuidados).
 /// Usa el esquema <c>vitalify</c> y no <c>public</c>, porque Supabase expone <c>public</c> por su API de datos.
 /// </summary>
 public class TransaccionalDbContext(DbContextOptions<TransaccionalDbContext> options) : DbContext(options)
@@ -39,6 +41,19 @@ public class TransaccionalDbContext(DbContextOptions<TransaccionalDbContext> opt
     public DbSet<DispositivoMovil> DispositivosMoviles => Set<DispositivoMovil>();
     public DbSet<NotaClinica> Notas => Set<NotaClinica>();
     public DbSet<NotaClinicaVersion> VersionesNotas => Set<NotaClinicaVersion>();
+
+    // Fase 8: catálogo NNN y plan de cuidados de enfermería.
+    public DbSet<DiagnosticoNanda> DiagnosticosNanda => Set<DiagnosticoNanda>();
+    public DbSet<IntervencionNic> IntervencionesNic => Set<IntervencionNic>();
+    public DbSet<ResultadoNoc> ResultadosNoc => Set<ResultadoNoc>();
+    public DbSet<IndicadorNoc> IndicadoresNoc => Set<IndicadorNoc>();
+    public DbSet<VinculoNnn> VinculosNnn => Set<VinculoNnn>();
+    public DbSet<DiagnosticoPlan> DiagnosticosPlan => Set<DiagnosticoPlan>();
+    public DbSet<IntervencionPlan> IntervencionesPlan => Set<IntervencionPlan>();
+    public DbSet<EjecucionIntervencion> EjecucionesIntervencion => Set<EjecucionIntervencion>();
+    public DbSet<ResultadoPlan> ResultadosPlan => Set<ResultadoPlan>();
+    public DbSet<ValoracionResultado> ValoracionesResultado => Set<ValoracionResultado>();
+    public DbSet<SugerenciaEmitida> SugerenciasEmitidas => Set<SugerenciaEmitida>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

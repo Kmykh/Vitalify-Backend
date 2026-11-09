@@ -218,7 +218,10 @@ public sealed class DiaPlanillaSolicitud
 public sealed record CargarProgramacionSolicitud(Dictionary<string, Guid>? Letras, List<DiaPlanillaSolicitud>? Dias);
 
 /// <param name="Nota">Qué se hizo (obligatoria, de 5 a 1000 caracteres).</param>
-public sealed record AtenderAlertaSolicitud(string? Nota);
+/// <param name="IntervencionesEjecutadas">
+/// Opcional (fase 8): ids de intervenciones del plan de cuidados que se ejecutaron al atender. Quedan como ejecuciones con esta alerta.
+/// </param>
+public sealed record AtenderAlertaSolicitud(string? Nota, List<Guid>? IntervencionesEjecutadas = null);
 
 /// <summary>Token de notificaciones push de la app.</summary>
 /// <param name="Token">Token de registro de FCM (<c>FirebaseMessaging.instance.getToken()</c>).</param>

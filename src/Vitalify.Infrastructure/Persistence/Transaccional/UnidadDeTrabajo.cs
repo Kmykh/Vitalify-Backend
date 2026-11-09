@@ -3,6 +3,7 @@ using Npgsql;
 using Vitalify.Application.Alertas;
 using Vitalify.Application.Camas;
 using Vitalify.Application.Comun;
+using Vitalify.Application.Nnn;
 using Vitalify.Application.Dispositivos;
 using Vitalify.Application.Pacientes;
 using Vitalify.Application.Puertos;
@@ -36,6 +37,10 @@ internal sealed class UnidadDeTrabajo(TransaccionalDbContext db) : IUnidadDeTrab
         [ConfiguracionProgramacionTurno.IndiceTurno] = Error.Conflicto("programacion-concurrente", "Otro usuario cargó la programación al mismo tiempo. Intenta de nuevo."),
         [ConfiguracionDispositivoMovil.IndiceToken] = Error.Conflicto("token-push-concurrente", "El token del celular se registró al mismo tiempo desde otra sesión. Intenta de nuevo."),
         [ConfiguracionNotaClinicaVersion.IndiceNumero] = Error.Conflicto("nota-editada-concurrente", "La nota se corrigió al mismo tiempo desde otra sesión. Vuelve a cargarla."),
+        [ConfiguracionDiagnosticoPlan.IndiceActivo] = ErroresNnn.DiagnosticoYaActivo,
+        [ConfiguracionIntervencionPlan.IndiceActiva] = ErroresNnn.IntervencionYaPlanificada,
+        [ConfiguracionResultadoPlan.IndiceResultado] = Error.Conflicto("resultado-ya-planificado", "Ese resultado NOC ya está en el plan de este diagnóstico."),
+        [ConfiguracionSugerenciaEmitida.IndicePendiente] = ErroresNnn.SugerenciaConcurrente,
     };
 
     public async Task<Resultado<Unidad>> GuardarCambiosAsync(CancellationToken ct = default)

@@ -18,10 +18,11 @@ public sealed record SensorEntregaDto(string Codigo, string Senal, string Conexi
 public sealed record PreocupacionEntregaDto(DateTime ObservadaEn, Guid RegistradaPor);
 
 /// <summary>Un paciente en la entrega de turno.</summary>
+/// <param name="PlanCuidados">Diagnósticos de enfermería activos, intervenciones de cada turno sin ejecutar y valoraciones NOC que faltan (fase 8).</param>
 public sealed record PacienteEntregaDto(
     Guid PacienteId, string NombreCompleto, string Cama, string NivelRiesgo, bool? EvaluacionCompleta, PuntajeEntregaDto News2, PuntajeEntregaDto Mews,
     IReadOnlyList<AlertaDto> AlertasAbiertas, IReadOnlyList<AlertaDto> AlertasAtendidasEnElTurno, DateTime? ProximaTomaManualEn, bool TomaVencida,
-    SensorEntregaDto? Sensor, PreocupacionEntregaDto? UltimaPreocupacionClinica);
+    SensorEntregaDto? Sensor, PreocupacionEntregaDto? UltimaPreocupacionClinica, Nnn.PlanEntregaDto PlanCuidados);
 
 /// <summary>Resumen del "reporte de enfermería" al cambiar de turno, ordenado por riesgo (el más grave primero).</summary>
 public sealed record EntregaTurnoDto(Guid ServicioId, DateTime TurnoDesde, DateTime TurnoHasta, DateTime GeneradaEn, IReadOnlyList<PacienteEntregaDto> Pacientes);
@@ -43,7 +44,8 @@ public sealed class ObtenerEntregaTurno(
     CatalogoTurnos catalogo,
     OpcionesTelemetria opcionesTelemetria,
     OpcionesClinicas opcionesClinicas,
-    IReloj reloj)
+    IReloj reloj,
+    Nnn.PlanEnEntregaTurno planEnEntrega)
 {
     public async Task<Resultado<EntregaTurnoDto>> EjecutarAsync(Guid servicioId, Guid usuarioId, CancellationToken ct = default)
     {
@@ -65,8 +67,7 @@ public sealed class ObtenerEntregaTurno(
 
         // La guardia (diurna o nocturna) que contiene este momento: las dos cubren las 24 h.
         var ahora = reloj.AhoraUtc;
-        var guardia = catalogo.TurnosEn(ahora).Where(t => t.Tipo is TipoTurno.GuardiaDiurna or TipoTurno.GuardiaNocturna)
-            .Select(catalogo.Intervalo).DefaultIfEmpty(new IntervaloTurno(ahora.AddHours(-12), ahora)).First();
+        var guardia = Guardias.Actual(catalogo, ahora).Intervalo;
 
         var activas = await hospitalizaciones.ListarActivasDeServicioAsync(servicioId, ct);
         var ids = activas.Select(h => h.HospitalizacionId).ToList();
@@ -75,6 +76,7 @@ public sealed class ObtenerEntregaTurno(
         var estadosSignos = await estados.ObtenerVariosAsync(ids, ct);
         var preocupaciones = await observaciones.ObtenerUltimasPreocupacionesAsync(ids, ct);
         var deAlertas = (await alertas.ListarParaEntregaAsync(ids, guardia.InicioUtc, ct)).ToLookup(a => a.Alerta.HospitalizacionId);
+        var planes = await planEnEntrega.ObtenerAsync(ids, guardia.InicioUtc, ct);
 
         var pacientes = activas.Select(h =>
         {
@@ -97,7 +99,8 @@ public sealed class ObtenerEntregaTurno(
                     ? new SensorEntregaDto(codigo, TextosEstado.De(Vigencia.SenalDe(estado?.UltimaLecturaEn, ahora, opcionesTelemetria.Vigencia)),
                         RegistrarPresenciaDispositivo.Texto(presencia.Obtener(codigo)), estado?.UltimaLecturaEn)
                     : null,
-                preocupaciones.GetValueOrDefault(h.HospitalizacionId) is { } o ? new PreocupacionEntregaDto(o.ObservadaEn, o.RegistradaPor) : null);
+                preocupaciones.GetValueOrDefault(h.HospitalizacionId) is { } o ? new PreocupacionEntregaDto(o.ObservadaEn, o.RegistradaPor) : null,
+                planes.GetValueOrDefault(h.HospitalizacionId) ?? Nnn.PlanEntregaDto.Vacio);
         })
         .OrderByDescending(p => AlertaClinica.RangoNivel(p.NivelRiesgo))
         .ThenByDescending(p => p.News2.Actual ?? -1)

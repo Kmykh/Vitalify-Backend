@@ -110,6 +110,7 @@ Todo lo que el médico necesita del episodio en una respuesta:
 | `alertas` | Las cinco categorías: cantidad, abiertas y tiempo medio en segundos hasta tomada y hasta atendida |
 | `alertasAbiertas` | Las alertas pendientes o en atención |
 | `ultimasNotas` | Las 5 notas más recientes |
+| `planCuidados` (fase 8) | Diagnósticos de enfermería activos (código, etiqueta y última valoración NOC) y cantidad de sugerencias NNN pendientes ([nnn.md](nnn.md)) |
 | `proximaTomaManualEn` y `tomaVencida` | Solo en un episodio activo |
 
 Algunas aclaraciones:

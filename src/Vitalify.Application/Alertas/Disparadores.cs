@@ -12,9 +12,10 @@ namespace Vitalify.Application.Alertas;
 /// (<see cref="EvaluacionRiesgo.AportaRespectoDe"/>): entonces <see cref="EvaluacionId"/> es la última guardada, que tiene
 /// el mismo puntaje.
 /// </summary>
+/// <param name="Guardada">Si esta evaluación se guardó (cambió algo): las sugerencias NNN solo se recalculan entonces.</param>
 public sealed record RiesgoEvaluado(
     Guid HospitalizacionId, Guid PacienteId, Guid EvaluacionId, DateTime EvaluadaEn, int News2, NivelRiesgoNews2 News2Nivel,
-    int Mews, NivelRiesgoMews MewsNivel, bool Completo, OrigenEvaluacion Origen)
+    int Mews, NivelRiesgoMews MewsNivel, bool Completo, OrigenEvaluacion Origen, bool Guardada = true)
 {
     public static RiesgoEvaluado Desde(EvaluacionRiesgo e) =>
         new(e.HospitalizacionId, e.PacienteId, e.Id, e.EvaluadaEn, e.News2Total, e.News2Nivel, e.MewsTotal, e.MewsNivel,
@@ -32,7 +33,11 @@ public sealed class PublicadorRiesgoEvaluado(IEnumerable<IManejadorRiesgoEvaluad
     /// <param name="evaluacionGuardadaId">La evaluación guardada que respalda el puntaje, si no es la misma (ver <see cref="RiesgoEvaluado"/>).</param>
     public async Task PublicarAsync(EvaluacionRiesgo evaluacion, Guid? evaluacionGuardadaId = null, CancellationToken ct = default)
     {
-        var evento = RiesgoEvaluado.Desde(evaluacion) with { EvaluacionId = evaluacionGuardadaId ?? evaluacion.Id };
+        var evento = RiesgoEvaluado.Desde(evaluacion) with
+        {
+            EvaluacionId = evaluacionGuardadaId ?? evaluacion.Id,
+            Guardada = evaluacionGuardadaId is null || evaluacionGuardadaId == evaluacion.Id,
+        };
         foreach (var manejador in manejadores)
         {
             try

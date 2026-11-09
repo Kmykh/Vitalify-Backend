@@ -125,6 +125,8 @@ public sealed class TiempoRealFalso : INotificadorTiempoReal
     public List<(string Evento, AlertaEventoDto Alerta)> Alertas { get; } = [];
     public List<RiesgoActualizadoDto> Riesgos { get; } = [];
     public List<SignosActualizadosDto> Signos { get; } = [];
+    public List<PlanActualizadoDto> Planes { get; } = [];
+    public List<SugerenciasNnnDto> Sugerencias { get; } = [];
     public HashSet<Guid> Conectados { get; } = [];
     public bool Falla { get; set; }
 
@@ -148,6 +150,18 @@ public sealed class TiempoRealFalso : INotificadorTiempoReal
     public Task SignosActualizadosAsync(Guid servicioId, SignosActualizadosDto signos, CancellationToken ct = default)
     {
         Signos.Add(signos);
+        return Task.CompletedTask;
+    }
+
+    public Task PlanActualizadoAsync(Guid servicioId, PlanActualizadoDto plan, CancellationToken ct = default)
+    {
+        Planes.Add(plan);
+        return Task.CompletedTask;
+    }
+
+    public Task SugerenciasNnnAsync(Guid servicioId, SugerenciasNnnDto sugerencias, CancellationToken ct = default)
+    {
+        Sugerencias.Add(sugerencias);
         return Task.CompletedTask;
     }
 }

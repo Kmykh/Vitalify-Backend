@@ -173,6 +173,9 @@ public sealed class HistorialEnMemoria
             .Where(o => o.HospitalizacionId == hospitalizacionId && o.ObservadaEn >= desde && o.ObservadaEn <= hasta)
             .OrderByDescending(o => o.ObservadaEn).ToList());
 
+    public Task<EvaluacionRiesgo?> ObtenerPorIdAsync(Guid id, CancellationToken ct = default) =>
+        Task.FromResult(Evaluaciones.SingleOrDefault(e => e.Id == id));
+
     public Task<EvaluacionRiesgo?> ObtenerUltimaAsync(Guid hospitalizacionId, CancellationToken ct = default) =>
         Task.FromResult(Evaluaciones.Where(e => e.HospitalizacionId == hospitalizacionId).OrderByDescending(e => e.EvaluadaEn).FirstOrDefault());
 

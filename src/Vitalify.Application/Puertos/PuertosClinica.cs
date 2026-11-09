@@ -9,6 +9,8 @@ public interface IRepositorioEvaluaciones
 
     Task<EvaluacionRiesgo?> ObtenerUltimaAsync(Guid hospitalizacionId, CancellationToken ct = default);
 
+    Task<EvaluacionRiesgo?> ObtenerPorIdAsync(Guid id, CancellationToken ct = default);
+
     Task<IReadOnlyDictionary<Guid, EvaluacionRiesgo>> ObtenerUltimasAsync(IReadOnlyCollection<Guid> hospitalizaciones, CancellationToken ct = default);
 
     /// <summary>Evaluaciones de la hospitalización entre ambos límites (inclusive), de la más antigua a la más reciente.</summary>

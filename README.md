@@ -2,6 +2,8 @@
 
 Vitalify es una plataforma IoMT hospitalaria (tesis UPC). Monitorea los signos vitales de pacientes hospitalizados con un wearable ESP32, calcula los puntajes de riesgo NEWS2 y MEWS en el backend y genera alertas para enfermería (app Flutter) y para los médicos (dashboard React). Las alertas llegan en tiempo real (SignalR) y por push (FCM) a quien está de turno.
 
+**Vitalify sugiere, y la enfermera decide:** a partir de NEWS2, las alertas y la toma manual, el sistema propone diagnósticos de enfermería NANDA-I con sus intervenciones NIC y resultados NOC, y nada entra al plan de cuidados sin que una enfermera lo confirme (ver [`docs/nnn.md`](docs/nnn.md)).
+
 Este repositorio contiene el backend: **ASP.NET Core 8** con **arquitectura hexagonal** y **PostgreSQL en Supabase** (usado solo como base de datos, sin Supabase Auth ni su SDK).
 
 ## Estructura

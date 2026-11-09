@@ -114,6 +114,12 @@ public interface INotificadorTiempoReal
     Task RiesgoActualizadoAsync(Guid servicioId, RiesgoActualizadoDto riesgo, CancellationToken ct = default);
 
     Task SignosActualizadosAsync(Guid servicioId, SignosActualizadosDto signos, CancellationToken ct = default);
+
+    /// <summary>Evento <c>planActualizado</c> al grupo del servicio (fase 8).</summary>
+    Task PlanActualizadoAsync(Guid servicioId, PlanActualizadoDto plan, CancellationToken ct = default);
+
+    /// <summary>Evento <c>sugerenciasNnn</c> al grupo del servicio (fase 8).</summary>
+    Task SugerenciasNnnAsync(Guid servicioId, SugerenciasNnnDto sugerencias, CancellationToken ct = default);
 }
 
 /// <summary>

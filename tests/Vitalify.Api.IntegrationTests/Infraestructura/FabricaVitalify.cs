@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Testcontainers.PostgreSql;
 using Vitalify.Application.Puertos;
 using Vitalify.Application.Vinculacion;
@@ -39,6 +40,12 @@ public class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
 
     /// <summary>Push enviados (envuelve al adaptador real, que solo escribe en el log).</summary>
     public PushRegistrado Push { get; } = new();
+
+    /// <summary>Eventos de SignalR que la API envió (envuelve al adaptador real).</summary>
+    public TiempoRealRegistrado TiempoReal { get; } = new();
+
+    /// <summary>Todo lo que la API escribió en el log (mensaje y excepción), para comprobar que no lleva datos clínicos.</summary>
+    public LogsCapturados Logs { get; } = new();
 
     /// <summary>Entorno de ASP.NET Core con el que arranca la API.</summary>
     protected virtual string Entorno => "Development";
@@ -168,6 +175,10 @@ public class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
         return await scope.ServiceProvider.GetRequiredService<Application.Historial.ResumirLecturasAntiguas>().EjecutarAsync();
     }
 
+    /// <summary>Corre otra vez la semilla del catálogo NNN (la API ya la corrió al arrancar).</summary>
+    public Task<Infrastructure.Semillas.ResultadoSemillaNnn> SembrarCatalogoNnnAsync() =>
+        Services.GetRequiredService<Infrastructure.Semillas.SemillaCatalogoNnn>().SembrarAsync();
+
     /// <summary>Corre una vez lo que hace el worker de renovación de códigos.</summary>
     public async Task<int> RenovarCodigosAsync()
     {
@@ -178,8 +189,17 @@ public class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment(Entorno);
+        builder.ConfigureLogging(l => l.AddProvider(Logs));
         builder.ConfigureTestServices(services =>
         {
+            var tiempoReal = services.Last(d => d.ServiceType == typeof(INotificadorTiempoReal));
+            services.RemoveAll<INotificadorTiempoReal>();
+            services.AddSingleton<INotificadorTiempoReal>(sp =>
+            {
+                TiempoReal.Interno = (INotificadorTiempoReal)ActivatorUtilities.CreateInstance(sp, tiempoReal.ImplementationType!);
+                return TiempoReal;
+            });
+
             services.RemoveAll<IReloj>();
             services.AddSingleton<IReloj>(Reloj);
 

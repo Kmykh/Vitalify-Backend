@@ -109,8 +109,14 @@ public static class DependencyInjection
             services.AddSingleton<INotificadorPush, NotificadorPushEnLog>();
         }
 
+        // Fase 8: proceso de enfermería NNN. El catálogo se siembra en todos los entornos (también en producción).
+        services.AddScoped<IRepositorioCatalogoNnn, RepositorioCatalogoNnn>();
+        services.AddScoped<IRepositorioPlanCuidados, RepositorioPlanCuidados>();
+
         services.AddHostedService<SemillaAdministrador>();
         services.AddHostedService<SemillaDatosDemo>();
+        services.AddSingleton<SemillaCatalogoNnn>();
+        services.AddHostedService(sp => sp.GetRequiredService<SemillaCatalogoNnn>());
 
         return services;
     }

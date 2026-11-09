@@ -27,10 +27,11 @@ public sealed record AlertasPorTipoDto(string Tipo, int Cantidad, int Abiertas, 
 /// <summary>Todo lo que el médico necesita del episodio en una sola respuesta.</summary>
 /// <param name="ProximaTomaManualEn">Solo en un episodio activo.</param>
 /// <param name="TomaVencida">Pasaron la próxima toma y la tolerancia.</param>
+/// <param name="PlanCuidados">Diagnósticos de enfermería activos con su última valoración NOC y sugerencias pendientes (fase 8).</param>
 public sealed record ResumenPacienteDto(
     PacienteResumenDto Paciente, EpisodioDto Episodio, EvaluacionRiesgoDto? UltimoRiesgo, ExtremosEpisodioDto Extremos,
     IReadOnlyList<AlertasPorTipoDto> Alertas, IReadOnlyList<AlertaDto> AlertasAbiertas, IReadOnlyList<NotaDto> UltimasNotas,
-    DateTime? ProximaTomaManualEn, bool TomaVencida);
+    DateTime? ProximaTomaManualEn, bool TomaVencida, Nnn.PlanCuidadosResumenDto PlanCuidados);
 
 public sealed record ObtenerResumenConsulta(Guid PacienteId, Guid? HospitalizacionId, Guid UsuarioId, string? Ip);
 
@@ -50,7 +51,8 @@ public sealed class ObtenerResumenPaciente(
     PresentadorNotas presentadorNotas,
     AuditoriaHistorial auditoria,
     OpcionesClinicas opcionesClinicas,
-    IReloj reloj)
+    IReloj reloj,
+    Nnn.ResumenPlanCuidados resumenPlan)
 {
     public const int NotasEnResumen = 5;
 
@@ -77,6 +79,7 @@ public sealed class ObtenerResumenPaciente(
         var delEpisodio = await alertas.ListarDeHospitalizacionAsync(hospitalizacion.Id, ct);
         var ultimasNotas = await presentadorNotas.PresentarAsync(await notas.ListarDeHospitalizacionAsync(hospitalizacion.Id, NotasEnResumen, ct), ct);
 
+        var planCuidados = await resumenPlan.ObtenerAsync(hospitalizacion, ct);
         var proxima = hospitalizacion.EstaActiva ? riesgo?.ProximaTomaManualEn : null;
         var auditado = await auditoria.RegistrarAsync(paciente.Id, hospitalizacion.Id, "resumen", consulta.UsuarioId, consulta.Ip, ct);
         if (!auditado.EsExito)
@@ -93,7 +96,8 @@ public sealed class ObtenerResumenPaciente(
             delEpisodio.Where(a => a.Alerta.EstaAbierta).Select(AlertaDto.Desde).ToList(),
             ultimasNotas,
             proxima,
-            proxima is { } p && ahora > p + opcionesClinicas.ToleranciaToma);
+            proxima is { } p && ahora > p + opcionesClinicas.ToleranciaToma,
+            planCuidados);
     }
 
     /// <summary>Las cinco categorías siempre, aunque no haya alertas de alguna.</summary>

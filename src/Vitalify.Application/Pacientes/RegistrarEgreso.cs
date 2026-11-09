@@ -28,7 +28,7 @@ public sealed class RegistrarEgresoValidador : AbstractValidator<RegistrarEgreso
 /// <summary>
 /// HU08: registra el egreso. Si el paciente tiene un sensor vinculado, lo libera primero; todo se guarda en una
 /// sola unidad de trabajo (una transacción). La hospitalización queda Finalizada y se conserva. El wearable liberado
-/// recibe <c>desvinculado</c> y un QR nuevo.
+/// recibe <c>desvinculado</c> y un QR nuevo. Los diagnósticos de enfermería activos quedan Resueltos con el motivo "Egreso".
 /// </summary>
 public sealed class RegistrarEgreso(
     IValidator<RegistrarEgresoComando> validador,
@@ -39,7 +39,9 @@ public sealed class RegistrarEgreso(
     IUnidadDeTrabajo unidadDeTrabajo,
     IResolutorDispositivos resolutorDispositivos,
     ServicioCodigosVinculacion servicioCodigos,
-    IReloj reloj)
+    IReloj reloj,
+    Nnn.CierrePlanCuidados cierrePlan,
+    Nnn.NotificadorPlanCuidados notificadorPlan)
 {
     public async Task<Resultado<EgresoDto>> EjecutarAsync(RegistrarEgresoComando comando, CancellationToken ct = default)
     {
@@ -75,6 +77,9 @@ public sealed class RegistrarEgreso(
 
         Enumeraciones.TryParseNombre<MotivoEgreso>(comando.Motivo, out var motivo);
         hospitalizacion.RegistrarEgreso(motivo, comando.Observacion, ahora, comando.UsuarioId);
+
+        // Fase 8: los diagnósticos de enfermería activos se resuelven con el motivo "Egreso", en la misma transacción.
+        var diagnosticosCerrados = await cierrePlan.PrepararAlEgresarAsync(hospitalizacion.Id, comando.UsuarioId, comando.Ip, ahora, ct);
         auditoria.Agregar(RegistroAuditoria.Registrar(
             AccionAuditoria.PacienteEgresado, ahora, comando.UsuarioId, comando.Ip,
             $"Paciente {hospitalizacion.PacienteId}, hospitalización {hospitalizacion.Id}, motivo {motivo}."));
@@ -83,6 +88,11 @@ public sealed class RegistrarEgreso(
         if (!guardado.EsExito)
         {
             return guardado.Error;
+        }
+
+        if (diagnosticosCerrados > 0)
+        {
+            await notificadorPlan.PlanActualizadoAsync(hospitalizacion.Id, ct);
         }
 
         if (liberado is not null)

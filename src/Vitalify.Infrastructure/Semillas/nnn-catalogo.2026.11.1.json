@@ -1,0 +1,79 @@
+{
+  "version": "2026.11.1",
+  "aviso": "Subconjunto tentativo: solo código y etiqueta corta en español. Sin definiciones, características definitorias ni actividades (derechos de autor de Thieme y Elsevier). Cada entrada queda sin verificar hasta que una enfermera asesora la coteja con su libro. Ver docs/nnn.md.",
+  "ediciones": {
+    "nanda": "NANDA-I 2024-2026",
+    "nic": "NIC 8a ed.",
+    "noc": "NOC 7a ed."
+  },
+  "diagnosticos": [
+    { "codigo": "00032", "etiqueta": "Patrón respiratorio ineficaz", "dominio": "Actividad/reposo", "clase": "Respuestas cardiovasculares/pulmonares", "tipo": "Real" },
+    { "codigo": "00030", "etiqueta": "Deterioro del intercambio de gases", "dominio": "Eliminación e intercambio", "clase": "Función respiratoria", "tipo": "Real" },
+    { "codigo": "00031", "etiqueta": "Limpieza ineficaz de las vías aéreas", "dominio": "Seguridad/protección", "clase": "Lesión física", "tipo": "Real" },
+    { "codigo": "00007", "etiqueta": "Hipertermia", "dominio": "Seguridad/protección", "clase": "Termorregulación", "tipo": "Real" },
+    { "codigo": "00006", "etiqueta": "Hipotermia", "dominio": "Seguridad/protección", "clase": "Termorregulación", "tipo": "Real" },
+    { "codigo": "00029", "etiqueta": "Disminución del gasto cardíaco", "dominio": "Actividad/reposo", "clase": "Respuestas cardiovasculares/pulmonares", "tipo": "Real" },
+    { "codigo": "00240", "etiqueta": "Riesgo de disminución del gasto cardíaco", "dominio": "Actividad/reposo", "clase": "Respuestas cardiovasculares/pulmonares", "tipo": "Riesgo" },
+    { "codigo": "00028", "etiqueta": "Riesgo de déficit de volumen de líquidos", "dominio": "Nutrición", "clase": "Hidratación", "tipo": "Riesgo" },
+    { "codigo": "00128", "etiqueta": "Confusión aguda", "dominio": "Percepción/cognición", "clase": "Cognición", "tipo": "Real" },
+    { "codigo": "00201", "etiqueta": "Riesgo de perfusión tisular cerebral ineficaz", "dominio": "Actividad/reposo", "clase": "Respuestas cardiovasculares/pulmonares", "tipo": "Riesgo" },
+    { "codigo": "00303", "etiqueta": "Riesgo de caídas del adulto", "dominio": "Seguridad/protección", "clase": "Lesión física", "tipo": "Riesgo" },
+    { "codigo": "00132", "etiqueta": "Dolor agudo", "dominio": "Confort", "clase": "Confort físico", "tipo": "Real" },
+    { "codigo": "00004", "etiqueta": "Riesgo de infección", "dominio": "Seguridad/protección", "clase": "Infección", "tipo": "Riesgo" },
+    { "codigo": "00146", "etiqueta": "Ansiedad", "dominio": "Afrontamiento/tolerancia al estrés", "clase": "Respuestas de afrontamiento", "tipo": "Real" }
+  ],
+  "intervenciones": [
+    { "codigo": "3350", "etiqueta": "Monitorización respiratoria", "campo": "Fisiológico: complejo" },
+    { "codigo": "3320", "etiqueta": "Oxigenoterapia", "campo": "Fisiológico: complejo" },
+    { "codigo": "3140", "etiqueta": "Manejo de la vía aérea", "campo": "Fisiológico: complejo" },
+    { "codigo": "3740", "etiqueta": "Tratamiento de la fiebre", "campo": "Fisiológico: complejo" },
+    { "codigo": "3800", "etiqueta": "Tratamiento de la hipotermia", "campo": "Fisiológico: complejo" },
+    { "codigo": "6680", "etiqueta": "Monitorización de los signos vitales", "campo": "Seguridad" },
+    { "codigo": "4044", "etiqueta": "Cuidados cardíacos: agudos", "campo": "Fisiológico: complejo" },
+    { "codigo": "4150", "etiqueta": "Regulación hemodinámica", "campo": "Fisiológico: complejo" },
+    { "codigo": "4250", "etiqueta": "Manejo del shock", "campo": "Fisiológico: complejo" },
+    { "codigo": "4120", "etiqueta": "Manejo de líquidos", "campo": "Fisiológico: complejo" },
+    { "codigo": "2620", "etiqueta": "Monitorización neurológica", "campo": "Fisiológico: complejo" },
+    { "codigo": "6490", "etiqueta": "Prevención de caídas", "campo": "Seguridad" },
+    { "codigo": "1410", "etiqueta": "Manejo del dolor: agudo", "campo": "Fisiológico: básico" },
+    { "codigo": "5820", "etiqueta": "Disminución de la ansiedad", "campo": "Conductual" },
+    { "codigo": "6540", "etiqueta": "Control de infecciones", "campo": "Seguridad" },
+    { "codigo": "7710", "etiqueta": "Colaboración con el médico", "campo": "Sistema sanitario" }
+  ],
+  "resultados": [
+    { "codigo": "0415", "etiqueta": "Estado respiratorio", "escala": "Desviación grave del rango normal (1) a Sin desviación del rango normal (5)" },
+    { "codigo": "0402", "etiqueta": "Estado respiratorio: intercambio gaseoso", "escala": "Desviación grave del rango normal (1) a Sin desviación del rango normal (5)" },
+    { "codigo": "0800", "etiqueta": "Termorregulación", "escala": "Gravemente comprometido (1) a No comprometido (5)" },
+    { "codigo": "0802", "etiqueta": "Signos vitales", "escala": "Desviación grave del rango normal (1) a Sin desviación del rango normal (5)" },
+    { "codigo": "0400", "etiqueta": "Efectividad de la bomba cardíaca", "escala": "Desviación grave del rango normal (1) a Sin desviación del rango normal (5)" },
+    { "codigo": "0601", "etiqueta": "Equilibrio hídrico", "escala": "Gravemente comprometido (1) a No comprometido (5)" },
+    { "codigo": "0912", "etiqueta": "Estado neurológico: consciencia", "escala": "Gravemente comprometido (1) a No comprometido (5)" },
+    { "codigo": "1909", "etiqueta": "Conducta de prevención de caídas", "escala": "Nunca demostrado (1) a Siempre demostrado (5)" },
+    { "codigo": "2102", "etiqueta": "Nivel del dolor", "escala": "Grave (1) a Ninguno (5)" },
+    { "codigo": "1211", "etiqueta": "Nivel de ansiedad", "escala": "Grave (1) a Ninguno (5)" },
+    { "codigo": "0703", "etiqueta": "Severidad de la infección", "escala": "Grave (1) a Ninguno (5)" }
+  ],
+  "indicadores": [
+    { "codigo": "080201", "resultado": "0802", "etiqueta": "Temperatura corporal", "parametroVital": "temperatura" },
+    { "codigo": "080203", "resultado": "0802", "etiqueta": "Frecuencia del pulso radial", "parametroVital": "fc" },
+    { "codigo": "080204", "resultado": "0802", "etiqueta": "Frecuencia respiratoria", "parametroVital": "fr" },
+    { "codigo": "080205", "resultado": "0802", "etiqueta": "Presión arterial sistólica", "parametroVital": "pas" },
+    { "codigo": "080208", "resultado": "0802", "etiqueta": "Saturación de oxígeno", "parametroVital": "spo2" }
+  ],
+  "vinculos": [
+    { "diagnostico": "00032", "nic": ["3350", "3140", "6680"], "noc": ["0415", "0802"] },
+    { "diagnostico": "00030", "nic": ["3320", "3350"], "noc": ["0402", "0802"] },
+    { "diagnostico": "00031", "nic": ["3140", "3350"], "noc": ["0415"] },
+    { "diagnostico": "00007", "nic": ["3740", "6680"], "noc": ["0800", "0802"] },
+    { "diagnostico": "00006", "nic": ["3800", "6680"], "noc": ["0800", "0802"] },
+    { "diagnostico": "00029", "nic": ["4150", "6680", "4044"], "noc": ["0400", "0802"] },
+    { "diagnostico": "00240", "nic": ["4150", "6680"], "noc": ["0400", "0802"] },
+    { "diagnostico": "00028", "nic": ["4250", "4120"], "noc": ["0601", "0802"] },
+    { "diagnostico": "00128", "nic": ["2620", "6490"], "noc": ["0912"] },
+    { "diagnostico": "00201", "nic": ["2620", "6490"], "noc": ["0912"] },
+    { "diagnostico": "00303", "nic": ["6490"], "noc": ["1909"] },
+    { "diagnostico": "00132", "nic": ["1410"], "noc": ["2102"] },
+    { "diagnostico": "00004", "nic": ["6540", "7710"], "noc": ["0703", "0802"] },
+    { "diagnostico": "00146", "nic": ["5820"], "noc": ["1211"] }
+  ]
+}

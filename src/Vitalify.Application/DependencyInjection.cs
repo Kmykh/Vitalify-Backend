@@ -6,6 +6,7 @@ using Vitalify.Application.Camas;
 using Vitalify.Application.Clinica;
 using Vitalify.Application.Dispositivos;
 using Vitalify.Application.Historial;
+using Vitalify.Application.Nnn;
 using Vitalify.Application.Notas;
 using Vitalify.Application.Notificaciones;
 using Vitalify.Application.Pacientes;
@@ -147,6 +148,38 @@ public static class DependencyInjection
         services.AddScoped<ListarVersionesNota>();
         services.AddSingleton<IValidator<ListarAuditoriaConsulta>, ListarAuditoriaValidador>();
         services.AddScoped<ListarAuditoria>();
+
+        // Fase 8: proceso de enfermería NNN. Los manejadores de sugerencias van después de los de alertas (registro en orden).
+        services.AddScoped<PresentadorPlanCuidados>();
+        services.AddScoped<ServicioSugerenciasNnn>();
+        services.AddScoped<NotificadorPlanCuidados>();
+        services.AddScoped<ContextoPlanCuidados>();
+        services.AddScoped<EjecucionesPlan>();
+        services.AddScoped<CierrePlanCuidados>();
+        services.AddScoped<ResumenPlanCuidados>();
+        services.AddScoped<PlanEnEntregaTurno>();
+        services.AddScoped<IManejadorRiesgoEvaluado, SugerenciasNnnAlEvaluar>();
+        services.AddScoped<IManejadorLecturaRegistrada, SugerenciasNnnAlRegistrarLectura>();
+        services.AddScoped<ConsultarCatalogoNnn>();
+        services.AddScoped<ObtenerVinculosDiagnostico>();
+        services.AddScoped<VerificarEntradaCatalogoNnn>();
+        services.AddScoped<ObtenerSugerenciasPaciente>();
+        services.AddScoped<ObtenerSugerenciasAlerta>();
+        services.AddSingleton<IValidator<ConfirmarDiagnosticoComando>, ConfirmarDiagnosticoValidador>();
+        services.AddSingleton<IValidator<DescartarSugerenciaComando>, DescartarSugerenciaValidador>();
+        services.AddSingleton<IValidator<CambiarEstadoDiagnosticoComando>, CambiarEstadoDiagnosticoValidador>();
+        services.AddSingleton<IValidator<AgregarIntervencionComando>, AgregarIntervencionValidador>();
+        services.AddSingleton<IValidator<RegistrarEjecucionComando>, RegistrarEjecucionValidador>();
+        services.AddSingleton<IValidator<RegistrarValoracionComando>, RegistrarValoracionValidador>();
+        services.AddScoped<ConfirmarDiagnostico>();
+        services.AddScoped<DescartarSugerencia>();
+        services.AddScoped<CambiarEstadoDiagnostico>();
+        services.AddScoped<AgregarIntervencion>();
+        services.AddScoped<RegistrarEjecucion>();
+        services.AddScoped<RegistrarValoracion>();
+        services.AddScoped<ObtenerValoracionSugerida>();
+        services.AddScoped<ObtenerPlanCuidados>();
+        services.AddScoped<ObtenerIndicadoresNnn>();
 
         return services;
     }

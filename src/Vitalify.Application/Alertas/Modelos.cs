@@ -131,6 +131,15 @@ public sealed record AlertaEventoDto(
 public sealed record RiesgoActualizadoDto(
     Guid PacienteId, Guid HospitalizacionId, string Cama, int News2, int Mews, string Nivel, bool Completo, DateTime EvaluadaEn);
 
+/// <summary>
+/// Evento <c>planActualizado</c>: cambió el plan de cuidados (fase 8). Solo ids: la app vuelve a pedir el plan por REST.
+/// Nunca lleva el código ni la etiqueta de un diagnóstico.
+/// </summary>
+public sealed record PlanActualizadoDto(Guid PacienteId, Guid HospitalizacionId);
+
+/// <summary>Evento <c>sugerenciasNnn</c>: cuántas sugerencias NNN tiene pendientes el paciente, sin códigos.</summary>
+public sealed record SugerenciasNnnDto(Guid PacienteId, int Cantidad);
+
 /// <summary>Evento <c>signosActualizados</c> (como máximo uno cada 5 s por paciente).</summary>
 public sealed record SignosActualizadosDto(
     Guid PacienteId, Guid HospitalizacionId, string Cama, DateTime MedidoEn, int? Fc, int? Fr, int? Spo2, decimal? Temperatura,

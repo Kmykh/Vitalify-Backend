@@ -63,6 +63,9 @@ internal sealed class RepositorioEvaluaciones(HistorialDbContext db) : IReposito
 {
     public void Agregar(EvaluacionRiesgo evaluacion) => db.Evaluaciones.Add(evaluacion);
 
+    public Task<EvaluacionRiesgo?> ObtenerPorIdAsync(Guid id, CancellationToken ct = default) =>
+        db.Evaluaciones.AsNoTracking().SingleOrDefaultAsync(e => e.Id == id, ct);
+
     public Task<EvaluacionRiesgo?> ObtenerUltimaAsync(Guid hospitalizacionId, CancellationToken ct = default) =>
         db.Evaluaciones.AsNoTracking()
             .Where(e => e.HospitalizacionId == hospitalizacionId)

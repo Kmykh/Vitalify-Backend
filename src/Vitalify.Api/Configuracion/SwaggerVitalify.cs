@@ -34,6 +34,7 @@ internal static class SwaggerVitalify
                 Description = "accessToken devuelto por POST /api/v1/auth/login. Pega solo el token, sin el prefijo \"Bearer\".",
             });
             o.OperationFilter<FiltroSeguridad>();
+            o.OperationFilter<EjemplosOpenApiNnn>();
 
             var xml = Path.Combine(AppContext.BaseDirectory, $"{typeof(Program).Assembly.GetName().Name}.xml");
             o.IncludeXmlComments(xml);
