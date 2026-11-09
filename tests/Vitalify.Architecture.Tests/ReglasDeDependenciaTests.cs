@@ -113,6 +113,24 @@ public class ReglasDeDependenciaTests
     }
 
     [Fact]
+    public void El_motor_de_sugerencias_NNN_es_dominio_puro_y_no_depende_de_la_infraestructura()
+    {
+        // Las reglas NNN son criterio clínico versionado: viven en el dominio, sin base de datos ni configuración.
+        var resultado = Types.InAssembly(Domain)
+            .That().ResideInNamespace("Vitalify.Domain.Nnn")
+            .ShouldNot().HaveDependencyOnAny([ApplicationNs, InfrastructureNs, ApiNs, .. Frameworks])
+            .GetResult();
+        Assert.True(resultado.IsSuccessful, Describir(resultado));
+        Assert.Equal("Vitalify.Domain", typeof(Vitalify.Domain.Nnn.MotorSugerenciasNnn).Assembly.GetName().Name);
+
+        var casosDeUso = Types.InAssembly(Application)
+            .That().ResideInNamespace("Vitalify.Application.Nnn")
+            .ShouldNot().HaveDependencyOnAny([InfrastructureNs, ApiNs, "Microsoft.EntityFrameworkCore", "Npgsql", "Microsoft.AspNetCore"])
+            .GetResult();
+        Assert.True(casosDeUso.IsSuccessful, Describir(casosDeUso));
+    }
+
+    [Fact]
     public void La_guia_de_toma_manual_es_un_recurso_de_Application_y_se_carga_sin_la_infraestructura()
     {
         // Es contenido clínico versionado del núcleo: vive en Application (no en la base ni en Infrastructure).
