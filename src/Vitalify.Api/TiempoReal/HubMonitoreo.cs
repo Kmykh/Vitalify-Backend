@@ -99,6 +99,12 @@ public sealed class NotificadorSignalR(IHubContext<HubMonitoreo> hub, Conexiones
     public Task SignosActualizadosAsync(Guid servicioId, SignosActualizadosDto signos, CancellationToken ct = default) =>
         EnviarAsync(GruposMonitoreo.Servicio(servicioId), "signosActualizados", signos, ct);
 
+    public Task PlanActualizadoAsync(Guid servicioId, PlanActualizadoDto plan, CancellationToken ct = default) =>
+        EnviarAsync(GruposMonitoreo.Servicio(servicioId), "planActualizado", plan, ct);
+
+    public Task SugerenciasNnnAsync(Guid servicioId, SugerenciasNnnDto sugerencias, CancellationToken ct = default) =>
+        EnviarAsync(GruposMonitoreo.Servicio(servicioId), "sugerenciasNnn", sugerencias, ct);
+
     private async Task EnviarAsync(string grupo, string evento, object datos, CancellationToken ct)
     {
         try

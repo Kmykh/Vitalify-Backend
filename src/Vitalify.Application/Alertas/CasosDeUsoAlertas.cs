@@ -200,7 +200,11 @@ public sealed class TomarAlerta(
     }
 }
 
-public sealed record AtenderAlertaComando(Guid AlertaId, string? Nota, Guid UsuarioId, string? Ip);
+/// <param name="IntervencionesEjecutadas">
+/// Opcional (fase 8): ids de intervenciones del plan de cuidados que se ejecutaron al atender la alerta. Se registran como
+/// ejecuciones con esta alerta. Sin el campo, atender se comporta igual que antes.
+/// </param>
+public sealed record AtenderAlertaComando(Guid AlertaId, string? Nota, Guid UsuarioId, string? Ip, IReadOnlyList<Guid>? IntervencionesEjecutadas = null);
 
 public sealed class AtenderAlertaValidador : AbstractValidator<AtenderAlertaComando>
 {
@@ -209,13 +213,19 @@ public sealed class AtenderAlertaValidador : AbstractValidator<AtenderAlertaComa
         RuleFor(c => c.Nota)
             .Must(n => n?.Trim().Length is >= AlertaClinica.LargoMinimoNota and <= AlertaClinica.LargoMaximoNota)
             .WithMessage($"La nota de atención es obligatoria y debe tener entre {AlertaClinica.LargoMinimoNota} y {AlertaClinica.LargoMaximoNota} caracteres.");
+        RuleFor(c => c.IntervencionesEjecutadas)
+            .Must(l => l is null || (l.Count <= MaximoIntervenciones && l.Distinct().Count() == l.Count))
+            .WithMessage($"Indica hasta {MaximoIntervenciones} intervenciones del plan, sin repetir.");
     }
+
+    public const int MaximoIntervenciones = 20;
 }
 
 /// <summary>Cierra la alerta con una nota obligatoria (qué se hizo).</summary>
 public sealed class AtenderAlerta(
     IValidator<AtenderAlertaComando> validador, IRepositorioAlertas alertas, AccesoServicio acceso, ContextoHospitalizaciones contextos,
-    NotificadorAlertas notificador, IRepositorioAuditoria auditoria, IUnidadDeTrabajo unidadDeTrabajo, IReloj reloj)
+    NotificadorAlertas notificador, IRepositorioAuditoria auditoria, IUnidadDeTrabajo unidadDeTrabajo, IReloj reloj,
+    Nnn.EjecucionesPlan ejecuciones, Nnn.NotificadorPlanCuidados notificadorPlan)
 {
     public async Task<Resultado<AlertaDto>> EjecutarAsync(AtenderAlertaComando comando, CancellationToken ct = default)
     {
@@ -247,6 +257,19 @@ public sealed class AtenderAlerta(
         }
 
         var ahora = reloj.AhoraUtc;
+        var conIntervenciones = comando.IntervencionesEjecutadas is { Count: > 0 };
+        if (conIntervenciones)
+        {
+            // Fase 8: lo que se hizo por la alerta queda como ejecución de las intervenciones NIC del plan.
+            var preparadas = await ejecuciones.PrepararAsync(
+                comando.IntervencionesEjecutadas!, alerta.HospitalizacionId, alerta.Id, null, comando.UsuarioId, comando.Ip, ahora,
+                "intervencionesEjecutadas", ct);
+            if (!preparadas.EsExito)
+            {
+                return preparadas.Error;
+            }
+        }
+
         alerta.Atender(comando.UsuarioId, comando.Nota!, ahora);
         auditoria.Agregar(RegistroAuditoria.Registrar(AccionAuditoria.AlertaAtendida, ahora, comando.UsuarioId, comando.Ip, $"Alerta {alerta.Id}."));
         var guardado = await unidadDeTrabajo.GuardarCambiosAsync(ct);
@@ -257,6 +280,10 @@ public sealed class AtenderAlerta(
 
         var cama = (await contextos.ObtenerAsync(alerta.HospitalizacionId, ct))?.CodigoCama ?? string.Empty;
         await notificador.SincronizarAsync(alerta, cama, ct);
+        if (conIntervenciones)
+        {
+            await notificadorPlan.PlanActualizadoAsync(alerta.HospitalizacionId, ct);
+        }
         return AlertaDto.Desde(new AlertaConCama(alerta, cama));
     }
 }

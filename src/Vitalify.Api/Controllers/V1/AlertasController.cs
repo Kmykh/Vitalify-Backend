@@ -59,11 +59,15 @@ public class AlertasController : ControllerBase
     }
 
     /// <summary>Atiende la alerta con una nota (qué se hizo).</summary>
+    /// <remarks>
+    /// Con <c>intervencionesEjecutadas</c> (ids de intervenciones del plan de cuidados), cada una queda registrada como
+    /// ejecución con esta alerta, en la misma transacción. El médico solo puede registrar la NIC 7710.
+    /// </remarks>
     /// <response code="200">Alerta atendida.</response>
-    /// <response code="400">Falta la nota o no tiene entre 5 y 1000 caracteres.</response>
-    /// <response code="403">La alerta es de otro servicio.</response>
+    /// <response code="400">Falta la nota o no tiene entre 5 y 1000 caracteres, o una intervención no es del plan de esta hospitalización.</response>
+    /// <response code="403">La alerta es de otro servicio, o un médico registró una intervención distinta de la NIC 7710.</response>
     /// <response code="404">La alerta no existe.</response>
-    /// <response code="409">Ya fue atendida.</response>
+    /// <response code="409">Ya fue atendida, o una intervención o su diagnóstico ya no están activos.</response>
     [HttpPost("{id:guid}/atender")]
     [ProducesResponseType<AlertaDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -71,7 +75,25 @@ public class AlertasController : ControllerBase
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<AlertaDto>> Atender(Guid id, AtenderAlertaSolicitud solicitud, [FromServices] AtenderAlerta atender, CancellationToken ct)
     {
-        var resultado = await atender.EjecutarAsync(new AtenderAlertaComando(id, solicitud.Nota, User.IdUsuario() ?? Guid.Empty, HttpContext.Ip()), ct);
+        var resultado = await atender.EjecutarAsync(
+            new AtenderAlertaComando(id, solicitud.Nota, User.IdUsuario() ?? Guid.Empty, HttpContext.Ip(), solicitud.IntervencionesEjecutadas), ct);
+        return resultado.EsExito ? Ok(resultado.Valor) : this.Problema(resultado.Error);
+    }
+
+    /// <summary>Sugerencias NNN de la evaluación que abrió la alerta (fase 8).</summary>
+    /// <remarks>
+    /// Usa la evaluación del detalle de la alerta (riesgo) o la última hasta que se creó (caída), con la toma manual que contaba
+    /// entonces. No repite los diagnósticos que ya están activos en el plan. Vitalify sugiere; la enfermera decide.
+    /// </remarks>
+    /// <response code="200">Sugerencias (puede estar vacía).</response>
+    /// <response code="404">La alerta no existe.</response>
+    [HttpGet("{id:guid}/sugerencias-nnn")]
+    [ProducesResponseType<Application.Nnn.SugerenciasAlertaDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<Application.Nnn.SugerenciasAlertaDto>> SugerenciasNnn(
+        Guid id, [FromServices] Application.Nnn.ObtenerSugerenciasAlerta obtener, CancellationToken ct)
+    {
+        var resultado = await obtener.EjecutarAsync(new Application.Nnn.ObtenerSugerenciasAlertaConsulta(id, User.IdUsuario() ?? Guid.Empty, HttpContext.Ip()), ct);
         return resultado.EsExito ? Ok(resultado.Valor) : this.Problema(resultado.Error);
     }
 }

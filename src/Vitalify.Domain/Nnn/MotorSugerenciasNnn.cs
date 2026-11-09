@@ -13,7 +13,7 @@ public enum PrioridadSugerencia
 
 /// <summary>
 /// Lo que el motor mira de un paciente: la última evaluación de riesgo (con los puntos NEWS2 de cada parámetro), las
-/// alertas abiertas, la última toma manual <b>que todavía cuenta</b> (dolor y preocupación clínica; el ACVPU y el oxígeno
+/// alertas abiertas (o la alerta que se consulta), la última toma manual <b>que todavía cuenta</b> (dolor y preocupación clínica; el ACVPU y el oxígeno
 /// los trae la evaluación) y los diagnósticos que ya están activos en el plan, para no sugerirlos otra vez.
 /// </summary>
 /// <param name="DiagnosticosExcluidos">Además de los activos, los que la enfermera descartó en este turno.</param>
@@ -55,8 +55,8 @@ public sealed class ContextoReglasNnn
         News2Total = news2?.Total ?? 0;
         AlgunParametroEnTres = news2?.AlgunParametroEnTres ?? false;
         Dolor = entrada.UltimaObservacion?.Contexto?.Dolor;
-        Caida = entrada.AlertasAbiertas.Where(a => a.Tipo == TipoAlerta.Caida && a.EstaAbierta).OrderByDescending(a => a.CreadaEn).FirstOrDefault();
-        Riesgo = entrada.AlertasAbiertas.Where(a => a.Tipo == TipoAlerta.Riesgo && a.EstaAbierta).OrderByDescending(a => a.CreadaEn).FirstOrDefault();
+        Caida = entrada.AlertasAbiertas.Where(a => a.Tipo == TipoAlerta.Caida).OrderByDescending(a => a.CreadaEn).FirstOrDefault();
+        Riesgo = entrada.AlertasAbiertas.Where(a => a.Tipo == TipoAlerta.Riesgo).OrderByDescending(a => a.CreadaEn).FirstOrDefault();
     }
 
     public EvaluacionRiesgo? Evaluacion { get; }
