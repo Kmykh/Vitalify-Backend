@@ -29,4 +29,19 @@ public enum AccionAuditoria
     ConsultaHistorialPaciente = 23,
     NotaRegistrada = 24,
     NotaEditada = 25,
+
+    // Fase 8: proceso de enfermería NNN. El detalle lleva solo ids: nunca el código ni la etiqueta del diagnóstico.
+    ConfirmarDiagnosticoEnfermeria = 26,
+    DescartarSugerenciaNnn = 27,
+    CerrarDiagnosticoEnfermeria = 28,
+
+    /// <summary>Ejecución de una intervención NIC del plan.</summary>
+    RegistrarIntervencion = 29,
+    ValorarResultado = 30,
+
+    /// <summary>Intervención NIC agregada a un diagnóstico ya confirmado.</summary>
+    AgregarIntervencionPlan = 31,
+
+    /// <summary>El administrador marcó una entrada del catálogo NNN como verificada (dato del catálogo, no de un paciente).</summary>
+    VerificarCatalogoNnn = 32,
 }

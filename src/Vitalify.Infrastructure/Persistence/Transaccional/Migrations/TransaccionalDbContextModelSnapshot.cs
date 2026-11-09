@@ -431,6 +431,630 @@ namespace Vitalify.Infrastructure.Persistence.Transaccional.Migrations
                     b.ToTable("hospitalizacion", "vitalify");
                 });
 
+            modelBuilder.Entity("Vitalify.Domain.Nnn.DiagnosticoNanda", b =>
+                {
+                    b.Property<string>("Codigo")
+                        .HasMaxLength(5)
+                        .HasColumnType("character varying(5)")
+                        .HasColumnName("codigo");
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("boolean")
+                        .HasColumnName("activo");
+
+                    b.Property<string>("Clase")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("clase");
+
+                    b.Property<string>("Dominio")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("dominio");
+
+                    b.Property<string>("Edicion")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("edicion");
+
+                    b.Property<string>("Etiqueta")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("etiqueta");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("tipo");
+
+                    b.Property<bool>("Verificado")
+                        .HasColumnType("boolean")
+                        .HasColumnName("verificado");
+
+                    b.Property<DateTime?>("VerificadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("verificado_en");
+
+                    b.Property<Guid?>("VerificadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("verificado_por");
+
+                    b.HasKey("Codigo")
+                        .HasName("pk_nnn_diagnostico");
+
+                    b.HasIndex("VerificadoPor")
+                        .HasDatabaseName("ix_nnn_diagnostico_verificado_por");
+
+                    b.ToTable("nnn_diagnostico", "vitalify");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Nnn.DiagnosticoPlan", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("AlertaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("alerta_id");
+
+                    b.Property<DateTime?>("CerradoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("cerrado_en");
+
+                    b.Property<Guid?>("CerradoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cerrado_por");
+
+                    b.Property<DateTime?>("ConfirmadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("confirmado_en");
+
+                    b.Property<Guid?>("ConfirmadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("confirmado_por");
+
+                    b.Property<string>("DiagnosticoCodigo")
+                        .IsRequired()
+                        .HasMaxLength(5)
+                        .HasColumnType("character varying(5)")
+                        .HasColumnName("diagnostico_codigo");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("estado");
+
+                    b.Property<Guid?>("EvaluacionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("evaluacion_id");
+
+                    b.Property<Guid>("HospitalizacionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("hospitalizacion_id");
+
+                    b.Property<string>("MotivoCierre")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("motivo_cierre");
+
+                    b.Property<string>("Origen")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("origen");
+
+                    b.Property<Guid>("PacienteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("paciente_id");
+
+                    b.Property<string>("ReglaOrigen")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("regla_origen");
+
+                    b.Property<string>("VersionReglas")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("version_reglas");
+
+                    b.HasKey("Id")
+                        .HasName("pk_plan_diagnostico");
+
+                    b.HasIndex("AlertaId")
+                        .HasDatabaseName("ix_plan_diagnostico_alerta_id");
+
+                    b.HasIndex("CerradoPor")
+                        .HasDatabaseName("ix_plan_diagnostico_cerrado_por");
+
+                    b.HasIndex("ConfirmadoEn")
+                        .HasDatabaseName("ix_plan_diagnostico_confirmado_en");
+
+                    b.HasIndex("ConfirmadoPor")
+                        .HasDatabaseName("ix_plan_diagnostico_confirmado_por");
+
+                    b.HasIndex("DiagnosticoCodigo")
+                        .HasDatabaseName("ix_plan_diagnostico_diagnostico_codigo");
+
+                    b.HasIndex("PacienteId")
+                        .HasDatabaseName("ix_plan_diagnostico_paciente_id");
+
+                    b.HasIndex("HospitalizacionId", "DiagnosticoCodigo")
+                        .IsUnique()
+                        .HasDatabaseName("ux_plan_diagnostico_activo")
+                        .HasFilter("estado = 'Activo'");
+
+                    b.HasIndex("HospitalizacionId", "Estado")
+                        .HasDatabaseName("ix_plan_diagnostico_hospitalizacion_id_estado");
+
+                    b.ToTable("plan_diagnostico", "vitalify");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Nnn.EjecucionIntervencion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("AlertaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("alerta_id");
+
+                    b.Property<DateTime>("EjecutadaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ejecutada_en");
+
+                    b.Property<Guid>("EjecutadaPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ejecutada_por");
+
+                    b.Property<string>("Observacion")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("observacion");
+
+                    b.Property<Guid>("PlanIntervencionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plan_intervencion_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_plan_intervencion_ejecucion");
+
+                    b.HasIndex("AlertaId")
+                        .HasDatabaseName("ix_plan_intervencion_ejecucion_alerta_id");
+
+                    b.HasIndex("EjecutadaPor")
+                        .HasDatabaseName("ix_plan_intervencion_ejecucion_ejecutada_por");
+
+                    b.HasIndex("PlanIntervencionId", "EjecutadaEn")
+                        .HasDatabaseName("ix_plan_intervencion_ejecucion_plan_intervencion_id_ejecutada_~");
+
+                    b.ToTable("plan_intervencion_ejecucion", "vitalify");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Nnn.IndicadorNoc", b =>
+                {
+                    b.Property<string>("Codigo")
+                        .HasMaxLength(6)
+                        .HasColumnType("character varying(6)")
+                        .HasColumnName("codigo");
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("boolean")
+                        .HasColumnName("activo");
+
+                    b.Property<string>("Edicion")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("edicion");
+
+                    b.Property<string>("Etiqueta")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("etiqueta");
+
+                    b.Property<string>("ParametroVital")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("parametro_vital");
+
+                    b.Property<string>("ResultadoCodigo")
+                        .IsRequired()
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)")
+                        .HasColumnName("resultado_codigo");
+
+                    b.Property<bool>("Verificado")
+                        .HasColumnType("boolean")
+                        .HasColumnName("verificado");
+
+                    b.Property<DateTime?>("VerificadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("verificado_en");
+
+                    b.Property<Guid?>("VerificadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("verificado_por");
+
+                    b.HasKey("Codigo")
+                        .HasName("pk_nnn_indicador");
+
+                    b.HasIndex("ResultadoCodigo")
+                        .HasDatabaseName("ix_nnn_indicador_resultado_codigo");
+
+                    b.HasIndex("VerificadoPor")
+                        .HasDatabaseName("ix_nnn_indicador_verificado_por");
+
+                    b.ToTable("nnn_indicador", "vitalify");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Nnn.IntervencionNic", b =>
+                {
+                    b.Property<string>("Codigo")
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)")
+                        .HasColumnName("codigo");
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("boolean")
+                        .HasColumnName("activo");
+
+                    b.Property<string>("Campo")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("campo");
+
+                    b.Property<string>("Edicion")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("edicion");
+
+                    b.Property<string>("Etiqueta")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("etiqueta");
+
+                    b.Property<bool>("Verificado")
+                        .HasColumnType("boolean")
+                        .HasColumnName("verificado");
+
+                    b.Property<DateTime?>("VerificadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("verificado_en");
+
+                    b.Property<Guid?>("VerificadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("verificado_por");
+
+                    b.HasKey("Codigo")
+                        .HasName("pk_nnn_intervencion");
+
+                    b.HasIndex("VerificadoPor")
+                        .HasDatabaseName("ix_nnn_intervencion_verificado_por");
+
+                    b.ToTable("nnn_intervencion", "vitalify");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Nnn.IntervencionPlan", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("Activa")
+                        .HasColumnType("boolean")
+                        .HasColumnName("activa");
+
+                    b.Property<DateTime>("AgregadaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("agregada_en");
+
+                    b.Property<Guid>("AgregadaPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("agregada_por");
+
+                    b.Property<string>("Frecuencia")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("frecuencia");
+
+                    b.Property<string>("IntervencionCodigo")
+                        .IsRequired()
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)")
+                        .HasColumnName("intervencion_codigo");
+
+                    b.Property<Guid>("PlanDiagnosticoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plan_diagnostico_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_plan_intervencion");
+
+                    b.HasIndex("AgregadaPor")
+                        .HasDatabaseName("ix_plan_intervencion_agregada_por");
+
+                    b.HasIndex("IntervencionCodigo")
+                        .HasDatabaseName("ix_plan_intervencion_intervencion_codigo");
+
+                    b.HasIndex("PlanDiagnosticoId", "IntervencionCodigo")
+                        .IsUnique()
+                        .HasDatabaseName("ux_plan_intervencion_activa")
+                        .HasFilter("activa");
+
+                    b.ToTable("plan_intervencion", "vitalify");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Nnn.ResultadoNoc", b =>
+                {
+                    b.Property<string>("Codigo")
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)")
+                        .HasColumnName("codigo");
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("boolean")
+                        .HasColumnName("activo");
+
+                    b.Property<string>("Edicion")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("edicion");
+
+                    b.Property<string>("Escala")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("escala");
+
+                    b.Property<string>("Etiqueta")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("etiqueta");
+
+                    b.Property<bool>("Verificado")
+                        .HasColumnType("boolean")
+                        .HasColumnName("verificado");
+
+                    b.Property<DateTime?>("VerificadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("verificado_en");
+
+                    b.Property<Guid?>("VerificadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("verificado_por");
+
+                    b.HasKey("Codigo")
+                        .HasName("pk_nnn_resultado");
+
+                    b.HasIndex("VerificadoPor")
+                        .HasDatabaseName("ix_nnn_resultado_verificado_por");
+
+                    b.ToTable("nnn_resultado", "vitalify");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Nnn.ResultadoPlan", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("PlanDiagnosticoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plan_diagnostico_id");
+
+                    b.Property<int>("PuntuacionBasal")
+                        .HasColumnType("integer")
+                        .HasColumnName("puntuacion_basal");
+
+                    b.Property<int>("PuntuacionMeta")
+                        .HasColumnType("integer")
+                        .HasColumnName("puntuacion_meta");
+
+                    b.Property<string>("ResultadoCodigo")
+                        .IsRequired()
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)")
+                        .HasColumnName("resultado_codigo");
+
+                    b.HasKey("Id")
+                        .HasName("pk_plan_resultado");
+
+                    b.HasIndex("ResultadoCodigo")
+                        .HasDatabaseName("ix_plan_resultado_resultado_codigo");
+
+                    b.HasIndex("PlanDiagnosticoId", "ResultadoCodigo")
+                        .IsUnique()
+                        .HasDatabaseName("ux_plan_resultado");
+
+                    b.ToTable("plan_resultado", "vitalify", t =>
+                        {
+                            t.HasCheckConstraint("ck_plan_resultado_puntuaciones", "puntuacion_basal BETWEEN 1 AND 5 AND puntuacion_meta BETWEEN 1 AND 5 AND puntuacion_meta >= puntuacion_basal");
+                        });
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Nnn.SugerenciaEmitida", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("AlertaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("alerta_id");
+
+                    b.Property<string>("DiagnosticoCodigo")
+                        .IsRequired()
+                        .HasMaxLength(5)
+                        .HasColumnType("character varying(5)")
+                        .HasColumnName("diagnostico_codigo");
+
+                    b.Property<DateTime>("EmitidaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("emitida_en");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("estado");
+
+                    b.Property<Guid?>("EvaluacionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("evaluacion_id");
+
+                    b.Property<Guid>("HospitalizacionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("hospitalizacion_id");
+
+                    b.Property<Guid>("PacienteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("paciente_id");
+
+                    b.Property<Guid?>("PlanDiagnosticoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plan_diagnostico_id");
+
+                    b.Property<string>("Prioridad")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("prioridad");
+
+                    b.Property<string>("Regla")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("regla");
+
+                    b.Property<DateTime?>("ResueltaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resuelta_en");
+
+                    b.Property<string>("VersionReglas")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("version_reglas");
+
+                    b.HasKey("Id")
+                        .HasName("pk_plan_sugerencia");
+
+                    b.HasIndex("AlertaId")
+                        .HasDatabaseName("ix_plan_sugerencia_alerta_id");
+
+                    b.HasIndex("DiagnosticoCodigo")
+                        .HasDatabaseName("ix_plan_sugerencia_diagnostico_codigo");
+
+                    b.HasIndex("EmitidaEn")
+                        .HasDatabaseName("ix_plan_sugerencia_emitida_en");
+
+                    b.HasIndex("PacienteId")
+                        .HasDatabaseName("ix_plan_sugerencia_paciente_id");
+
+                    b.HasIndex("PlanDiagnosticoId")
+                        .HasDatabaseName("ix_plan_sugerencia_plan_diagnostico_id");
+
+                    b.HasIndex("HospitalizacionId", "DiagnosticoCodigo")
+                        .IsUnique()
+                        .HasDatabaseName("ux_plan_sugerencia_pendiente")
+                        .HasFilter("estado = 'Pendiente'");
+
+                    b.ToTable("plan_sugerencia", "vitalify");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Nnn.ValoracionResultado", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("IndicadorCodigo")
+                        .HasMaxLength(6)
+                        .HasColumnType("character varying(6)")
+                        .HasColumnName("indicador_codigo");
+
+                    b.Property<Guid>("PlanResultadoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plan_resultado_id");
+
+                    b.Property<int>("Puntuacion")
+                        .HasColumnType("integer")
+                        .HasColumnName("puntuacion");
+
+                    b.Property<int?>("PuntuacionSugerida")
+                        .HasColumnType("integer")
+                        .HasColumnName("puntuacion_sugerida");
+
+                    b.Property<string>("Turno")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("turno");
+
+                    b.Property<DateTime>("ValoradaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("valorada_en");
+
+                    b.Property<Guid>("ValoradaPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("valorada_por");
+
+                    b.HasKey("Id")
+                        .HasName("pk_plan_resultado_valoracion");
+
+                    b.HasIndex("IndicadorCodigo")
+                        .HasDatabaseName("ix_plan_resultado_valoracion_indicador_codigo");
+
+                    b.HasIndex("ValoradaPor")
+                        .HasDatabaseName("ix_plan_resultado_valoracion_valorada_por");
+
+                    b.HasIndex("PlanResultadoId", "ValoradaEn")
+                        .HasDatabaseName("ix_plan_resultado_valoracion_plan_resultado_id_valorada_en");
+
+                    b.ToTable("plan_resultado_valoracion", "vitalify", t =>
+                        {
+                            t.HasCheckConstraint("ck_plan_resultado_valoracion_puntuacion", "puntuacion BETWEEN 1 AND 5 AND (puntuacion_sugerida IS NULL OR puntuacion_sugerida BETWEEN 1 AND 5)");
+                        });
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Nnn.VinculoNnn", b =>
+                {
+                    b.Property<string>("DiagnosticoCodigo")
+                        .HasMaxLength(5)
+                        .HasColumnType("character varying(5)")
+                        .HasColumnName("diagnostico_codigo");
+
+                    b.Property<string>("Tipo")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("tipo");
+
+                    b.Property<string>("Codigo")
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)")
+                        .HasColumnName("codigo");
+
+                    b.Property<int>("Orden")
+                        .HasColumnType("integer")
+                        .HasColumnName("orden");
+
+                    b.HasKey("DiagnosticoCodigo", "Tipo", "Codigo")
+                        .HasName("pk_nnn_vinculo");
+
+                    b.ToTable("nnn_vinculo", "vitalify");
+                });
+
             modelBuilder.Entity("Vitalify.Domain.Notas.NotaClinica", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1059,6 +1683,224 @@ namespace Vitalify.Infrastructure.Persistence.Transaccional.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_hospitalizacion_usuario_registrado_por");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Nnn.DiagnosticoNanda", b =>
+                {
+                    b.HasOne("Vitalify.Domain.Usuarios.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("VerificadoPor")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_nnn_diagnostico_usuario_verificado_por");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Nnn.DiagnosticoPlan", b =>
+                {
+                    b.HasOne("Vitalify.Domain.Alertas.AlertaClinica", null)
+                        .WithMany()
+                        .HasForeignKey("AlertaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_plan_diagnostico_alerta_clinica_alerta_id");
+
+                    b.HasOne("Vitalify.Domain.Usuarios.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("CerradoPor")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_plan_diagnostico_usuario_cerrado_por");
+
+                    b.HasOne("Vitalify.Domain.Usuarios.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("ConfirmadoPor")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_plan_diagnostico_usuario_confirmado_por");
+
+                    b.HasOne("Vitalify.Domain.Nnn.DiagnosticoNanda", null)
+                        .WithMany()
+                        .HasForeignKey("DiagnosticoCodigo")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_plan_diagnostico_nnn_diagnostico_diagnostico_codigo");
+
+                    b.HasOne("Vitalify.Domain.Hospitalizaciones.Hospitalizacion", null)
+                        .WithMany()
+                        .HasForeignKey("HospitalizacionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_plan_diagnostico_hospitalizacion_hospitalizacion_id");
+
+                    b.HasOne("Vitalify.Domain.Pacientes.Paciente", null)
+                        .WithMany()
+                        .HasForeignKey("PacienteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_plan_diagnostico_paciente_paciente_id");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Nnn.EjecucionIntervencion", b =>
+                {
+                    b.HasOne("Vitalify.Domain.Alertas.AlertaClinica", null)
+                        .WithMany()
+                        .HasForeignKey("AlertaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_plan_intervencion_ejecucion_alerta_clinica_alerta_id");
+
+                    b.HasOne("Vitalify.Domain.Usuarios.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("EjecutadaPor")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_plan_intervencion_ejecucion_usuario_ejecutada_por");
+
+                    b.HasOne("Vitalify.Domain.Nnn.IntervencionPlan", null)
+                        .WithMany()
+                        .HasForeignKey("PlanIntervencionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_plan_intervencion_ejecucion_plan_intervencion_plan_interven~");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Nnn.IndicadorNoc", b =>
+                {
+                    b.HasOne("Vitalify.Domain.Nnn.ResultadoNoc", null)
+                        .WithMany()
+                        .HasForeignKey("ResultadoCodigo")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_nnn_indicador_nnn_resultado_resultado_codigo");
+
+                    b.HasOne("Vitalify.Domain.Usuarios.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("VerificadoPor")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_nnn_indicador_usuario_verificado_por");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Nnn.IntervencionNic", b =>
+                {
+                    b.HasOne("Vitalify.Domain.Usuarios.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("VerificadoPor")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_nnn_intervencion_usuario_verificado_por");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Nnn.IntervencionPlan", b =>
+                {
+                    b.HasOne("Vitalify.Domain.Usuarios.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("AgregadaPor")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_plan_intervencion_usuario_agregada_por");
+
+                    b.HasOne("Vitalify.Domain.Nnn.IntervencionNic", null)
+                        .WithMany()
+                        .HasForeignKey("IntervencionCodigo")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_plan_intervencion_nnn_intervencion_intervencion_codigo");
+
+                    b.HasOne("Vitalify.Domain.Nnn.DiagnosticoPlan", null)
+                        .WithMany()
+                        .HasForeignKey("PlanDiagnosticoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_plan_intervencion_plan_diagnostico_plan_diagnostico_id");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Nnn.ResultadoNoc", b =>
+                {
+                    b.HasOne("Vitalify.Domain.Usuarios.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("VerificadoPor")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_nnn_resultado_usuario_verificado_por");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Nnn.ResultadoPlan", b =>
+                {
+                    b.HasOne("Vitalify.Domain.Nnn.DiagnosticoPlan", null)
+                        .WithMany()
+                        .HasForeignKey("PlanDiagnosticoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_plan_resultado_plan_diagnostico_plan_diagnostico_id");
+
+                    b.HasOne("Vitalify.Domain.Nnn.ResultadoNoc", null)
+                        .WithMany()
+                        .HasForeignKey("ResultadoCodigo")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_plan_resultado_nnn_resultado_resultado_codigo");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Nnn.SugerenciaEmitida", b =>
+                {
+                    b.HasOne("Vitalify.Domain.Alertas.AlertaClinica", null)
+                        .WithMany()
+                        .HasForeignKey("AlertaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_plan_sugerencia_alerta_clinica_alerta_id");
+
+                    b.HasOne("Vitalify.Domain.Nnn.DiagnosticoNanda", null)
+                        .WithMany()
+                        .HasForeignKey("DiagnosticoCodigo")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_plan_sugerencia_nnn_diagnostico_diagnostico_codigo");
+
+                    b.HasOne("Vitalify.Domain.Hospitalizaciones.Hospitalizacion", null)
+                        .WithMany()
+                        .HasForeignKey("HospitalizacionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_plan_sugerencia_hospitalizacion_hospitalizacion_id");
+
+                    b.HasOne("Vitalify.Domain.Pacientes.Paciente", null)
+                        .WithMany()
+                        .HasForeignKey("PacienteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_plan_sugerencia_paciente_paciente_id");
+
+                    b.HasOne("Vitalify.Domain.Nnn.DiagnosticoPlan", null)
+                        .WithMany()
+                        .HasForeignKey("PlanDiagnosticoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_plan_sugerencia_plan_diagnostico_plan_diagnostico_id");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Nnn.ValoracionResultado", b =>
+                {
+                    b.HasOne("Vitalify.Domain.Nnn.IndicadorNoc", null)
+                        .WithMany()
+                        .HasForeignKey("IndicadorCodigo")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_plan_resultado_valoracion_nnn_indicador_indicador_codigo");
+
+                    b.HasOne("Vitalify.Domain.Nnn.ResultadoPlan", null)
+                        .WithMany()
+                        .HasForeignKey("PlanResultadoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_plan_resultado_valoracion_plan_resultado_plan_resultado_id");
+
+                    b.HasOne("Vitalify.Domain.Usuarios.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("ValoradaPor")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_plan_resultado_valoracion_usuario_valorada_por");
+                });
+
+            modelBuilder.Entity("Vitalify.Domain.Nnn.VinculoNnn", b =>
+                {
+                    b.HasOne("Vitalify.Domain.Nnn.DiagnosticoNanda", null)
+                        .WithMany()
+                        .HasForeignKey("DiagnosticoCodigo")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_nnn_vinculo_nnn_diagnostico_diagnostico_codigo");
                 });
 
             modelBuilder.Entity("Vitalify.Domain.Notas.NotaClinica", b =>

@@ -6,6 +6,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Catálogo NNN tentativo (solo código y etiqueta corta; ver docs/nnn.md). -->
+    <EmbeddedResource Include="Semillas\nnn-catalogo.2026.11.1.json" LogicalName="Vitalify.Infrastructure.Semillas.nnn-catalogo.json" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="AspNetCore.HealthChecks.NpgSql" Version="8.0.2" />
     <PackageReference Include="DotNetEnv" Version="3.1.1" />
     <PackageReference Include="FirebaseAdmin" Version="3.7.0" />
