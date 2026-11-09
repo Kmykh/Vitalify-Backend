@@ -179,6 +179,7 @@ public static class DependencyInjection
         services.AddScoped<RegistrarValoracion>();
         services.AddScoped<ObtenerValoracionSugerida>();
         services.AddScoped<ObtenerPlanCuidados>();
+        services.AddScoped<ObtenerIndicadoresNnn>();
 
         return services;
     }
