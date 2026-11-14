@@ -219,6 +219,7 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
   - Formato `VTF1:{codigoDispositivo}:{codigo}`, con 8 caracteres de `CodigoVinculacion.Alfabeto`.
   - En `codigo_vinculacion` solo se guardan los SHA-256 del código y del token, comparados con `FixedTimeEquals`.
   - Vale 10 min; el token, 5 min. Al 5.º intento fallido, el código se invalida y se publica otro.
+  - `emparejando` lleva `expira` (el vencimiento del token). Si vence sin confirmar, el código deja de servir aunque le queden minutos (`CodigoVinculacion.SigueSirviendo`): lo renuevan el worker, el wearable (pide QR a su `expira`) y la app (`POST /dispositivos/{id}/qr`), que vuelve a escanear sin perder lo escrito.
   - Vencido, usado o inventado → siempre el mismo 404 `qr-no-valido`.
 - **Comandos:**
   - `IPublicadorComandosDispositivo`: el adaptador es `PublicadorComandosMqtt` (Api/Salida/Mqtt, cola + `ReceptorMqtt`), o `PublicadorComandosEnLog` con MQTT apagado.
