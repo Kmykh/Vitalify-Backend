@@ -425,4 +425,56 @@ public partial class HU06VinculacionPorQrTests(FabricaVitalify fabrica) : Prueba
         Assert.NotEqual(qrsAntes.Vencido, Fabrica.Comandos.UltimoQr(vencido.Codigo));
         Assert.Equal(qrsAntes.Emparejando, Fabrica.Comandos.UltimoQr(emparejando.Codigo));
     }
+
+    [Fact]
+    public async Task ElEscaneoVenceSinConfirmar_ElWorkerPublicaUnQrNuevoAunqueElCodigoSigaVigente()
+    {
+        // Antes la pantalla quedaba en "emparejando" hasta los 10 min del código: no había QR que volver a escanear.
+        var sensor = await SensorEnLineaAsync();
+        var enfermera = await ClienteEnfermeraAsync();
+        using (Fabrica.Reloj.Adelantar(TimeSpan.FromMinutes(1)))
+        {
+            await EscanearOkAsync(enfermera, Fabrica.Comandos.UltimoQr(sensor.Codigo));
+        }
+
+        var qrEscaneado = Fabrica.Comandos.UltimoQr(sensor.Codigo);
+        using (Fabrica.Reloj.Adelantar(TimeSpan.FromMinutes(4)))
+        {
+            await Fabrica.RenovarCodigosAsync(); // escaneo en curso (vence al minuto 6): no se toca
+        }
+
+        Assert.Equal(qrEscaneado, Fabrica.Comandos.UltimoQr(sensor.Codigo));
+        using (Fabrica.Reloj.Adelantar(TimeSpan.FromMinutes(7)))
+        {
+            Assert.True(await Fabrica.RenovarCodigosAsync() >= 1);
+        }
+
+        Assert.Equal("mostrar-qr", Fabrica.Comandos.De(sensor.Codigo).Last().Comando.Accion);
+        Assert.NotEqual(qrEscaneado, Fabrica.Comandos.UltimoQr(sensor.Codigo));
+        var codigos = await Fabrica.ConsultarAsync(db => db.CodigosVinculacion.Where(c => c.DispositivoId == sensor.Id).ToListAsync());
+        Assert.Null(codigos.Single(c => c.EstaActivo).TokenHash);
+    }
+
+    [Fact]
+    public async Task ElWearablePideQrConElEscaneoVencido_RecibeUnQrNuevo_YConElEscaneoEnCurso_VuelveAEmparejando()
+    {
+        var sensor = await SensorEnLineaAsync();
+        var enfermera = await ClienteEnfermeraAsync();
+        await EscanearOkAsync(enfermera, Fabrica.Comandos.UltimoQr(sensor.Codigo));
+        var qrEscaneado = Fabrica.Comandos.UltimoQr(sensor.Codigo);
+
+        // Botón BOOT durante el registro: la app todavía puede confirmar, así que el wearable vuelve a "emparejando".
+        Assert.Equal(SincronizarPantallaDispositivo.Emparejando, await Fabrica.SimularSolicitudQrAsync(sensor.Codigo));
+        Assert.Equal("emparejando", Fabrica.Comandos.De(sensor.Codigo).Last().Comando.Accion);
+        Assert.Equal(qrEscaneado, Fabrica.Comandos.UltimoQr(sensor.Codigo));
+
+        // Vencido el escaneo, el wearable lo pide solo (a su "expira") y recibe un QR nuevo.
+        using (Fabrica.Reloj.Adelantar(TimeSpan.FromMinutes(5) + TimeSpan.FromSeconds(5)))
+        {
+            Assert.Equal(SincronizarPantallaDispositivo.QrPublicado, await Fabrica.SimularSolicitudQrAsync(sensor.Codigo));
+        }
+
+        Assert.Equal("mostrar-qr", Fabrica.Comandos.De(sensor.Codigo).Last().Comando.Accion);
+        Assert.NotEqual(qrEscaneado, Fabrica.Comandos.UltimoQr(sensor.Codigo));
+    }
 }
