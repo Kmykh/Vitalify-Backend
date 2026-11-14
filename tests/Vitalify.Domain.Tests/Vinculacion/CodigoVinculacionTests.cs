@@ -106,6 +106,27 @@ public class CodigoVinculacionTests
     }
 
     [Fact]
+    public void Sigue_sirviendo_mientras_espera_su_escaneo_o_hay_uno_en_curso_y_no_cuando_el_escaneo_vencio()
+    {
+        var (sinEscanear, _) = CodigoVinculacion.Generar(Guid.NewGuid(), Ahora, Diez);
+        Assert.True(sinEscanear.SigueSirviendo(Ahora.AddMinutes(9)));
+        Assert.False(sinEscanear.SigueSirviendo(Ahora.AddMinutes(10)));
+
+        // Escaneado al minuto 1: el token vale hasta el 6. Después ya no sirve aunque el código venza al 10.
+        var (escaneado, _) = CodigoVinculacion.Generar(Guid.NewGuid(), Ahora, Diez);
+        escaneado.EmitirToken(Ahora.AddMinutes(1), Cinco);
+        Assert.True(escaneado.SigueSirviendo(Ahora.AddMinutes(5)));
+        Assert.False(escaneado.SigueSirviendo(Ahora.AddMinutes(6)));
+        Assert.True(escaneado.EstaVigente(Ahora.AddMinutes(6)));
+
+        // Escaneado al minuto 8: el escaneo en curso lo mantiene después de los 10 minutos del código.
+        var (tardio, _) = CodigoVinculacion.Generar(Guid.NewGuid(), Ahora, Diez);
+        tardio.EmitirToken(Ahora.AddMinutes(8), Cinco);
+        Assert.True(tardio.SigueSirviendo(Ahora.AddMinutes(12)));
+        Assert.False(tardio.SigueSirviendo(Ahora.AddMinutes(13)));
+    }
+
+    [Fact]
     public void No_se_emite_token_con_un_codigo_vencido_ni_invalidado()
     {
         var (vencido, _) = CodigoVinculacion.Generar(Guid.NewGuid(), Ahora, Diez);

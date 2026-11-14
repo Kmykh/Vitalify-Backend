@@ -52,6 +52,13 @@ public sealed class CodigoVinculacion
     /// <summary>Alguien escaneó el QR y todavía puede confirmar la vinculación.</summary>
     public bool TieneTokenVigente(DateTime ahora) => EstaActivo && TokenHash is not null && TokenExpiraEn > ahora;
 
+    /// <summary>
+    /// Espera su escaneo (vigente y nunca escaneado) o tiene un escaneo en curso. Un código escaneado cuyo token venció
+    /// sin confirmar ya no sirve aunque le queden minutos: el wearable mostraba "emparejando" y no se podía volver a
+    /// escanear; hay que reemplazarlo por uno nuevo.
+    /// </summary>
+    public bool SigueSirviendo(DateTime ahora) => TieneTokenVigente(ahora) || (EstaVigente(ahora) && TokenHash is null);
+
     /// <summary>Genera un código nuevo. Devuelve también el código en claro, que solo debe ir al wearable.</summary>
     public static (CodigoVinculacion Codigo, string EnClaro) Generar(Guid dispositivoId, DateTime ahora, TimeSpan vigencia)
     {
