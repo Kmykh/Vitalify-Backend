@@ -26,8 +26,12 @@ public sealed record MostrarQr(string Qr, DateTime Expira) : ComandoDispositivo
     public override bool Retenido => true;
 }
 
-/// <summary>Una enfermera escaneó el QR y está registrando al paciente. No retenido.</summary>
-public sealed record Emparejando : ComandoDispositivo
+/// <summary>
+/// Una enfermera escaneó el QR y está registrando al paciente. No retenido. <paramref name="Expira"/> es hasta cuándo
+/// puede confirmar (el vencimiento del token): pasado ese momento sin <see cref="Vinculado"/>, el wearable vuelve a pedir
+/// un QR y el backend lo renueva.
+/// </summary>
+public sealed record Emparejando(DateTime Expira) : ComandoDispositivo
 {
     public override string Accion => "emparejando";
     public override bool Retenido => false;
@@ -83,7 +87,10 @@ public static class ContratoComandos
             {
                 case MostrarQr m:
                     json.WriteString("qr", m.Qr);
-                    json.WriteString("expira", m.Expira.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture));
+                    json.WriteString("expira", Iso8601(m.Expira));
+                    break;
+                case Emparejando e:
+                    json.WriteString("expira", Iso8601(e.Expira));
                     break;
                 case Vinculado v:
                     json.WriteString("cama", v.Cama);
@@ -102,6 +109,10 @@ public static class ContratoComandos
     }
 
     public static string SerializarTexto(ComandoDispositivo comando) => Encoding.UTF8.GetString(Serializar(comando));
+
+    /// <summary>UTC con segundos y "Z" (<c>2026-11-02T15:10:00Z</c>): lo que interpreta el firmware.</summary>
+    private static string Iso8601(DateTime fecha) =>
+        fecha.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
 
     /// <summary>¿Es <c>{"accion":"solicitar-qr"}</c>? Cualquier otro contenido se ignora.</summary>
     public static bool EsSolicitudQr(ReadOnlySpan<byte> payload)

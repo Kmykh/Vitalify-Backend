@@ -25,9 +25,11 @@ sequenceDiagram
 
     E->>API: POST /api/v1/vinculaciones/escaneo { qr }
     API->>API: código vigente + sensor en línea → token de un solo uso (5 min)
-    API->>B: emparejando (no retenido)
+    API->>B: emparejando { expira } (no retenido)
     B->>W: emparejando
-    API-->>E: 200 { tokenVinculacion, conexion: "establecida" }
+    API-->>E: 200 { tokenVinculacion, conexion: "establecida", expiraEn }
+
+    Note over W,E: Si el token vence sin confirmar: la app pide un QR nuevo (POST /dispositivos/{id}/qr),<br/>el wearable lo pide a su expira y el worker lo renueva. La app vuelve a escanear sin perder lo escrito.
 
     E->>API: POST /api/v1/vinculaciones/confirmar { token, paciente, cama, observación inicial }
     API->>API: 1) valida todo y construye la observación<br/>2) una transacción: ingreso + vinculación + código usado<br/>3) observación + primer NEWS2/MEWS (historial)
@@ -50,7 +52,8 @@ sequenceDiagram
 | Se conecta mientras una enfermera tiene un escaneo en curso | `emparejando` (no se invalida su token) |
 | Pide un QR (`solicitar-qr`) | igual que al conectarse |
 | El QR venció y el sensor sigue en línea y sin vincular | `mostrar-qr` nuevo (worker, cada 60 s) |
-| Escaneo válido | `emparejando` |
+| El escaneo venció sin confirmar (aunque al código le queden minutos) | `mostrar-qr` nuevo (worker, cada 60 s; o al pedirlo el wearable a su `expira`, o la app) |
+| Escaneo válido | `emparejando` con `expira` (el vencimiento del token) |
 | Vinculación confirmada (por QR o por la vía manual de respaldo) | `vinculado` con cama e iniciales |
 | Egreso o liberación del sensor | `desvinculado` y luego `mostrar-qr` nuevo |
 | 5 códigos equivocados sobre el mismo sensor | `mostrar-qr` nuevo (el anterior queda invalidado) |
@@ -73,7 +76,7 @@ Todo va en mayúsculas para que el QR use el **modo alfanumérico**. Con el cód
 |---|---|
 | Un solo uso | Al confirmar, el código queda `usado_en`; el token de vinculación también deja de servir. Reutilizar un token responde 404 `vinculacion-no-valida` |
 | Sin texto plano | En `vitalify.codigo_vinculacion` solo se guardan el SHA-256 del código (`hash_codigo`) y del token (`token_hash`). La comparación es en tiempo constante (`CryptographicOperations.FixedTimeEquals`) |
-| Vencimiento | El código vale `Vinculacion__MinutosVigenciaCodigo` (10 min); el token, `Vinculacion__MinutosVigenciaToken` (5 min). Un escaneo en curso no se renueva hasta que vence su token |
+| Vencimiento | El código vale `Vinculacion__MinutosVigenciaCodigo` (10 min); el token, `Vinculacion__MinutosVigenciaToken` (5 min). Un escaneo en curso no se renueva hasta que vence su token; un código escaneado cuyo token venció sin confirmar ya no sirve y se reemplaza (`CodigoVinculacion.SigueSirviendo`): antes la pantalla quedaba en "Emparejando" hasta los 10 min del código |
 | Un código activo por sensor | Índice único parcial `ux_codigo_vinculacion_activo` (sin usar ni invalidar). Generar uno nuevo invalida el anterior en la misma transacción |
 | Intentos | Al 5.º código equivocado sobre el mismo sensor (`Vinculacion__IntentosMaximos`), su código se invalida y se publica uno nuevo. Además, `escaneo` admite 10 solicitudes por minuto por usuario (`RateLimit:EscaneoQrPorMinuto`) |
 | Mismo error para todo | Un QR vencido, ya usado, inventado o con otro formato responde siempre el mismo 404 `qr-no-valido`: no se revela cuál fue el motivo. La auditoría sí lo guarda |

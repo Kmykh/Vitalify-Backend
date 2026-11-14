@@ -167,7 +167,7 @@ El backend le habla al wearable por `device/{codigo}/comandos`, con QoS 1 y JSON
 | `accion` | Retenido | Cuerpo | Cuándo |
 |---|:-:|---|---|
 | `mostrar-qr` | sí | `{"accion":"mostrar-qr","qr":"VTF1:ESP32-001:K7P3QX9M","expira":"2026-11-02T15:10:00Z"}` | Al conectarse sin vincular, al pedirlo, al vencer el anterior y tras liberar el sensor |
-| `emparejando` | no | `{"accion":"emparejando"}` | Una enfermera escaneó el QR y está registrando al paciente |
+| `emparejando` | no | `{"accion":"emparejando","expira":"2026-11-02T15:05:00Z"}` | Una enfermera escaneó el QR y está registrando al paciente. `expira` es hasta cuándo puede confirmar la app (el vencimiento de su token) |
 | `vinculado` | sí | `{"accion":"vinculado","cama":"MED-B-01","iniciales":"R.M."}` | Se confirmó la vinculación (o se reconectó estando vinculado) |
 | `desvinculado` | sí | `{"accion":"desvinculado"}` | Egreso o liberación del sensor (le sigue un `mostrar-qr`) |
 | `repetir-medicion` | no | `{"accion":"repetir-medicion","variable":"presion","motivo":"..."}` | Llegó una medición incompleta (por ejemplo, PAS sin PAD). La incidencia queda con `requiere_nueva_lectura` |
@@ -184,7 +184,7 @@ El backend le habla al wearable por `device/{codigo}/comandos`, con QoS 1 y JSON
    | Estado | Pasa a este estado con | OLED | Telemetría |
    |---|---|---|---|
    | `esperando-qr` (al arrancar) | `mostrar-qr` o `desvinculado` | El QR y "Escanee para vincular" | **No envía** |
-   | `emparejando` | `emparejando` | "Emparejando…" | No envía |
+   | `emparejando` | `emparejando` | "Emparejando…" y cuánto le queda a la app | No envía |
    | `vinculado` | `vinculado` | Cama e iniciales (por ejemplo, `MED-B-01 · R.M.`) | Envía cada 10 s y al instante si hay una caída |
 
    Un `mostrar-qr` o un `desvinculado` también hace volver a `esperando-qr` desde cualquier estado.
@@ -196,7 +196,7 @@ El backend le habla al wearable por `device/{codigo}/comandos`, con QoS 1 y JSON
 
    Se comprobó con un lector de QR (zxing) sobre la imagen que dibuja el firmware, con y sin esa franja. Si `expira` ya pasó, mostrar "Código vencido" y pedir otro.
 4. **No enviar telemetría hasta `vinculado`.** Al pasar a `esperando-qr`, **descartar el búfer offline**: esas lecturas eran del paciente anterior. Tras reconectarse, esperar el primer comando retenido antes de vaciar el búfer.
-5. **Pedir un QR** publicando `{"accion":"solicitar-qr"}` en `device/{codigo}/solicitudes` (QoS 1). Hacerlo si al conectarse no llega ningún comando en unos segundos, si el QR venció o si se pulsa el botón.
+5. **Pedir un QR** publicando `{"accion":"solicitar-qr"}` en `device/{codigo}/solicitudes` (QoS 1). Hacerlo si al conectarse no llega ningún comando en unos segundos, si el QR venció, si se pulsa el botón y **si pasó el `expira` de `emparejando` sin que llegue `vinculado`** (sin hora o sin `expira`, a los 6 min). La pantalla nunca debe quedarse en "Emparejando": si la app todavía puede confirmar, el backend responde `emparejando` otra vez; si no, un `mostrar-qr` nuevo.
 6. **`repetir-medicion`:** avisar en la OLED. Hoy el wearable no mide presión, así que no debería llegar.
 
 ### Broker

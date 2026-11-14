@@ -161,6 +161,14 @@ public class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
         Assert.True(await scope.ServiceProvider.GetRequiredService<RegistrarPresenciaDispositivo>().EjecutarAsync(codigoDispositivo, estado));
     }
 
+    /// <summary>Lo que hace el receptor MQTT cuando el wearable publica <c>{"accion":"solicitar-qr"}</c> en <c>device/{codigo}/solicitudes</c>.</summary>
+    public async Task<string?> SimularSolicitudQrAsync(string codigoDispositivo)
+    {
+        await using var scope = Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<AtenderSolicitudDispositivo>()
+            .EjecutarAsync(codigoDispositivo, """{"accion":"solicitar-qr"}"""u8.ToArray());
+    }
+
     /// <summary>Corre una vez lo que hace el vigilante de alertas.</summary>
     public async Task<Application.Alertas.VigilarAlertas.Resumen> VigilarAlertasAsync(DateTime? ultimaRevision = null)
     {
