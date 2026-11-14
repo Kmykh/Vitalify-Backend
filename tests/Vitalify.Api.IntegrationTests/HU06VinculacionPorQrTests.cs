@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.RegularExpressions;
@@ -121,8 +122,10 @@ public partial class HU06VinculacionPorQrTests(FabricaVitalify fabrica) : Prueba
         Assert.False(string.IsNullOrWhiteSpace(escaneo.TokenVinculacion));
         Assert.Equal(Fabrica.Reloj.AhoraUtc.AddMinutes(5), escaneo.ExpiraEn, TimeSpan.FromSeconds(2));
 
+        // "emparejando" lleva hasta cuándo puede confirmar la app: al vencer, el wearable pide un QR nuevo.
         var emparejando = Fabrica.Comandos.De(sensor.Codigo).Last();
-        Assert.Equal(("""{"accion":"emparejando"}""", false), (emparejando.Json, emparejando.Retenido));
+        var expira = escaneo.ExpiraEn.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
+        Assert.Equal(($$"""{"accion":"emparejando","expira":"{{expira}}"}""", false), (emparejando.Json, emparejando.Retenido));
 
         var codigo = await Fabrica.ConsultarAsync(db => db.CodigosVinculacion.SingleAsync(c => c.DispositivoId == sensor.Id && c.UsadoEn == null && c.InvalidadoEn == null));
         Assert.Equal(CodigoVinculacion.Hash(escaneo.TokenVinculacion), codigo.TokenHash);

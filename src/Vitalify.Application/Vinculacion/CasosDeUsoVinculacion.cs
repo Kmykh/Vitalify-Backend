@@ -47,9 +47,9 @@ public sealed class SincronizarPantallaDispositivo(
             return SinCambios;
         }
 
-        if ((await codigos.ObtenerActivoAsync(dispositivo.Id, ct))?.TieneTokenVigente(reloj.AhoraUtc) == true)
+        if (await codigos.ObtenerActivoAsync(dispositivo.Id, ct) is { } activo && activo.TieneTokenVigente(reloj.AhoraUtc))
         {
-            await publicador.PublicarAsync(dispositivo.Codigo, new Emparejando(), retenido: false, ct);
+            await publicador.PublicarAsync(dispositivo.Codigo, new Emparejando(activo.TokenExpiraEn!.Value), retenido: false, ct);
             return Emparejando;
         }
 
@@ -192,7 +192,7 @@ public sealed class EscanearQr(
             return guardado.Error;
         }
 
-        await publicador.PublicarAsync(dispositivo.Codigo, new Emparejando(), retenido: false, ct);
+        await publicador.PublicarAsync(dispositivo.Codigo, new Emparejando(activo.TokenExpiraEn!.Value), retenido: false, ct);
         return new EscaneoQrDto(token, new DispositivoEscaneadoDto(dispositivo.Id, dispositivo.Codigo), ConexionEstablecida, activo.TokenExpiraEn!.Value);
     }
 
@@ -207,8 +207,10 @@ public sealed class EscanearQr(
 }
 
 /// <summary>
-/// Renueva el QR de los wearables en línea y sin vincular cuyo código venció (o que no tienen ninguno). No toca un
-/// código con un escaneo en curso. Lo llama un worker cada <see cref="OpcionesVinculacion.IntervaloRenovacion"/>.
+/// Renueva el QR de los wearables en línea y sin vincular cuyo código ya no sirve: venció, se escaneó y el escaneo
+/// venció sin confirmar (la pantalla quedaba en "emparejando" hasta los 10 min del código), o no tienen ninguno. No
+/// toca un código que espera su escaneo ni uno con un escaneo en curso. Lo llama un worker cada
+/// <see cref="OpcionesVinculacion.IntervaloRenovacion"/>.
 /// </summary>
 public sealed class RenovarCodigosVinculacion(
     IPresenciaDispositivos presencia,
@@ -231,7 +233,7 @@ public sealed class RenovarCodigosVinculacion(
 
             var ahora = reloj.AhoraUtc;
             var activo = await codigos.ObtenerActivoAsync(dispositivo.Id, ct);
-            if (activo is not null && (activo.EstaVigente(ahora) || activo.TieneTokenVigente(ahora)))
+            if (activo is not null && activo.SigueSirviendo(ahora))
             {
                 continue;
             }

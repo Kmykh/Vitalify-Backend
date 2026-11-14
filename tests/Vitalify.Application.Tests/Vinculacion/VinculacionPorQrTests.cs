@@ -15,7 +15,7 @@ public class ContratoComandosTests
     public static TheoryData<ComandoDispositivo, string, bool> Comandos => new()
     {
         { new MostrarQr("VTF1:ESP32-001:K7P3QX9M", new DateTime(2026, 11, 2, 15, 10, 0, DateTimeKind.Utc)), """{"accion":"mostrar-qr","qr":"VTF1:ESP32-001:K7P3QX9M","expira":"2026-11-02T15:10:00Z"}""", true },
-        { new Emparejando(), """{"accion":"emparejando"}""", false },
+        { new Emparejando(new DateTime(2026, 11, 2, 15, 5, 0, DateTimeKind.Utc)), """{"accion":"emparejando","expira":"2026-11-02T15:05:00Z"}""", false },
         { new Vinculado("MED-B-01", "R.M."), """{"accion":"vinculado","cama":"MED-B-01","iniciales":"R.M."}""", true },
         { new Desvinculado(), """{"accion":"desvinculado"}""", true },
         { new RepetirMedicion("presion", "Falta la diastólica"), """{"accion":"repetir-medicion","variable":"presion","motivo":"Falta la diastólica"}""", false },
