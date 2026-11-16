@@ -55,6 +55,10 @@ Control de acceso basado en roles (RBAC) de Vitalify. Cada rol tiene permisos di
 | Diagnósticos de enfermería: confirmar, descartar sugerencias, resolver | `POST /pacientes/{id}/plan-cuidados/diagnosticos`, `POST /pacientes/{id}/plan-cuidados/sugerencias/descartar`, `PUT /plan-cuidados/diagnosticos/{id}/estado` | — | — | **G** | `SoloEnfermera` (los diagnósticos NANDA-I son de enfermería) |
 | Intervenciones NIC: agregar y registrar ejecuciones | `POST /plan-cuidados/diagnosticos/{id}/intervenciones`, `POST /plan-cuidados/intervenciones/{id}/ejecuciones` | — | **G** (solo NIC 7710) | **G** | `PersonalClinico`; el médico solo la 7710 (si no, 403 `nnn-solo-enfermeria`) |
 | Valoración de resultados NOC | `POST /plan-cuidados/resultados/{id}/valoraciones` | — | — | **G** | `SoloEnfermera` |
+| Mi turno: pacientes del servicio por riesgo, con lo vencido y lo pendiente (fase 9) | `GET /mi-turno` | — | L | L | `PersonalClinico`, solo de su servicio (sin servicio, 403 `usuario-sin-servicio`) |
+| Confirmar una sugerencia NNN con su paquete, en un toque | `POST /pacientes/{id}/plan-cuidados/sugerencias/confirmar-paquete` | — | — | **G** | `SoloEnfermera` |
+| Valoración NOC del turno en lote | `GET /pacientes/{id}/plan-cuidados/valoracion-turno` · `POST` (misma ruta) | — | L | L · **G** | Leer: `PersonalClinico` (se audita como `ConsultaHistorialPaciente`); guardar: `SoloEnfermera` |
+| Nota de enfermería del turno (PAE) | `GET /pacientes/{id}/nota-turno/borrador`, `POST /pacientes/{id}/nota-turno` | — | — | **G** | `SoloEnfermera`; una por paciente y guardia (409 `nota-turno-ya-registrada`); se audita `NotaRegistrada` |
 | Indicadores NNN para la tesis (agregados) | `GET /sistema/indicadores-nnn?desde=&hasta=` | L | — | — | `SoloAdministrador`; solo cantidades y promedios, ningún dato de pacientes |
 | Incidencias de telemetría (datos técnicos, sin datos del paciente) | `GET /telemetria/incidencias` | L | — | — | `SoloAdministrador` |
 | Ingesta de telemetría de desarrollo (solo Development) | `POST /dev/telemetria` | **G** | — | — | `SoloAdministrador` |
@@ -94,6 +98,11 @@ Notas:
   - Se audita `ConfirmarDiagnosticoEnfermeria`, `DescartarSugerenciaNnn`, `CerrarDiagnosticoEnfermeria`, `RegistrarIntervencion`, `ValorarResultado` y `AgregarIntervencionPlan`, solo con ids: **nunca** el código ni la etiqueta del diagnóstico, que son datos clínicos.
   - Los eventos `planActualizado` y `sugerenciasNnn` de SignalR llevan solo ids y una cantidad. Las observaciones de las ejecuciones son texto clínico y nunca van a los logs.
   - No hay DELETE: un diagnóstico se resuelve o se descarta con motivo y una valoración se corrige con otra nueva (NTS 139).
+- **Automatización asistida del PAE (fase 9; `docs/nnn.md`):**
+  - Vitalify precarga el paquete, agenda, recuerda y redacta el borrador de la nota; la enfermera confirma, valora y firma.
+  - La toma manual completa de una enfermera registra la NIC 6680 a su nombre (`origen = TomaManual`); la de un médico, no.
+  - `recordatoriosPlan` (SignalR) y los push de recordatorio llevan solo ids, cama y cantidades; las sugerencias nunca van por push.
+  - `GET /mi-turno` trae el nombre del paciente, como la entrega de turno: solo por REST y para el personal clínico del servicio.
 
 ### Cambio respecto de la versión anterior
 
@@ -155,6 +164,8 @@ Todo lo que preveía esta sección ya está implementado (tiempo real, alertas, 
 | El médico no confirma diagnósticos NANDA-I, pero agrega y registra la NIC 7710 | `F8_el_medico_no_confirma_diagnosticos_NANDA_pero_puede_agregar_y_registrar_la_NIC_7710` |
 | Solo el administrador verifica el catálogo y la semilla no pisa lo verificado | `F8_el_catalogo_se_busca_sin_tildes_y_el_administrador_verifica_sin_que_la_semilla_lo_pise` |
 | Los indicadores NNN son agregados y solo del administrador | `F8_los_indicadores_de_la_tesis_son_solo_agregados_y_del_administrador` |
+| Solo la enfermera firma la nota del turno, una por guardia, y no se crea por la API genérica de notas | `F9_la_nota_del_turno_se_redacta_en_los_cinco_pasos_del_PAE_y_se_firma_una_vez_por_guardia` |
+| Los recordatorios del plan llevan solo cantidades, sin códigos de diagnóstico ni NIC | `F9_los_recordatorios_avisan_lo_vencido_solo_con_cantidades_y_agrupan_el_push` |
 | Ningún log, auditoría ni evento de SignalR lleva un código o una etiqueta NANDA-I | `F8_ningun_log_auditoria_ni_evento_SignalR_contiene_un_codigo_ni_una_etiqueta_NANDA` |
 
-Las pruebas están en `tests/Vitalify.Api.IntegrationTests/` (`HU03ControlDeAccesoTests.cs`, `PermisosFase2Tests.cs`, `HU05RegistroDePacienteTests.cs`, `TelemetriaExtrasTests.cs`, `HU06VinculacionPorQrTests.cs`, `TomaManualTests.cs`, `Fase6AlertasTests.cs`, `Fase6TurnosTests.cs`, `Fase7HistorialTests.cs` y `Fase8ProcesoEnfermeriaTests.cs`).
+Las pruebas están en `tests/Vitalify.Api.IntegrationTests/` (`HU03ControlDeAccesoTests.cs`, `PermisosFase2Tests.cs`, `HU05RegistroDePacienteTests.cs`, `TelemetriaExtrasTests.cs`, `HU06VinculacionPorQrTests.cs`, `TomaManualTests.cs`, `Fase6AlertasTests.cs`, `Fase6TurnosTests.cs`, `Fase7HistorialTests.cs`, `Fase8ProcesoEnfermeriaTests.cs` y `Fase9AutomatizacionNnnTests.cs`).
