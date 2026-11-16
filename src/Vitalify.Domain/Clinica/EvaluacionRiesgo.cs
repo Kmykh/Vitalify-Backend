@@ -46,15 +46,37 @@ public sealed class EvaluacionRiesgo
     /// </summary>
     public DateTime? ProximaTomaManualEn { get; private set; }
 
+    /// <summary>De dónde salieron la FR, la PAS y la temperatura (fase 9). Null en las evaluaciones anteriores o si faltó el valor.</summary>
+    public FuenteSigno? FuenteFr { get; private set; }
+
+    public FuenteSigno? FuentePas { get; private set; }
+
+    public FuenteSigno? FuenteTemperatura { get; private set; }
+
     private EvaluacionRiesgo()
     {
     }
 
     public ParametrosClinicos Parametros => new(Fr, Spo2, OxigenoSuplementario, Pas, Fc, Conciencia, Temperatura);
 
+    /// <summary>
+    /// De dónde salió el valor del parámetro: la FC y la SpO2 siempre del sensor; la conciencia y el oxígeno, de la toma
+    /// manual; la FR, la PAS y la temperatura, lo que se guardó. Null si faltó o si la evaluación es anterior a la fase 9.
+    /// </summary>
+    public FuenteSigno? FuenteDe(ParametroClinico parametro) => parametro switch
+    {
+        ParametroClinico.Fc => Fc is null ? null : FuenteSigno.Sensor,
+        ParametroClinico.Spo2 => Spo2 is null ? null : FuenteSigno.Sensor,
+        ParametroClinico.Conciencia => Conciencia is null ? null : FuenteSigno.Manual,
+        ParametroClinico.OxigenoSuplementario => OxigenoSuplementario is null ? null : FuenteSigno.Manual,
+        ParametroClinico.Fr => Fr is null ? null : FuenteFr,
+        ParametroClinico.Pas => Pas is null ? null : FuentePas,
+        _ => Temperatura is null ? null : FuenteTemperatura,
+    };
+
     public static EvaluacionRiesgo Calcular(
         Guid hospitalizacionId, Guid pacienteId, DateTime evaluadaEn, OrigenEvaluacion origen, ParametrosClinicos parametros,
-        EscalaSpo2 escala = EscalaSpo2.Escala1)
+        EscalaSpo2 escala = EscalaSpo2.Escala1, FuentesSignos? fuentes = null)
     {
         ArgumentNullException.ThrowIfNull(parametros);
         var news2 = CalculadoraNews2.Calcular(parametros, escala);
@@ -81,6 +103,9 @@ public sealed class EvaluacionRiesgo
             MewsTotal = mews.Total,
             MewsNivel = mews.Nivel,
             MewsCompleto = mews.Completo,
+            FuenteFr = parametros.Fr is null ? null : fuentes?.Fr,
+            FuentePas = parametros.Pas is null ? null : fuentes?.Pas,
+            FuenteTemperatura = parametros.Temperatura is null ? null : fuentes?.Temperatura,
         };
     }
 
