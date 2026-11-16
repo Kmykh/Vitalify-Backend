@@ -15,10 +15,16 @@ namespace Vitalify.Application.Clinica;
 /// 12 h), y si una evaluación posterior acortó el plazo porque el paciente empeoró, hasta ese plazo.</item>
 /// </list>
 /// Lo que no está en ninguna de las dos fuentes queda como faltante y el puntaje se marca parcial. Cada evaluación
-/// guarda su <see cref="EvaluacionRiesgo.ProximaTomaManualEn"/>. Solo la agrega al repositorio: el llamador confirma con
-/// <see cref="IUnidadDeTrabajoHistorial"/> y publica <c>RiesgoEvaluado</c>.
+/// guarda su <see cref="EvaluacionRiesgo.ProximaTomaManualEn"/> y de dónde salió cada valor. Solo la agrega al
+/// repositorio: el llamador confirma con <see cref="IUnidadDeTrabajoHistorial"/> y publica <c>RiesgoEvaluado</c>.
+/// <para>
+/// Precisión del wearable (fase 9, <see cref="PrecisionSensor"/>): la FC, la SpO2 y la temperatura del sensor se puntúan con
+/// la mediana de los últimos 60 s y la FR con la de sus 3 últimos valores (vigente 5 min); la temperatura de piel de
+/// 36,0 °C o menos no puntúa (queda faltante: termómetro).
+/// </para>
 /// </summary>
 public sealed class EvaluadorRiesgo(
+    IRepositorioLecturas lecturas,
     IRepositorioEstadoSignos estados,
     IRepositorioObservaciones observaciones,
     IRepositorioEvaluaciones evaluaciones,
@@ -64,7 +70,11 @@ public sealed class EvaluadorRiesgo(
             hospitalizacionId, ahora - FrecuenciaTomaManual.TopeVigencia - opcionesClinicas.ToleranciaToma, ct);
         var vigentes = tomas.Where(o => FrecuenciaTomaManual.Cuenta(o, ahora, anterior, opcionesClinicas.ToleranciaToma)).ToList();
 
-        var evaluacion = EvaluacionRiesgo.Calcular(hospitalizacionId, pacienteId, ahora, origen, Combinar(estado, vigentes, ahora), escala);
+        // Hasta un par de minutos "en el futuro": el reloj del wearable puede ir algo adelantado (la ingesta lo admite).
+        var recientes = await lecturas.ListarPorHospitalizacionAsync(
+            hospitalizacionId, ahora - PrecisionSensor.VigenciaFr, ahora + PrecisionSensor.VentanaMediana * 2, ct);
+        var (parametros, fuentes) = Combinar(estado, recientes, vigentes, ahora);
+        var evaluacion = EvaluacionRiesgo.Calcular(hospitalizacionId, pacienteId, ahora, origen, parametros, escala, fuentes);
 
         // El plazo sale de la última toma (aunque ya no cuente) y del NEWS2 de ahora: si empeora, se acorta. Sin ninguna
         // toma, el plazo queda fijo desde la primera evaluación (si avanzara con cada lectura, nunca vencería).
@@ -76,36 +86,55 @@ public sealed class EvaluadorRiesgo(
         return (evaluacion, anterior);
     }
 
-    private ParametrosClinicos Combinar(EstadoSignosActual? e, IReadOnlyList<ObservacionEnfermeria> manuales, DateTime ahora)
+    private (ParametrosClinicos Parametros, FuentesSignos Fuentes) Combinar(
+        EstadoSignosActual? e, IReadOnlyList<LecturaSignos> recientes, IReadOnlyList<ObservacionEnfermeria> manuales, DateTime ahora)
     {
-        (T? Valor, DateTime? En) Sensor<T>(T? valor, DateTime? medidoEn)
+        // El valor del sensor solo cuenta si está vigente; se puntúa la mediana de la ventana (sin lecturas en ella, el último).
+        (T? Valor, DateTime? En) Sensor<T>(T? valor, DateTime? medidoEn, TimeSpan vigencia, Func<IEnumerable<LecturaSignos>, T?> mediana)
             where T : struct =>
-            valor is not null && Vigencia.EstadoDe(medidoEn, ahora, opcionesTelemetria.Vigencia) == EstadoVariable.Vigente
-                ? (valor, medidoEn)
+            valor is not null && Vigencia.EstadoDe(medidoEn, ahora, vigencia) == EstadoVariable.Vigente
+                ? (mediana(recientes) ?? valor, medidoEn)
                 : (null, null);
+
+        // La ventana de la mediana se ancla en la lectura más reciente (no en el reloj del servidor).
+        var ancla = recientes.Count > 0 ? recientes.Max(l => l.MedidoEn) : ahora;
+        IEnumerable<LecturaSignos> Ventana(IEnumerable<LecturaSignos> l) => l.Where(x => x.MedidoEn >= ancla - PrecisionSensor.VentanaMediana);
 
         (T? Valor, DateTime? En) Manual<T>(Func<ObservacionEnfermeria, T?> campo)
             where T : struct =>
             manuales.FirstOrDefault(o => campo(o) is not null) is { } o ? (campo(o), o.ObservadaEn) : (null, null);
 
-        static T? MasReciente<T>((T? Valor, DateTime? En) a, (T? Valor, DateTime? En) b)
+        static (T? Valor, FuenteSigno? Fuente) MasReciente<T>((T? Valor, DateTime? En) sensor, (T? Valor, DateTime? En) manual)
             where T : struct =>
-            a.Valor is null ? b.Valor : b.Valor is null ? a.Valor : (a.En >= b.En ? a.Valor : b.Valor);
+            sensor.Valor is null ? (manual.Valor, manual.Valor is null ? null : FuenteSigno.Manual)
+            : manual.Valor is null || sensor.En >= manual.En ? (sensor.Valor, FuenteSigno.Sensor)
+            : (manual.Valor, FuenteSigno.Manual);
 
-        var temperaturaSensor = Sensor(e?.TempValor, e?.TempMedidoEn);
+        var temperaturaSensor = Sensor(e?.TempValor, e?.TempMedidoEn, opcionesTelemetria.Vigencia,
+            l => PrecisionSensor.Mediana(Ventana(l).Select(x => x.Temperatura)));
         if (temperaturaSensor.Valor is { } t)
         {
-            temperaturaSensor = (t + opcionesClinicas.AjusteTemperaturaSensor, temperaturaSensor.En);
+            // Temperatura de piel corregida; la de 36,0 °C o menos no puntúa (no es temperatura central).
+            var corregida = t + opcionesClinicas.AjusteTemperaturaSensor;
+            temperaturaSensor = PrecisionSensor.TemperaturaPielPuntua(corregida) ? (corregida, temperaturaSensor.En) : (null, null);
         }
 
-        return new ParametrosClinicos(
-            Fr: MasReciente(Sensor(e?.FrValor, e?.FrMedidoEn), Manual(o => o.Fr)),
-            Spo2: Sensor(e?.Spo2Valor, e?.Spo2MedidoEn).Valor,
+        // La FR del sensor solo se mide quieto y ya trae su propia ventana: vale 5 min y se toma la mediana de sus 3 últimos valores.
+        var frSensor = Sensor(e?.FrValor, e?.FrMedidoEn, PrecisionSensor.VigenciaFr,
+            l => PrecisionSensor.Mediana(l.Where(x => x.Fr is not null).OrderByDescending(x => x.MedidoEn).Take(PrecisionSensor.LecturasFr).Select(x => x.Fr)));
+        var fr = MasReciente(frSensor, Manual(o => o.Fr));
+        var pas = MasReciente(Sensor(e?.PasValor, e?.PasMedidoEn, opcionesTelemetria.Vigencia, _ => null), Manual(o => o.Pas));
+        var temperatura = MasReciente(temperaturaSensor, Manual(o => o.Temperatura));
+
+        var parametros = new ParametrosClinicos(
+            Fr: fr.Valor,
+            Spo2: Sensor(e?.Spo2Valor, e?.Spo2MedidoEn, opcionesTelemetria.Vigencia, l => PrecisionSensor.Mediana(Ventana(l).Select(x => x.Spo2))).Valor,
             OxigenoSuplementario: Manual(o => o.OxigenoSuplementario).Valor,
-            Pas: MasReciente(Sensor(e?.PasValor, e?.PasMedidoEn), Manual(o => o.Pas)),
-            Fc: Sensor(e?.FcValor, e?.FcMedidoEn).Valor,
+            Pas: pas.Valor,
+            Fc: Sensor(e?.FcValor, e?.FcMedidoEn, opcionesTelemetria.Vigencia, l => PrecisionSensor.Mediana(Ventana(l).Select(x => x.Fc))).Valor,
             Conciencia: Manual(o => o.Conciencia).Valor,
-            Temperatura: MasReciente(temperaturaSensor, Manual(o => o.Temperatura)));
+            Temperatura: temperatura.Valor);
+        return (parametros, new FuentesSignos(fr.Fuente, pas.Fuente, temperatura.Fuente));
     }
 }
 
