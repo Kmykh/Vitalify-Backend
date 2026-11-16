@@ -14,6 +14,10 @@ public class ContratoFirmwareTests
     private const string Completo =
         """{"dispositivo":"ESP32-001","ts":"2026-09-30T14:05:10.250Z","seq":18234,"fc":82,"fr":16,"spo2":97,"temp":36.8,"caida":false}""";
 
+    /// <summary>Firmware 2.2 con el divisor de la batería en VP (bateria.h del firmware).</summary>
+    private const string ConBateria =
+        """{"dispositivo":"ESP32-001","ts":"2026-09-30T14:05:10.250Z","seq":18234,"fc":82,"fr":16,"spo2":97,"temp":36.8,"caida":false,"bateria":87}""";
+
     private const string Parcial =
         """{"dispositivo":"ESP32-001","ts":"2026-09-30T14:05:10.250Z","seq":5,"temp":-0.5,"caida":true}""";
 
@@ -26,6 +30,17 @@ public class ContratoFirmwareTests
         Assert.Equal(new DateTime(2026, 9, 30, 14, 5, 10, 250, DateTimeKind.Utc), lectura.MedidoEn);
         Assert.Equal(new SignosMedidos(Fc: 82, Fr: 16, Spo2: 97, Temperatura: 36.8m), lectura.Signos);
         Assert.Empty(EvaluadorSignos.Evaluar(lectura.Signos, RangosFisiologicos.PorDefecto).Descartes);
+    }
+
+    [Fact]
+    public void El_JSON_con_bateria_del_firmware_se_interpreta_y_la_bateria_es_valida()
+    {
+        var lectura = MensajeTelemetria.Interpretar(Encoding.UTF8.GetBytes(ConBateria), OrigenLectura.Mqtt).Valor;
+        var evaluacion = EvaluadorSignos.Evaluar(lectura.Signos, RangosFisiologicos.PorDefecto);
+
+        Assert.Equal(87m, lectura.Signos.Bateria);
+        Assert.Empty(evaluacion.Descartes);
+        Assert.Equal(87, evaluacion.Validos.Bateria);
     }
 
     [Fact]
