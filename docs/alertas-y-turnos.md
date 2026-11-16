@@ -108,6 +108,7 @@ Si el servicio no tiene médicos activos, se avisa a todos los médicos activos.
 - Las alertas de riesgo y de preocupación salen del evento `RiesgoEvaluado`, que se publica al guardar cada evaluación (de una lectura o de una observación).
 - Las de caída y el cierre de `sin-senal` salen de `LecturaRegistrada`.
 - `VigilanteAlertasWorker` corre cada `Alertas__SegundosVigilancia` (30 s; 0 lo apaga) y revisa la falta de señal, las tomas vencidas, el escalamiento y el cambio de turno.
+- En la misma vuelta, después de las alertas y con su propio manejo de errores, corre `VigilarPlanCuidados` (fase 9): sincroniza las sugerencias NNN y manda los recordatorios del plan de cuidados (lo vencido, lo urgente y el cierre de guardia; ver [nnn.md](nnn.md#recordatorios)). Un fallo ahí no detiene la vigilancia de alertas.
 - **Un fallo al notificar nunca rompe la ingesta.** El manejador lo atrapa y lo deja en el log (puerto `IBitacoraFallos`, solo con ids).
 
 ### Tomar y atender
@@ -166,6 +167,7 @@ Cuando empieza un turno (el vigilante detecta los turnos que empezaron desde su 
 | `signosActualizados` | Cada lectura, **como máximo uno cada 5 s por paciente** | `pacienteId`, `hospitalizacionId`, `cama`, `medidoEn`, `fc`, `fr`, `spo2`, `temperatura`, `pas`, `pad` y `caida` |
 | `planActualizado` (fase 8) | Cambió el plan de cuidados: diagnóstico confirmado, descartado o cerrado, intervención agregada o ejecutada, valoración NOC o egreso | `pacienteId` y `hospitalizacionId`; la app vuelve a pedir el plan por REST |
 | `sugerenciasNnn` (fase 8) | Cambiaron las sugerencias NNN del paciente | `pacienteId` y `cantidad`; nunca códigos ni etiquetas de diagnósticos ([nnn.md](nnn.md)) |
+| `recordatoriosPlan` (fase 9) | Se venció algo del plan de cuidados o falta una hora para el cambio de turno | `motivo` (`vencidas` o `cierre-guardia`) y `pacientes`: `pacienteId`, `hospitalizacionId`, `cama`, `vencidas`, `proximas`, `valoracionesPendientes` y `notaTurnoPendiente`; nunca códigos de diagnósticos ni de NIC |
 
 - **Sin nombres.** Los eventos nunca llevan el nombre, el DNI ni el diagnóstico: el cliente los pide a la API (`GET /pacientes/{id}`) con su permiso.
 - **`destinatarios`** son los ids a los que se pide atención. Todas las pantallas del servicio se actualizan, pero solo los destinatarios deberían hacer sonar la alarma.
@@ -184,6 +186,10 @@ En [`docs/ejemplos/cliente-signalr.html`](ejemplos/cliente-signalr.html) hay un 
   - título "Vitalify · Cama MED-B-01";
   - cuerpo "Riesgo alto (NEWS2 7). Toque para atender" (o "MEWS n" si el nivel lo puso el MEWS);
   - `data`: `alertaId`, `pacienteId` y `tipo`, con prioridad alta en Android.
+- **Recordatorios del plan (fase 9):** `data.tipo = recordatorio-plan` y `data.motivo`:
+  - `vencidas`: "Vitalify · Plan de cuidados", "3 intervenciones vencidas en 2 pacientes"; como máximo uno cada 30 min por enfermera;
+  - `urgente`: con la cama en el título y `pacienteId`, "Intervención del plan vencida hace 15 min con NEWS2 de 5 o más";
+  - `cierre-guardia`: "Vitalify · Cambio de turno en 1 h", con las valoraciones NOC y las notas del turno que faltan.
 - **Tokens vencidos:** si FCM responde que un token no está registrado, se borra.
 
 **Credenciales de Firebase:**

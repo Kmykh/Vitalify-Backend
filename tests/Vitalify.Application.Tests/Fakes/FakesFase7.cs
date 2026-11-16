@@ -22,4 +22,13 @@ public sealed class RepositorioNotasEnMemoria : IRepositorioNotas
     public void Agregar(NotaClinica nota) => Notas.Add(nota);
 
     public void AgregarVersion(NotaClinicaVersion version) => Versiones.Add(version);
+
+    public Task<NotaClinica?> ObtenerDeTurnoAsync(Guid hospitalizacionId, string guardia, CancellationToken ct = default) =>
+        Task.FromResult(Notas.SingleOrDefault(n => n.HospitalizacionId == hospitalizacionId && n.Tipo == TipoNota.ProcesoEnfermeria && n.Guardia == guardia));
+
+    public Task<IReadOnlyList<(Guid HospitalizacionId, string Guardia)>> ListarGuardiasConNotaTurnoAsync(
+        DateTime desde, DateTime hasta, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<(Guid, string)>>(Notas
+            .Where(n => n.Tipo == TipoNota.ProcesoEnfermeria && n.Guardia is not null && n.CreadaEn >= desde && n.CreadaEn <= hasta)
+            .Select(n => (n.HospitalizacionId, n.Guardia!)).ToList());
 }

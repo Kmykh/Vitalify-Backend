@@ -27,6 +27,12 @@ public static class ErroresNnn
     public static readonly Error SugerenciaConcurrente = Error.Conflicto(
         "sugerencia-concurrente", "La sugerencia se registró al mismo tiempo desde otro proceso.");
 
+    public static readonly Error SugerenciaNoEncontrada = Error.NoEncontrado(
+        "sugerencia-no-encontrada", "Ese diagnóstico no está entre las sugerencias actuales del paciente: confírmalo con su plan completo.");
+
+    public static readonly Error NotaTurnoYaRegistrada = Error.Conflicto(
+        "nota-turno-ya-registrada", "Ya hay una nota del PAE de este paciente en esta guardia: corrígela (24 h) en vez de firmar otra.");
+
     public static readonly Error SoloEnfermeria = Error.Prohibido(
         "nnn-solo-enfermeria", $"El médico solo puede agregar o registrar la intervención NIC {ReglasNnn.NicColaboracionMedica} (colaboración con el médico).");
 }

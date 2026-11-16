@@ -21,6 +21,11 @@ public sealed record SugerenciasCalculadas(EvaluacionRiesgo? Evaluacion, IReadOn
 /// Calcula las sugerencias NNN de una hospitalización con el motor del dominio y lleva el registro de cada una
 /// (<c>plan_sugerencia</c>): emite las nuevas y expira las que el motor dejó de proponer. Un descarte vale hasta el fin de
 /// la guardia en que se registró, para que la siguiente enfermera vuelva a valorarlo.
+/// <para>
+/// Fase 9: un criterio que viene solo del wearable debe persistir antes de sugerirse (el motor mira las evaluaciones
+/// guardadas de los últimos 15 min), y una sugerencia que el motor deja de proponer no expira enseguida: queda
+/// <b>retenida</b> 30 min (<see cref="SugerenciaEmitida.Histeresis"/>), salvo que una toma manual posterior la descarte.
+/// </para>
 /// </summary>
 public sealed class ServicioSugerenciasNnn(
     IRepositorioEvaluaciones evaluaciones,
@@ -33,10 +38,24 @@ public sealed class ServicioSugerenciasNnn(
     OpcionesClinicas opcionesClinicas,
     IReloj reloj)
 {
-    public async Task<SugerenciasCalculadas> CalcularAsync(Guid hospitalizacionId, CancellationToken ct = default)
+    /// <summary>Cuánto atrás mira el motor para medir la persistencia (el plazo más largo es el de la temperatura de piel, 10 min).</summary>
+    public static readonly TimeSpan VentanaPersistencia = TimeSpan.FromMinutes(15);
+
+    // Si el motor la vuelve a proponer, se corre la histéresis; para no escribir con cada lectura, a lo sumo una vez por minuto.
+    private static readonly TimeSpan RenovacionHisteresis = TimeSpan.FromMinutes(1);
+
+    public async Task<SugerenciasCalculadas> CalcularAsync(Guid hospitalizacionId, CancellationToken ct = default) =>
+        (await CalcularConPendientesAsync(hospitalizacionId, ct)).Calculadas;
+
+    private async Task<(SugerenciasCalculadas Calculadas, IReadOnlyList<SugerenciaEmitida> Pendientes, bool DescartaPorToma)> CalcularConPendientesAsync(
+        Guid hospitalizacionId, CancellationToken ct)
     {
         var ahora = reloj.AhoraUtc;
         var evaluacion = await evaluaciones.ObtenerUltimaAsync(hospitalizacionId, ct);
+        var anteriores = evaluacion is null
+            ? []
+            : (await evaluaciones.ListarAsync(hospitalizacionId, evaluacion.EvaluadaEn - VentanaPersistencia, evaluacion.EvaluadaEn, ct))
+                .Where(e => e.Id != evaluacion.Id).OrderByDescending(e => e.EvaluadaEn).ToList();
         var abiertas = (await alertas.ListarDeHospitalizacionAsync(hospitalizacionId, ct)).Select(a => a.Alerta).Where(a => a.EstaAbierta).ToList();
         var toma = await observaciones.ObtenerUltimaTomaAsync(hospitalizacionId, ct);
         if (toma is not null && !FrecuenciaTomaManual.Cuenta(toma, ahora, evaluacion, opcionesClinicas.ToleranciaToma))
@@ -46,31 +65,67 @@ public sealed class ServicioSugerenciasNnn(
 
         var activos = await plan.ListarCodigosActivosAsync(hospitalizacionId, ct);
         var descartados = await plan.ListarCodigosDescartadosDesdeAsync(hospitalizacionId, Guardias.Actual(catalogo, ahora).Intervalo.InicioUtc, ct);
-        var sugerencias = MotorSugerenciasNnn.Estandar.Sugerir(new EntradaMotorNnn(evaluacion, abiertas, toma, activos, descartados));
-        return new SugerenciasCalculadas(evaluacion, sugerencias);
+        var sugerencias = MotorSugerenciasNnn.Estandar.Sugerir(
+            new EntradaMotorNnn(evaluacion, abiertas, toma, activos, descartados, anteriores, ahora)).ToList();
+
+        // Las pendientes que el motor ya no propone siguen visibles (retenidas) mientras dura la histéresis: se muestran como
+        // las propuso la última vez. Una toma manual posterior a esa última vez las descarta enseguida.
+        var pendientes = await plan.ListarSugerenciasPendientesAsync(hospitalizacionId, ct);
+        bool DescartaPorToma(SugerenciaEmitida p) =>
+            evaluacion?.Origen == OrigenEvaluacion.Observacion && evaluacion.EvaluadaEn > (p.UltimaVezPropuestaEn ?? p.EmitidaEn);
+        foreach (var p in pendientes.Where(p => sugerencias.All(s => s.DiagnosticoCodigo != p.DiagnosticoCodigo)))
+        {
+            if (p.DebeExpirar(ahora, DescartaPorToma(p)) || activos.Contains(p.DiagnosticoCodigo) || descartados.Contains(p.DiagnosticoCodigo)
+                || p.UltimaEvaluacionId is not { } id || await evaluaciones.ObtenerPorIdAsync(id, ct) is not { } antes)
+            {
+                continue;
+            }
+
+            var retenida = MotorSugerenciasNnn.Estandar.Sugerir(new EntradaMotorNnn(antes, abiertas, toma, activos, descartados, OmitirPersistencia: true))
+                .FirstOrDefault(s => s.DiagnosticoCodigo == p.DiagnosticoCodigo);
+            if (retenida is not null)
+            {
+                sugerencias.Add(retenida with { Retenida = true });
+            }
+        }
+
+        return (new SugerenciasCalculadas(evaluacion, sugerencias), pendientes, evaluacion?.Origen == OrigenEvaluacion.Observacion);
     }
 
     /// <summary>Calcula y actualiza el registro de sugerencias. <see cref="SugerenciasCalculadas.Cambio"/> dice si hubo nuevas o expiradas.</summary>
     public async Task<SugerenciasCalculadas> SincronizarAsync(Guid hospitalizacionId, Guid pacienteId, CancellationToken ct = default)
     {
-        var calculadas = await CalcularAsync(hospitalizacionId, ct);
+        var (calculadas, pendientes, _) = await CalcularConPendientesAsync(hospitalizacionId, ct);
         var ahora = reloj.AhoraUtc;
-        var pendientes = await plan.ListarSugerenciasPendientesAsync(hospitalizacionId, ct);
+        var actuales = calculadas.Sugerencias.Where(s => !s.Retenida).ToList();
+        var retenidas = calculadas.Sugerencias.Where(s => s.Retenida).Select(s => s.DiagnosticoCodigo).ToHashSet(StringComparer.Ordinal);
         var cambio = false;
+        var escribir = false;
 
-        foreach (var s in calculadas.Sugerencias.Where(s => pendientes.All(p => p.DiagnosticoCodigo != s.DiagnosticoCodigo)))
+        foreach (var s in actuales)
         {
+            if (pendientes.FirstOrDefault(p => p.DiagnosticoCodigo == s.DiagnosticoCodigo) is { } p)
+            {
+                if (ahora - (p.UltimaVezPropuestaEn ?? p.EmitidaEn) >= RenovacionHisteresis)
+                {
+                    p.SeguirPropuesta(s.EvaluacionId, ahora);
+                    escribir = true;
+                }
+
+                continue;
+            }
+
             plan.Agregar(SugerenciaEmitida.Emitir(hospitalizacionId, pacienteId, s, MotorSugerenciasNnn.VersionReglas, ahora));
             cambio = true;
         }
 
-        foreach (var p in pendientes.Where(p => calculadas.Sugerencias.All(s => s.DiagnosticoCodigo != p.DiagnosticoCodigo)))
+        foreach (var p in pendientes.Where(p => actuales.All(s => s.DiagnosticoCodigo != p.DiagnosticoCodigo) && !retenidas.Contains(p.DiagnosticoCodigo)))
         {
             p.Expirar(ahora);
             cambio = true;
         }
 
-        if (cambio)
+        if (cambio || escribir)
         {
             var guardado = await unidadDeTrabajo.GuardarCambiosAsync(ct);
             if (!guardado.EsExito && guardado.Error.Codigo != ErroresNnn.SugerenciaConcurrente.Codigo)
@@ -166,6 +221,7 @@ public sealed class ObtenerSugerenciasPaciente(
     IRepositorioPacientes pacientes,
     IRepositorioHospitalizaciones hospitalizaciones,
     ServicioSugerenciasNnn servicio,
+    ServicioPaquetesNnn paquetes,
     PresentadorPlanCuidados presentador,
     NotificadorPlanCuidados notificador,
     AuditoriaHistorial auditoria)
@@ -196,11 +252,13 @@ public sealed class ObtenerSugerenciasPaciente(
         }
 
         var catalogo = await presentador.CatalogoAsync(ct);
+        var datos = await paquetes.DatosAsync(hospitalizacion.Id, ct);
         var e = calculadas.Evaluacion;
         return new SugerenciasPacienteDto(
             consulta.PacienteId, hospitalizacion.Id, MotorSugerenciasNnn.VersionReglas, e?.Id, e?.EvaluadaEn, e?.News2Total,
             e is null ? null : e.News2Completo && e.MewsCompleto,
-            calculadas.Sugerencias.Select(s => PresentadorPlanCuidados.Sugerencia(catalogo, s)).ToList(), TextosNnn.Aviso);
+            calculadas.Sugerencias.Select(s => PresentadorPlanCuidados.Sugerencia(catalogo, s, ServicioPaquetesNnn.Armar(catalogo, s, datos))).ToList(),
+            TextosNnn.Aviso);
     }
 }
 
@@ -238,8 +296,9 @@ public sealed class ObtenerSugerenciasAlerta(
         var toma = (await observaciones.ListarAsync(alerta.HospitalizacionId, instante - FrecuenciaTomaManual.TopeVigencia, instante, ct))
             .FirstOrDefault(o => FrecuenciaTomaManual.Cuenta(o, instante, evaluacion, opcionesClinicas.ToleranciaToma));
 
+        // La alerta ya es el evento: no se espera la persistencia del wearable (lo que viene solo del sensor sale "por confirmar").
         var activos = await plan.ListarCodigosActivosAsync(alerta.HospitalizacionId, ct);
-        var sugerencias = MotorSugerenciasNnn.Estandar.Sugerir(new EntradaMotorNnn(evaluacion, [alerta], toma, activos));
+        var sugerencias = MotorSugerenciasNnn.Estandar.Sugerir(new EntradaMotorNnn(evaluacion, [alerta], toma, activos, OmitirPersistencia: true));
 
         var auditado = await auditoria.RegistrarAsync(
             alerta.PacienteId, alerta.HospitalizacionId, $"sugerencias-nnn de la alerta {alerta.Id}", consulta.UsuarioId, consulta.Ip, ct);

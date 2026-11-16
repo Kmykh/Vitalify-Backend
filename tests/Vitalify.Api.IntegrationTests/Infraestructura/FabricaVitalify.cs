@@ -176,6 +176,13 @@ public class FabricaVitalify : WebApplicationFactory<Program>, IAsyncLifetime
         return await scope.ServiceProvider.GetRequiredService<Application.Alertas.VigilarAlertas>().EjecutarAsync(ultimaRevision);
     }
 
+    /// <summary>Corre una vez lo que hace el vigilante del plan de cuidados (fase 9) en cada vuelta del worker de alertas.</summary>
+    public async Task<Application.Nnn.VigilarPlanCuidados.Resumen> VigilarPlanAsync(DateTime? ultimaRevision = null)
+    {
+        await using var scope = Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<Application.Nnn.VigilarPlanCuidados>().EjecutarAsync(ultimaRevision);
+    }
+
     /// <summary>Corre una vez lo que hace el worker de retención del historial (a las 03:00 de Lima).</summary>
     public async Task<Application.Historial.ResultadoRetencion> ResumirHistorialAsync()
     {

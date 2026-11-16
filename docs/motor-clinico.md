@@ -28,7 +28,7 @@ El wearable no mide presión, conciencia ni oxígeno. Por eso el motor:
 
 Por cada parámetro se toma **el valor más reciente** entre dos fuentes:
 
-- **El wearable:** su valor vale mientras esté **vigente**, es decir, si se midió hace `Telemetria__SegundosVigencia` (90 s) o menos. Una FC de hace 5 minutos no se usa.
+- **El wearable:** su valor vale mientras esté **vigente**, es decir, si se midió hace `Telemetria__SegundosVigencia` (90 s) o menos (la FR, 5 min). Una FC de hace 5 minutos no se usa. Desde la fase 9 no se puntúa la última lectura sino la **mediana** de la ventana ([Precisión del sensor](#precisión-del-sensor-fase-9)).
 - **La última observación:** cada valor vale hasta su [plazo de vigencia](#vigencia-de-la-toma-manual): la próxima toma más `Clinico__MinutosToleranciaToma` (30 min), con un tope de 12 h.
 
 Lo que no esté en ninguna de las dos queda como faltante.
@@ -43,6 +43,22 @@ Lo que no esté en ninguna de las dos queda como faltante.
 - Las del wearable (8640 al día por paciente): solo si respecto de la última guardada cambió el total o el nivel de NEWS2 o de MEWS, cambió si están completos o cambió la próxima toma manual, o si ya pasaron **5 minutos** (`EvaluacionRiesgo.AportaRespectoDe`). Así la tendencia no pierde ningún cambio y la tabla crece unas 12 filas por hora en un paciente estable, en lugar de 360.
 
 `RiesgoEvaluado` se publica con **cada** evaluación, se guarde o no. Las alertas reaccionan al instante (por ejemplo, al terminar la espera tras atender, AL-E9) y el tablero recibe el puntaje al día. Si la evaluación no se guardó, el evento lleva el id de la última guardada, que tiene el mismo puntaje. `GET /riesgo` muestra la última guardada: el mismo puntaje, con valores de hasta 5 min antes.
+
+## Precisión del sensor (fase 9)
+
+NEWS2 y MEWS se validaron con tomas puntuales de una enfermera (Downey 2018; Weenk 2019). El wearable manda una lectura cada 10 s, y un valor suelto por movimiento o mal contacto puntuaría y dispararía alertas y sugerencias NNN. Por eso `EvaluadorRiesgo` filtra lo del sensor antes de puntuar (`Domain/Clinica/PrecisionSensor.cs`, versión `2026.12.1`):
+
+| Parámetro del sensor | Qué se puntúa | Vigencia |
+|---|---|---|
+| FC, SpO2 y temperatura | La **mediana** de las lecturas de los últimos **60 s**, contados desde la lectura más reciente (no desde el reloj del servidor, por si el del wearable va adelantado) | 90 s |
+| FR | La mediana de sus **3 últimos valores** (el firmware ya la calcula con una ventana de 32 s, con el paciente quieto) | **5 min**: con 90 s, el puntaje alternaba entre completo y parcial cada vez que el paciente se movía |
+| Temperatura de piel ≤ **36,0 °C** (ya corregida con `Clinico__AjusteTemperaturaSensor`) | **No puntúa**: queda en `faltantes` y se toma con termómetro. Un desfase fijo no la convierte en temperatura central: el gradiente cambia con el ambiente y la perfusión | — |
+
+- **Fundamento:** Görges 2009 y Welch 2011 (un retardo de 14 a 19 s reduce entre 50 y 67 % las alarmas no accionables). Las ventanas exactas son criterio de experto (CE, consulta a Fable) **a validar con la asesora**; el principio tiene evidencia.
+- **Fuente de cada parámetro:** cada evaluación guarda de dónde salió la FR, la PAS y la temperatura (`fuente_fr`, `fuente_pas` y `fuente_temperatura`, `Sensor` o `Manual`; migración `Fase9_FuentesEvaluacion`). La FC y la SpO2 son siempre del sensor; la conciencia y el oxígeno, de la toma manual. El motor NNN lo usa para no sugerir un diagnóstico por un criterio solo del sensor que no persistió ([nnn.md](nnn.md#persistencia-y-por-confirmar-desde-2026121)).
+- **Lo que no cambia:** las tablas NEWS2 y MEWS, la combinación con la toma manual y lo que se guarda.
+
+**Cómo encaja con NNN:** el puntaje filtrado alimenta las alertas y el motor de sugerencias. El nivel de respuesta NEWS2 (0, 1–4, un parámetro en 3, 5–6, ≥ 7) fija la frecuencia de las intervenciones `PorProtocolo` del plan de cuidados, y R11 pide avisar al médico (NIC 7710) también con MEWS ≥ 5 ([nnn.md](nnn.md#automatización-asistida-fase-9)).
 
 ## Tablas
 
@@ -164,6 +180,7 @@ Ejemplo: toma a las 08:00 con NEWS2 0 → próxima toma a las 20:00 → los valo
 | NTS N° 139-MINSA/2018/DGAIN (Gestión de la Historia Clínica) | Registro con autor, hora y versión de la guía |
 | Ley N° 29459 (productos farmacéuticos y dispositivos médicos) | Tensiómetro validado |
 | Royal College of Physicians, NEWS2 (2017) | Puntajes, ACVPU, escala de SpO2, frecuencia de la toma y preocupación clínica |
+| Görges 2009, Welch 2011, Downey 2018 y Weenk 2019 (fase 9) | Mediana y persistencia del sensor antes de puntuar o sugerir. Las citó la consulta a Fable: **verificar la referencia completa antes de citarlas en la tesis** |
 
 Los enlaces están en la guía (`GET /api/v1/guias/toma-manual`, sección `fuentes`).
 

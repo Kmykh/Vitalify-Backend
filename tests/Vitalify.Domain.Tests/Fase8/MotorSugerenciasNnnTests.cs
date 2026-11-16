@@ -26,17 +26,26 @@ internal static class PacienteNnn
             new DatosObservacion { Conciencia = NivelConciencia.Alerta, Contexto = ContextoClinico.Crear(dolor, null, null, null) },
             RangosFisiologicos.PorDefecto);
 
+    public static EvaluacionRiesgo EvaluarEn(ParametrosClinicos parametros, DateTime en, EscalaSpo2 escala = EscalaSpo2.Escala1, FuentesSignos? fuentes = null) =>
+        EvaluacionRiesgo.Calcular(Hospitalizacion, Paciente, en, OrigenEvaluacion.Lectura, parametros, escala, fuentes);
+
+    /// <summary>
+    /// Con <paramref name="persistente"/> (lo habitual en las pruebas de cada regla), el mismo cuadro ya estaba 11 min antes:
+    /// un criterio del wearable (FC, SpO2) cumple la persistencia de la fase 9. Las pruebas de la persistencia lo apagan.
+    /// </summary>
     public static IReadOnlyList<SugerenciaNnn> Sugerir(
         ParametrosClinicos? parametros = null, EscalaSpo2 escala = EscalaSpo2.Escala1, IReadOnlyList<AlertaClinica>? alertas = null,
-        ObservacionEnfermeria? observacion = null, IReadOnlyCollection<string>? activos = null, IReadOnlyCollection<string>? descartados = null) =>
+        ObservacionEnfermeria? observacion = null, IReadOnlyCollection<string>? activos = null, IReadOnlyCollection<string>? descartados = null,
+        bool persistente = true) =>
         MotorSugerenciasNnn.Estandar.Sugerir(new EntradaMotorNnn(
-            Evaluar(parametros ?? Normales, escala), alertas ?? [], observacion, activos ?? [], descartados));
+            Evaluar(parametros ?? Normales, escala), alertas ?? [], observacion, activos ?? [], descartados,
+            persistente ? [EvaluarEn(parametros ?? Normales, Ahora.AddMinutes(-11), escala)] : null));
 
     public static SugerenciaNnn Unica(IReadOnlyList<SugerenciaNnn> sugerencias, string diagnostico) =>
         Assert.Single(sugerencias, s => s.DiagnosticoCodigo == diagnostico);
 }
 
-/// <summary>Una prueba por regla del motor (versión 2026.11.1) y los casos que el motor debe resolver.</summary>
+/// <summary>Una prueba por regla del motor (versión 2026.12.1) y los casos que el motor debe resolver.</summary>
 public sealed class MotorSugerenciasNnnTests
 {
     private static readonly ParametrosClinicos N = PacienteNnn.Normales;
@@ -295,7 +304,7 @@ public sealed class MotorSugerenciasNnnTests
     [Fact]
     public void Las_reglas_tienen_ids_unicos_y_la_version_es_la_publicada()
     {
-        Assert.Equal("2026.11.1", MotorSugerenciasNnn.VersionReglas);
+        Assert.Equal("2026.12.1", MotorSugerenciasNnn.VersionReglas);
         Assert.Equal(
             ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10"],
             MotorSugerenciasNnn.Estandar.Reglas.Select(r => r.Id));

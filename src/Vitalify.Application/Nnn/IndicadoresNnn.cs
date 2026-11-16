@@ -1,5 +1,6 @@
 using Vitalify.Application.Comun;
 using Vitalify.Application.Puertos;
+using Vitalify.Application.Turnos;
 using Vitalify.Domain.Nnn;
 using Vitalify.Domain.Turnos;
 
@@ -23,15 +24,24 @@ public sealed record ValoracionPorTurnoIndicadorDto(int Diagnosticos, int Diagno
 /// <param name="CambioMedio">Promedio de (última valoración antes del cierre − puntuación basal) de los resultados de diagnósticos resueltos.</param>
 public sealed record CambioNocIndicadorDto(int ResultadosDeDiagnosticosResueltos, int ResultadosConValoracion, double? CambioMedio);
 
+/// <summary>
+/// Automatización asistida (fase 9): cuántos paquetes se confirmaron tal cual (sesgo de automatización: un "sí" sin revisar
+/// no es una decisión), cuánto tardó la enfermera en decidir, cuántas ejecuciones registró sola una toma manual completa y en
+/// cuántas guardias con plan se firmó la nota del PAE.
+/// </summary>
+public sealed record AutomatizacionIndicadorDto(
+    int PaquetesConfirmados, int ConfirmadosSinCambios, double? TasaSinCambios, double? MinutosHastaConfirmarMediana,
+    int EjecucionesPorTomaManual, int GuardiasConPlan, int GuardiasConNotaTurno, double? PorcentajeNotaTurno);
+
 /// <summary>Indicadores agregados del proceso de enfermería para el capítulo de validación. Nunca datos de pacientes.</summary>
 public sealed record IndicadoresNnnDto(
     DateTime Desde, DateTime Hasta, string VersionReglas, SugerenciasIndicadorDto Sugerencias, TiempoRespuestaIndicadorDto AlertaAPrimeraIntervencion,
-    ValoracionPorTurnoIndicadorDto ValoracionNocPorTurno, CambioNocIndicadorDto CambioNoc);
+    ValoracionPorTurnoIndicadorDto ValoracionNocPorTurno, CambioNocIndicadorDto CambioNoc, AutomatizacionIndicadorDto? Automatizacion = null);
 
 public sealed record ObtenerIndicadoresNnnConsulta(DateTime? Desde, DateTime? Hasta);
 
 /// <summary>Agregados del proceso de enfermería NNN en un rango (por defecto, los últimos 30 días). Solo cantidades y promedios.</summary>
-public sealed class ObtenerIndicadoresNnn(IRepositorioPlanCuidados plan, CatalogoTurnos catalogo, IReloj reloj)
+public sealed class ObtenerIndicadoresNnn(IRepositorioPlanCuidados plan, IRepositorioNotas notas, CatalogoTurnos catalogo, IReloj reloj)
 {
     public static readonly TimeSpan RangoPorDefecto = TimeSpan.FromDays(30);
     public static readonly TimeSpan RangoMaximo = TimeSpan.FromDays(366);
@@ -58,9 +68,60 @@ public sealed class ObtenerIndicadoresNnn(IRepositorioPlanCuidados plan, Catalog
         var tiempos = await plan.ListarTiemposAlertaIntervencionAsync(desde, hasta, ct);
         var diagnosticos = await plan.ListarConfirmadosActivosEntreAsync(desde, hasta, ct);
 
+        var conNota = await notas.ListarGuardiasConNotaTurnoAsync(desde, hasta, ct);
         return new IndicadoresNnnDto(
             desde, hasta, MotorSugerenciasNnn.VersionReglas, Sugerencias(emitidas), Tiempos(tiempos),
-            ValoracionPorTurno(diagnosticos, desde, hasta < ahora ? hasta : ahora), CambioNoc(diagnosticos, desde, hasta));
+            ValoracionPorTurno(diagnosticos, desde, hasta < ahora ? hasta : ahora), CambioNoc(diagnosticos, desde, hasta),
+            Automatizacion(emitidas, diagnosticos, conNota, desde, hasta < ahora ? hasta : ahora));
+    }
+
+    private AutomatizacionIndicadorDto Automatizacion(
+        IReadOnlyList<SugerenciaEmitida> emitidas, PlanCuidadosLectura l, IReadOnlyList<(Guid HospitalizacionId, string Guardia)> conNota,
+        DateTime desde, DateTime hasta)
+    {
+        var confirmados = l.Diagnosticos.Where(d => d.ConfirmadoSinCambios is not null && d.ConfirmadoEn >= desde && d.ConfirmadoEn < hasta).ToList();
+        var sinCambios = confirmados.Count(d => d.ConfirmadoSinCambios == true);
+        var minutos = emitidas.Where(s => s.Estado == EstadoSugerencia.Confirmada && s.ResueltaEn is not null)
+            .Select(s => (s.ResueltaEn!.Value - s.EmitidaEn).TotalMinutes).Where(m => m >= 0).OrderBy(m => m).ToList();
+        double? mediana = minutos.Count == 0 ? null
+            : Math.Round(minutos.Count % 2 == 1 ? minutos[minutos.Count / 2] : (minutos[(minutos.Count / 2) - 1] + minutos[minutos.Count / 2]) / 2, 2);
+        var porToma = l.Ejecuciones.Count(e => e.Origen == OrigenEjecucion.TomaManual && e.EjecutadaEn >= desde && e.EjecutadaEn < hasta);
+
+        // Guardias con plan: las de cada hospitalización con algún diagnóstico activo 6 h o más en ellas.
+        var guardiasConPlan = new HashSet<(Guid, string)>();
+        foreach (var d in l.Diagnosticos.Where(d => d.ConfirmadoEn is not null))
+        {
+            var inicio = d.ConfirmadoEn!.Value > desde ? d.ConfirmadoEn.Value : desde;
+            var fin = d.CerradoEn is { } c && c < hasta ? c : hasta;
+            foreach (var (clave, intervalo) in GuardiasConClaveEntre(inicio, fin))
+            {
+                if (Solape(intervalo, inicio, fin) >= MinimoActivoEnGuardia)
+                {
+                    guardiasConPlan.Add((d.HospitalizacionId, clave));
+                }
+            }
+        }
+
+        var firmadas = guardiasConPlan.Count(g => conNota.Contains(g));
+        return new AutomatizacionIndicadorDto(
+            confirmados.Count, sinCambios, confirmados.Count == 0 ? null : Math.Round(100.0 * sinCambios / confirmados.Count, 2), mediana,
+            porToma, guardiasConPlan.Count, firmadas, guardiasConPlan.Count == 0 ? null : Math.Round(100.0 * firmadas / guardiasConPlan.Count, 2));
+    }
+
+    private IEnumerable<(string Clave, IntervaloTurno Intervalo)> GuardiasConClaveEntre(DateTime inicio, DateTime fin)
+    {
+        for (var fecha = catalogo.FechaLocal(inicio).AddDays(-1); fecha <= catalogo.FechaLocal(fin); fecha = fecha.AddDays(1))
+        {
+            foreach (var tipo in new[] { TipoTurno.GuardiaDiurna, TipoTurno.GuardiaNocturna })
+            {
+                var turno = new TurnoDelDia(fecha, tipo);
+                var g = catalogo.Intervalo(turno);
+                if (g.InicioUtc < fin && inicio < g.FinUtc)
+                {
+                    yield return (Guardias.Clave(turno)!, g);
+                }
+            }
+        }
     }
 
     private static SugerenciasIndicadorDto Sugerencias(IReadOnlyList<SugerenciaEmitida> s)

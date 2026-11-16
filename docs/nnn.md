@@ -62,7 +62,7 @@ La app muestra `verificado` junto a cada entrada, para que nadie confunda una et
   - **nunca toca una entrada verificada**;
   - nunca borra: una entrada que sale de la semilla se queda como está.
 
-## Motor de sugerencias (versión de reglas `2026.11.1`)
+## Motor de sugerencias (versión de reglas `2026.12.1`)
 
 `MotorSugerenciasNnn` (`src/Vitalify.Domain/Nnn`) es C# puro: no lee la base ni la hora, y una prueba de arquitectura lo verifica. Mira cuatro cosas:
 
@@ -76,7 +76,7 @@ Los umbrales son los **puntos NEWS2 (RCP 2017)** que ya calcula `CalculadoraNews
 | Regla | Se cumple si… | Diagnóstico NANDA-I | NIC | NOC | Fundamento |
 |---|---|---|---|---|---|
 | R1 | FR con 2 o más puntos NEWS2 (≤ 8 o ≥ 21 rpm) | 00032 Patrón respiratorio ineficaz | 3350, 3140 | 0415 | NEWS2: banda FR |
-| R2 | SpO2 con 2 o más puntos (según la escala del paciente) **o** con oxígeno suplementario | 00030 Deterioro del intercambio de gases | 3320, 3350 | 0402 | NEWS2: bandas SpO2, escalas 1 y 2 |
+| R2 | SpO2 con 2 o más puntos (según la escala del paciente) **o** con oxígeno suplementario. En la **escala 2 con oxígeno y SpO2 ≥ 93 %** el motivo dice que está sobre el objetivo 88–92 % (exceso de oxígeno) y propone 3320 y 7710 | 00030 Deterioro del intercambio de gases | 3320, 3350 | 0402 | NEWS2: bandas SpO2, escalas 1 y 2 |
 | R3 | Temperatura ≥ 38,1 °C | 00007 Hipertermia | 3740, 6680 | 0800 | NEWS2: banda de temperatura |
 | R4 | Temperatura ≤ 35,0 °C | 00006 Hipotermia | 3800, 6680 | 0800 | NEWS2: 3 puntos |
 | R5 | PAS o FC con 2 o más puntos: **00029** si puntúan las dos, si no **00240** | 00029 / 00240 | 4150, 6680 | 0400, 0802 | NEWS2: bandas PAS y FC |
@@ -85,14 +85,25 @@ Los umbrales son los **puntos NEWS2 (RCP 2017)** que ya calcula `CalculadoraNews
 | R8 | Alerta de caída abierta **o** ACVPU distinto de A | 00303 Riesgo de caídas del adulto | 6490 | 1909 | Caída del wearable (MPU6050) |
 | R9 | Dolor ≥ 4 en la pregunta de contexto de la toma manual | 00132 Dolor agudo | 1410 | 2102 | Escala numérica 0–10 |
 | R10 | Temperatura ≥ 38,1 °C, FC ≥ 91 **y** FR ≥ 21 | 00004 Riesgo de infección | 6540, 7710 | 0703 | Bandas NEWS2; el motivo dice "posible respuesta inflamatoria: avise al médico", **nunca "sepsis"** |
-| R11 | NEWS2 ≥ 5 **o** algún parámetro con 3 puntos | — | agrega **7710** a todas | — | NEWS2: respuesta urgente, avisar al médico |
+| R11 | NEWS2 ≥ 5, **MEWS ≥ 5** o algún parámetro con 3 puntos | — | agrega **7710** a todas | — | NEWS2: respuesta urgente, avisar al médico; MEWS ≥ 5 (Subbe 2001) |
 
 - **Prioridad:**
   - **alta:** 3 puntos, R4, R6, R7, R10 o una caída;
-  - **media:** 2 puntos, solo oxígeno, ACVPU alterado sin caída, fiebre ≥ 39,1 °C o dolor ≥ 7;
-  - **baja:** lo demás.
+  - **media:** 2 puntos, ACVPU alterado sin caída, fiebre ≥ 39,1 °C o dolor ≥ 7;
+  - **baja:** lo demás, incluido el oxígeno solo, sin puntos de SpO2 (desde `2026.12.1`; antes era media).
+- **Orden:** primero la prioridad; dentro de la misma, por sistema (respiratorio, circulatorio, conciencia y lo demás), como se valora al pie de la cama (ABCDE).
 - **Unión:** si dos reglas proponen el mismo diagnóstico, salen como una sola sugerencia. Se unen sus NIC, NOC y motivos, y queda la prioridad mayor. `regla` es la primera; `reglas`, todas.
 - **Alerta asociada:** cada sugerencia queda asociada a la alerta de riesgo abierta, o a la de caída en R8.
+
+### Persistencia y "por confirmar" (desde `2026.12.1`)
+
+El wearable no es un dispositivo médico certificado, así que un criterio que se apoya **solo** en el sensor no se sugiere por un valor suelto:
+
+- **Fuente de cada parámetro:** cada evaluación guarda de dónde salió la FR, la PAS y la temperatura (`fuente_fr`, `fuente_pas`, `fuente_temperatura`: `Sensor` o `Manual`). La FC y la SpO2 son siempre del sensor; la conciencia y el oxígeno, siempre de la toma manual ([motor-clinico.md](motor-clinico.md#precisión-del-sensor-fase-9)).
+- **Persistencia:** si todos los parámetros de una regla vienen del sensor, la regla debe cumplirse sin interrupción en las evaluaciones guardadas durante **2 min**; **60 s** si algún parámetro está en 3 puntos; **10 min** si se apoya en la temperatura de piel. Las evaluaciones se guardan con cada cambio de puntaje, así que no hay una sin el criterio en medio.
+- **Por confirmar:** esas sugerencias salen con `porConfirmar = true` y `confirmarCon` (los parámetros a medir a mano, por ejemplo `["temperatura"]`). La app pide la toma manual antes de confirmar. Con un dato manual que respalda el criterio, la sugerencia sale normal.
+- **Histéresis:** una sugerencia que el motor deja de proponer no expira al instante, sino tras **30 min** sin volver a proponerse, para que un valor que oscila en el límite no la haga aparecer y desaparecer. La lista la muestra con `retenida = true`. Una toma manual posterior con la que el motor ya no la propone la expira de inmediato.
+- **Desde una alerta** (`GET /alertas/{id}/sugerencias-nnn`) no se exige persistencia: la alerta ya es la confirmación.
 
 ### Valoración NOC sugerida
 
@@ -110,8 +121,8 @@ El **4 no se propone**: lo elige la enfermera. Es solo una propuesta; la valorac
 ### Cómo se agrega o cambia una regla
 
 1. Agregar la regla en `ReglasNnn` (`MotorSugerenciasNnn.cs`) y sumarla a `ReglasNnn.Todas`, con un id nuevo (`R12`…). Los ids no se reutilizan.
-2. Escribir su prueba en `tests/Vitalify.Domain.Tests/Fase8/MotorSugerenciasNnnTests.cs` y, si corresponde, un escenario en `EscenariosClinicosNnnTests.cs`.
-3. Subir `MotorSugerenciasNnn.VersionReglas`, por ejemplo a `2026.12.1`. Cada diagnóstico y cada sugerencia guardan la versión con la que se emitieron, así los indicadores se pueden separar por versión.
+2. Escribir su prueba en `tests/Vitalify.Domain.Tests/Fase8/MotorSugerenciasNnnTests.cs` y, si corresponde, un escenario en `EscenariosClinicosNnnTests.cs`. Si la regla usa parámetros del sensor, pasarlos en `CandidataNnn.Parametros` para que se aplique la persistencia.
+3. Subir `MotorSugerenciasNnn.VersionReglas`, por ejemplo a `2027.01.1`. Si cambia la tabla de frecuencias o el criterio de cierre, subir también `ProtocoloNnn.Version`. Cada diagnóstico y cada sugerencia guardan la versión con la que se emitieron, así los indicadores se pueden separar por versión.
 4. Si la regla usa un código que no está en el catálogo, agregarlo a la semilla (ver "Semilla") con `verificado = false`.
 5. Actualizar la tabla de esta sección.
 
@@ -119,10 +130,10 @@ El **4 no se propone**: lo elige la enfermera. Es solo una propuesta; la valorac
 
 1. **Sugerencias.**
    - **Cuándo se recalculan:** con cada evaluación **guardada** (la que cambió algo; `RiesgoEvaluado.Guardada`), con cada caída y al consultarlas. Cada cambio queda en `plan_sugerencia` (emitida, confirmada, descartada o expirada), y el servicio recibe el evento `sugerenciasNnn` con el id del paciente y la cantidad.
-   - **Expiración:** una sugerencia que el motor deja de proponer, porque los signos mejoraron, expira.
-2. **Confirmar.** La enfermera elige las NIC (con frecuencia: `UnaVez`, `CadaTurno`, `CadaHora` o `SegunNecesidad`) y los NOC (puntuación basal y meta, de 1 a 5, con meta ≥ basal). El diagnóstico queda `Activo`. Un mismo diagnóstico no puede estar activo dos veces en la hospitalización (índice único → 409 `diagnostico-ya-activo`).
+   - **Expiración:** una sugerencia que el motor deja de proponer, porque los signos mejoraron, expira tras la histéresis de 30 min.
+2. **Confirmar.** Con un toque, el paquete tal como viene ([Automatización asistida](#automatización-asistida-fase-9)), o la confirmación completa: la enfermera elige las NIC (con frecuencia: `UnaVez`, `CadaTurno`, `CadaHora`, `SegunNecesidad` o `PorProtocolo`) y los NOC (puntuación basal y meta, de 1 a 5, con meta ≥ basal). El diagnóstico queda `Activo`. Un mismo diagnóstico no puede estar activo dos veces en la hospitalización (índice único → 409 `diagnostico-ya-activo`).
 3. **Descartar.** Exige un motivo de 5 a 300 caracteres. Queda registrado como `Descartado`, para medir la tasa de aceptación, y no se vuelve a sugerir **hasta el fin de la guardia**, para que la siguiente enfermera vuelva a valorarlo.
-4. **Ejecutar.** Cada intervención ejecutada guarda quién, cuándo, la alerta (opcional) y una observación de hasta 500 caracteres. Al atender una alerta se pueden enviar `intervencionesEjecutadas` y quedan con esa alerta. Una intervención `UnaVez` se desactiva al ejecutarse.
+4. **Ejecutar.** Cada intervención ejecutada guarda quién, cuándo, la alerta (opcional), una observación de hasta 500 caracteres y su `origen` (`Manual`, `TomaManual`, `Alerta` o `Lote`). Al atender una alerta se pueden enviar `intervencionesEjecutadas` y quedan con esa alerta. Una intervención `UnaVez` se desactiva al ejecutarse.
 5. **Evaluar.**
    - **Qué se valora:** cada indicador de 1 a 5, o el resultado completo si se envía el código del resultado (`indicadorCodigo = null`).
    - **No se edita:** una valoración mal hecha se corrige con otra nueva.
@@ -130,6 +141,97 @@ El **4 no se propone**: lo elige la enfermera. Es solo una propuesta; la valorac
 6. **Cerrar.**
    - `PUT .../estado` resuelve o descarta con motivo; no se puede volver a `Activo`.
    - **Al egresar,** los diagnósticos activos pasan a `Resuelto` con el motivo "Egreso" en la misma transacción del egreso, y las sugerencias pendientes expiran.
+
+## Automatización asistida (fase 9)
+
+Vitalify **precarga, agenda, recuerda y redacta**; la enfermera sigue decidiendo y firmando. El objetivo es que el PAE cueste pocos toques sin quitarle el criterio a la enfermera. Las reglas del protocolo están en `Domain/Nnn/ProtocoloNnn.cs` (versión `2026.12.1`) y `CriterioResolucion.cs`; los casos de uso, en `Application/Nnn/AutomatizacionNnn.cs`, `MiTurnoYRecordatorios.cs` y `NotaTurno.cs`.
+
+> Los plazos y umbrales marcados **CE** son criterio de experto (consulta a Fable, modelo de Anthropic, sobre la evidencia de NEWS2, MEWS y NNN) y **deben validarse con la enfermera asesora** antes del piloto. Viven en código, con su prueba, como las reglas.
+
+### Paquete de un toque
+
+Cada sugerencia de `GET /pacientes/{id}/nnn/sugerencias` trae un `paquete` listo para confirmar:
+
+- **NIC** con su frecuencia sugerida: `PorProtocolo` para las de la tabla de abajo, `UnaVez` para la 7710 y `CadaTurno` para las demás.
+- **NOC** con basal y meta:
+  - **basal:** la mediana de los puntos NEWS2 de cada parámetro del resultado en los últimos **30 min**, convertida con la [valoración NOC sugerida](#valoración-noc-sugerida); el peor parámetro manda. Así un valor suelto no fija la basal. Sin datos, 3 (`basalDesdeSignos = false`: que la enfermera la revise). Para el dolor (2102): 0 → 5, 1–3 → 4, 4–6 → 3, 7–8 → 2, 9–10 → 1 (CE);
+  - **meta:** 4 si la basal es 2 o menos; 5 si es 3 o más; nunca menor que la basal. En la escala 2 de SpO2, los NOC 0402 y 0415 tienen meta 4 como tope (CE).
+- `POST /pacientes/{id}/plan-cuidados/sugerencias/confirmar-paquete` con `{ "diagnosticoCodigo": "00032" }` confirma el paquete tal como viene. Si el código no está entre las sugerencias actuales, 404 `sugerencia-no-encontrada`.
+- La confirmación completa (`POST .../diagnosticos`) sigue igual y acepta `paqueteSinCambios`. Cada diagnóstico guarda `confirmadoSinCambios` (si se confirmó el paquete sin tocarlo) y `versionProtocolo`, para el indicador de automatización.
+
+### Frecuencia por protocolo y agenda
+
+Una NIC `PorProtocolo` se agenda según el **nivel de respuesta clínica de NEWS2** (RCP 2017):
+
+| NIC | 0 | 1–4 | Un parámetro en 3 | 5–6 | ≥ 7 |
+|---|---|---|---|---|---|
+| 6680 Monitorización de signos vitales | 12 h | 4 h | 1 h | 1 h | 30 min |
+| 3350, 2620, 4150, 3320, 3740, 3800 | turno | 4 h | 1 h | 1 h | 30 min |
+| 4250, 4120 (líquidos) | turno | turno | 1 h | 1 h | 30 min |
+| 1410 Manejo del dolor | turno | 4 h | 4 h | 4 h | 4 h |
+| 3140 Manejo de la vía aérea | según necesidad | según necesidad | según necesidad | 1 h | 30 min |
+
+- **Nivel efectivo:** sube al instante con la evaluación y **solo baja con una toma manual completa** en el nivel inferior: es el mayor de las evaluaciones desde la última toma completa. Un valor bueno del wearable no relaja el plan.
+- **Agenda** (`AgendaIntervenciones`, se calcula al leer, sin jobs): cada intervención activa trae `proximaEn` y `agenda` = `al-dia`, `proxima` (le toca en la próxima hora), `vencida` o `segun-necesidad`.
+  - La **6680** usa el mismo reloj que la toma manual (`proximaTomaManualEn`), para no duplicar el aviso de la alerta "toma pendiente".
+  - Una NIC **por turno** vence una hora antes del fin de la guardia si no se hizo en ella.
+  - Una NIC `UnaVez` está vencida desde que se planificó hasta que se hace.
+- `GET /pacientes/{id}/plan-cuidados` trae la agenda de cada intervención, `nivelRespuesta` y `versionProtocolo`.
+
+### La toma manual registra la NIC 6680
+
+Cuando **una enfermera** registra una toma manual **completa** (con PAS y conciencia), `EjecucionSignosAlRegistrarToma` registra la ejecución de la NIC 6680 activa del paciente con `origen = TomaManual`. Así no se registra dos veces lo mismo. Lo hace un manejador del nuevo evento `ObservacionRegistrada` (`IManejadorObservacionRegistrada`), después de guardar; si falla, va a la bitácora y la toma queda registrada.
+
+### Valoración NOC del turno en lote
+
+- `GET /pacientes/{id}/plan-cuidados/valoracion-turno`: cada resultado NOC activo con sus indicadores y la puntuación que propone el motor (mediana de 30 min, como la basal), la última valoración y si ya se valoró en esta guardia.
+- `POST` con todos los resultados en una sola operación: cada valoración se guarda como siempre (con `puntuacionSugerida`), en una transacción. Un resultado o indicador que no es del paciente responde 400. Se audita `ValorarResultado` por resultado, solo con ids.
+
+### "Listo para resolver"
+
+El plan marca `listoParaResolver` con un motivo precargado cuando se cumple **todo** (CE):
+
+- **12 h continuas** sin el criterio de la regla que lo propuso (el intervalo de NEWS2 0 de RCP 2017); **24 h** en la fiebre (R3 y R10), sin antipirético en las 4 h previas a las tomas;
+- al menos **2 tomas manuales completas** en ese lapso, separadas 4 h o más;
+- la última evaluación completa;
+- la última valoración NOC de cada resultado en la meta o mejor;
+- sin alerta de riesgo abierta;
+- en el dolor (R9), 3 o menos en las 2 últimas tomas.
+
+**Nunca** se propone para el riesgo de caídas (00303) ni para un diagnóstico elegido a mano, que no tiene regla que medir. Cerrar sigue siendo `PUT .../estado`: la app solo precarga el motivo.
+
+### Mi turno
+
+`GET /mi-turno` es la primera pantalla de la enfermera (y la del médico):
+
+- los pacientes del servicio del usuario, del más grave al más estable (nivel de respuesta NEWS2, total, alerta abierta, cantidad de vencidas y cama);
+- por paciente: NEWS2, si está completo, el nivel de respuesta, la alerta abierta más grave, lo **vencido** y lo **próximo**, las sugerencias por decidir, los NOC por valorar en la guardia y si ya se firmó la nota del turno;
+- totales de vencidas y sugerencias, y el inicio y fin de la guardia.
+
+Trae el nombre del paciente, como la entrega de turno: es REST y solo para el personal clínico del servicio (403 `usuario-sin-servicio` sin servicio). Leerlo no se audita como consulta del historial, igual que la lista de monitoreados.
+
+### Recordatorios
+
+`VigilarPlanCuidados` corre en el mismo ciclo que el vigilante de alertas (`Alertas__SegundosVigilancia`, 30 s) y recorre las hospitalizaciones activas:
+
+- **Sincroniza las sugerencias** (persistencia e histéresis), así expiran aunque nadie las consulte.
+- **Algo nuevo vencido:** evento `recordatoriosPlan` (`motivo = vencidas`) al servicio y **un push agrupado** por enfermera, como máximo cada **30 min** ("3 intervenciones vencidas en 2 pacientes").
+- **Urgente:** una intervención vencida hace **15 min** con NEWS2 ≥ 5 manda un push propio con la cama (CE).
+- **Cierre de guardia:** una hora antes del cambio de turno, `recordatoriosPlan` (`motivo = cierre-guardia`) y un push si faltan valoraciones NOC o notas del turno.
+- Las **sugerencias nunca van por push**: se ven al abrir la app (evento `sugerenciasNnn`).
+- Los avisos van a las enfermeras de turno (`ITurnoVigente`). El evento y el push llevan solo ids, cama y cantidades.
+
+### Nota de enfermería del turno (PAE)
+
+- `GET /pacientes/{id}/nota-turno/borrador` arma un **borrador determinista** (plantilla, sin IA) en los cinco pasos del PAE del D.S. 004-2002-SA, art. 9 a), con los datos de la guardia actual:
+  1. **Valoración:** NEWS2 y MEWS al inicio, el peor y el actual; extremos del wearable y de la toma manual por separado; última toma (con oxígeno y ACVPU); alertas del turno;
+  2. **Diagnóstico:** los diagnósticos activos (desde cuándo, la regla que los sugirió o si se eligieron del catálogo, y quién confirmó) y los cerrados en el turno con su motivo;
+  3. **Planificación:** cada NIC con su frecuencia efectiva y cada NOC con su basal y meta;
+  4. **Ejecución:** las ejecuciones del turno con hora, quién, origen (toma manual o alerta) y observación, y lo vencido y próximo al cierre;
+  5. **Evaluación:** la última valoración NOC del turno de cada resultado frente a su basal y meta (meta alcanzada, mejora o sin mejora) y las NIC pendientes para el turno siguiente.
+
+  Termina con dos avisos: el wearable no es un dispositivo médico certificado y el texto es un borrador que hay que revisar. Leerlo cuenta como `ConsultaHistorialPaciente`.
+- `POST /pacientes/{id}/nota-turno` firma el texto revisado como una nota de tipo `ProcesoEnfermeria` con la guardia (`2026-11-16/GuardiaDiurna`). Hay **una por paciente y guardia** (índice único `ux_nota_turno` → 409 `nota-turno-ya-registrada`); se corrige como cualquier nota (autor, 24 h, con versiones). Ese tipo no se crea por `POST /notas` ni se cambia al editar. Se audita `NotaRegistrada`, sin el texto.
 
 ## Endpoints
 
@@ -149,12 +251,19 @@ El **4 no se propone**: lo elige la enfermera. Es solo una propuesta; la valorac
 | `POST /api/v1/plan-cuidados/resultados/{id}/valoraciones` | Enfermera | Valora los indicadores; la respuesta trae `puntuacionSugerida` |
 | `GET /api/v1/plan-cuidados/resultados/{id}/valoracion-sugerida` | Personal clínico | La propuesta del motor **antes** de valorar |
 | `GET /api/v1/sistema/indicadores-nnn?desde=&hasta=` | Administrador | Indicadores agregados para la tesis |
+| `GET /api/v1/mi-turno` (fase 9) | Personal clínico de un servicio | Pacientes por riesgo con lo vencido, lo próximo, las sugerencias y lo que falta valorar |
+| `POST /api/v1/pacientes/{id}/plan-cuidados/sugerencias/confirmar-paquete` (fase 9) | Enfermera | Confirma una sugerencia con su paquete, en un toque |
+| `GET /api/v1/pacientes/{id}/plan-cuidados/valoracion-turno` (fase 9) | Personal clínico | Los NOC activos con la puntuación propuesta, para valorar en lote |
+| `POST /api/v1/pacientes/{id}/plan-cuidados/valoracion-turno` (fase 9) | Enfermera | Guarda la valoración NOC del turno en una operación |
+| `GET /api/v1/pacientes/{id}/nota-turno/borrador` (fase 9) | Enfermera | Borrador de la nota del turno en los cinco pasos del PAE |
+| `POST /api/v1/pacientes/{id}/nota-turno` (fase 9) | Enfermera | Firma la nota del turno (una por guardia) |
 
 Otros cambios:
 
 - `POST /alertas/{id}/atender` acepta `intervencionesEjecutadas`. Sin el campo, funciona igual que antes.
 - `GET /pacientes/{id}/resumen` agrega `planCuidados`: los diagnósticos activos con su última valoración NOC y la cantidad de sugerencias pendientes.
 - `GET /servicios/{id}/entrega-turno` agrega `planCuidados` por paciente: los diagnósticos activos, las intervenciones `CadaTurno` sin ejecutar en la guardia y los NOC sin valorar en la guardia.
+- Fase 9: cada sugerencia trae `porConfirmar`, `confirmarCon`, `retenida` y `paquete`; el plan, `nivelRespuesta`, `versionProtocolo`, la agenda de cada intervención (`proximaEn`, `agenda`), el `origen` de cada ejecución y, por diagnóstico, `confirmadoSinCambios`, `versionProtocolo` y `listoParaResolver`.
 
 Swagger tiene ejemplos de cuerpo y de respuesta para cada endpoint nuevo.
 
@@ -164,9 +273,11 @@ Swagger tiene ejemplos de cuerpo y de respuesta para cada endpoint nuevo.
 - **Auditoría:** se registran, solo con ids, `ConfirmarDiagnosticoEnfermeria`, `DescartarSugerenciaNnn`, `CerrarDiagnosticoEnfermeria`, `RegistrarIntervencion`, `ValorarResultado` y `AgregarIntervencionPlan`. Leer las sugerencias, el plan o la valoración sugerida cuenta como `ConsultaHistorialPaciente`.
 - **Eventos de SignalR** (al grupo del servicio):
   - `planActualizado` con `pacienteId` y `hospitalizacionId`; la app vuelve a pedir el plan por REST;
-  - `sugerenciasNnn` con `pacienteId` y `cantidad`.
+  - `sugerenciasNnn` con `pacienteId` y `cantidad`;
+  - `recordatoriosPlan` (fase 9) con `motivo` (`vencidas` o `cierre-guardia`) y, por paciente, `pacienteId`, `hospitalizacionId`, `cama` y las cantidades de vencidas, próximas y valoraciones pendientes, y si falta la nota del turno.
   - Se nombran en camelCase, como `alertaCreada` y `riesgoActualizado`, para que los clientes usen una sola convención.
 - **Observaciones:** las de las ejecuciones son texto clínico libre y nunca van a los logs.
+- **Push de recordatorios (fase 9):** solo la cama y cantidades ("3 intervenciones vencidas en 2 pacientes"); nunca el diagnóstico ni la NIC. `F9_los_recordatorios_avisan_lo_vencido_solo_con_cantidades_y_agrupan_el_push` comprueba que el evento y el push no llevan el código del diagnóstico ni de la NIC.
 
 ## Indicadores para la tesis
 
@@ -178,6 +289,11 @@ Swagger tiene ejemplos de cuerpo y de respuesta para cada endpoint nuevo.
 - **Respuesta a la alerta:** tiempo desde que se creó la alerta hasta la primera intervención NIC registrada por ella (promedio y mediana, en minutos).
 - **Valoración por turno:** porcentaje de diagnósticos con al menos una valoración NOC en **cada** guardia en que estuvieron activos 6 h o más, más los turnos evaluados y los turnos con valoración.
 - **Cambio NOC:** cambio medio desde la puntuación basal hasta la última valoración antes del cierre, en los resultados de los diagnósticos resueltos.
+- **Automatización (fase 9, `automatizacion`):**
+  - paquetes confirmados y cuántos **sin cambios** (`tasaSinCambios`): si la enfermera casi nunca toca el paquete, el protocolo encaja; si lo cambia mucho, hay que revisarlo con la asesora;
+  - mediana de minutos desde que se emitió la sugerencia hasta que se confirmó;
+  - ejecuciones registradas por la toma manual (`origen = TomaManual`), es decir, registros que la enfermera no tuvo que hacer;
+  - guardias con plan activo y cuántas tienen la nota del turno firmada (`porcentajeNotaTurno`).
 
 ## Decisiones de diseño
 

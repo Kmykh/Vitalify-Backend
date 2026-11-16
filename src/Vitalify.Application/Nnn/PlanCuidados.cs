@@ -71,9 +71,11 @@ public sealed record IntervencionSolicitada(string? Codigo, string? Frecuencia);
 public sealed record ResultadoSolicitado(string? Codigo, int? PuntuacionBasal, int? PuntuacionMeta);
 
 /// <param name="Origen"><c>Sugerido</c> (con <c>ReglaOrigen</c>) o <c>Manual</c>.</param>
+/// <param name="PaqueteSinCambios">Lo fija la confirmación en un toque (<see cref="ConfirmarPaqueteSugerido"/>); si no, se compara con el paquete vigente.</param>
 public sealed record ConfirmarDiagnosticoComando(
     Guid PacienteId, string? DiagnosticoCodigo, string? Origen, string? ReglaOrigen, Guid? AlertaId,
-    IReadOnlyList<IntervencionSolicitada>? Intervenciones, IReadOnlyList<ResultadoSolicitado>? Resultados, Guid UsuarioId, string? Ip);
+    IReadOnlyList<IntervencionSolicitada>? Intervenciones, IReadOnlyList<ResultadoSolicitado>? Resultados, Guid UsuarioId, string? Ip,
+    bool? PaqueteSinCambios = null);
 
 public sealed class ConfirmarDiagnosticoValidador : AbstractValidator<ConfirmarDiagnosticoComando>
 {
@@ -124,6 +126,7 @@ public sealed class ConfirmarDiagnostico(
     IUnidadDeTrabajo unidadDeTrabajo,
     PresentadorPlanCuidados presentador,
     ServicioSugerenciasNnn sugerencias,
+    ServicioPaquetesNnn paquetes,
     NotificadorPlanCuidados notificador,
     IReloj reloj)
 {
@@ -162,6 +165,27 @@ public sealed class ConfirmarDiagnostico(
         var pendiente = (await plan.ListarSugerenciasPendientesAsync(h.Id, ct)).FirstOrDefault(s => s.DiagnosticoCodigo == comando.DiagnosticoCodigo);
         var evaluacionId = pendiente?.EvaluacionId ?? (await evaluaciones.ObtenerUltimaAsync(h.Id, ct))?.Id;
 
+        // ¿Confirmó el paquete tal cual? (indicador del sesgo de automatización). Solo para una sugerencia vigente. Si esa
+        // sugerencia todavía no estaba registrada (la persistencia del wearable o la histéresis la mostraron entre dos
+        // sincronizaciones), se registra ahora: así cuenta en la tasa de aceptación.
+        var sinCambios = comando.PaqueteSinCambios;
+        if (origen == OrigenDiagnostico.Sugerido
+            && (await sugerencias.CalcularAsync(h.Id, ct)).Sugerencias.FirstOrDefault(s => s.DiagnosticoCodigo == comando.DiagnosticoCodigo) is { } vigente)
+        {
+            if (sinCambios is null)
+            {
+                var paquete = ServicioPaquetesNnn.Armar(c, vigente, await paquetes.DatosAsync(h.Id, ct));
+                sinCambios = ServicioPaquetesNnn.Coincide(paquete, comando.Intervenciones!, comando.Resultados!);
+            }
+
+            if (pendiente is null)
+            {
+                pendiente = SugerenciaEmitida.Emitir(h.Id, h.PacienteId, vigente, MotorSugerenciasNnn.VersionReglas, ahora);
+                plan.Agregar(pendiente);
+                evaluacionId = vigente.EvaluacionId ?? evaluacionId;
+            }
+        }
+
         DiagnosticoPlan d;
         List<IntervencionPlan> intervenciones;
         List<ResultadoPlan> resultados;
@@ -169,7 +193,7 @@ public sealed class ConfirmarDiagnostico(
         {
             d = DiagnosticoPlan.Confirmar(
                 h.Id, h.PacienteId, comando.DiagnosticoCodigo!, origen, comando.ReglaOrigen?.Trim(), comando.AlertaId ?? pendiente?.AlertaId,
-                evaluacionId, MotorSugerenciasNnn.VersionReglas, comando.UsuarioId, ahora);
+                evaluacionId, MotorSugerenciasNnn.VersionReglas, comando.UsuarioId, ahora, sinCambios, ProtocoloNnn.Version);
             intervenciones = comando.Intervenciones!.Select(i =>
             {
                 Enumeraciones.TryParseNombre<FrecuenciaIntervencion>(i.Frecuencia, out var frecuencia);
@@ -283,6 +307,14 @@ public sealed class DescartarSugerencia(
 
         var ahora = reloj.AhoraUtc;
         var pendiente = (await plan.ListarSugerenciasPendientesAsync(h.Id, ct)).FirstOrDefault(s => s.DiagnosticoCodigo == comando.DiagnosticoCodigo);
+        if (pendiente is null
+            && (await sugerencias.CalcularAsync(h.Id, ct)).Sugerencias.FirstOrDefault(s => s.DiagnosticoCodigo == comando.DiagnosticoCodigo) is { } vigente)
+        {
+            // Vigente pero todavía sin registrar: se registra para que el descarte cuente en la tasa de aceptación.
+            pendiente = SugerenciaEmitida.Emitir(h.Id, h.PacienteId, vigente, MotorSugerenciasNnn.VersionReglas, ahora);
+            plan.Agregar(pendiente);
+        }
+
         var d = DiagnosticoPlan.DescartarSugerencia(
             h.Id, h.PacienteId, comando.DiagnosticoCodigo!, comando.ReglaOrigen!.Trim(), pendiente?.AlertaId,
             pendiente?.EvaluacionId ?? (await evaluaciones.ObtenerUltimaAsync(h.Id, ct))?.Id, MotorSugerenciasNnn.VersionReglas,
@@ -448,7 +480,7 @@ public sealed class EjecucionesPlan(IRepositorioPlanCuidados plan, ContextoPlanC
 {
     public async Task<Resultado<IReadOnlyList<EjecucionIntervencion>>> PrepararAsync(
         IReadOnlyList<Guid> intervencionIds, Guid hospitalizacionId, Guid? alertaId, string? observacion, Guid usuarioId, string? ip,
-        DateTime ahora, string campo, CancellationToken ct = default)
+        DateTime ahora, string campo, OrigenEjecucion origen, CancellationToken ct = default)
     {
         var intervenciones = await plan.ObtenerIntervencionesAsync(intervencionIds, ct);
         var ejecuciones = new List<EjecucionIntervencion>();
@@ -477,7 +509,7 @@ public sealed class EjecucionesPlan(IRepositorioPlanCuidados plan, ContextoPlanC
                 return errorRol;
             }
 
-            var e = i.Ejecutar(usuarioId, ahora, alertaId, observacion);
+            var e = i.Ejecutar(usuarioId, ahora, alertaId, observacion, origen);
             plan.Agregar(e);
             ejecuciones.Add(e);
             auditoria.Agregar(RegistroAuditoria.Registrar(
@@ -529,7 +561,8 @@ public sealed class RegistrarEjecucion(
         }
 
         var preparadas = await ejecuciones.PrepararAsync(
-            [intervencion.Id], d.HospitalizacionId, comando.AlertaId, comando.Observacion, comando.UsuarioId, comando.Ip, reloj.AhoraUtc, "id", ct);
+            [intervencion.Id], d.HospitalizacionId, comando.AlertaId, comando.Observacion, comando.UsuarioId, comando.Ip, reloj.AhoraUtc, "id",
+            comando.AlertaId is null ? OrigenEjecucion.Manual : OrigenEjecucion.Alerta, ct);
         if (!preparadas.EsExito)
         {
             return preparadas.Error;
@@ -681,7 +714,8 @@ public sealed record ObtenerPlanCuidadosConsulta(Guid PacienteId, Guid? Hospital
 
 /// <summary>El plan completo de un episodio (por defecto el activo o el último). Leerlo cuenta como consulta del historial.</summary>
 public sealed class ObtenerPlanCuidados(
-    EpisodiosPaciente episodios, IRepositorioPlanCuidados plan, PresentadorPlanCuidados presentador, AuditoriaHistorial auditoria)
+    EpisodiosPaciente episodios, IRepositorioPlanCuidados plan, PresentadorPlanCuidados presentador, AuditoriaHistorial auditoria,
+    ServicioAgendaPlan agenda, ServicioResolucionPlan resolucion)
 {
     public async Task<Resultado<PlanCuidadosDto>> EjecutarAsync(ObtenerPlanCuidadosConsulta consulta, CancellationToken ct = default)
     {
@@ -692,10 +726,22 @@ public sealed class ObtenerPlanCuidados(
         }
 
         var h = elegido.Valor.Hospitalizacion;
-        var diagnosticos = await presentador.PresentarAsync(await plan.ObtenerPlanAsync(h.Id, ct), ct);
+        var lectura = await plan.ObtenerPlanAsync(h.Id, ct);
+
+        // Fase 9: en el episodio activo, cuándo toca cada intervención y qué diagnósticos están listos para resolver.
+        AgendaHospitalizacion? calculada = null;
+        var extras = ExtrasPlan.Ninguno;
+        if (h.EstaActiva)
+        {
+            calculada = await agenda.CalcularAsync(lectura, ct);
+            extras = new ExtrasPlan(calculada.Items, await resolucion.CalcularAsync(lectura, ct));
+        }
+
+        var diagnosticos = await presentador.PresentarAsync(lectura, extras, ct);
         var auditado = await auditoria.RegistrarAsync(consulta.PacienteId, h.Id, "plan-cuidados", consulta.UsuarioId, consulta.Ip, ct);
         return auditado.EsExito
-            ? new PlanCuidadosDto(consulta.PacienteId, h.Id, h.EstaActiva, MotorSugerenciasNnn.VersionReglas, diagnosticos)
+            ? new PlanCuidadosDto(consulta.PacienteId, h.Id, h.EstaActiva, MotorSugerenciasNnn.VersionReglas, diagnosticos,
+                calculada is null ? null : TextosNnn.De(calculada.Nivel))
             : auditado.Error;
     }
 }

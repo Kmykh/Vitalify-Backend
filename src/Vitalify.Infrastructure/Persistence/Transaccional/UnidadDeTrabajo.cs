@@ -41,6 +41,7 @@ internal sealed class UnidadDeTrabajo(TransaccionalDbContext db) : IUnidadDeTrab
         [ConfiguracionIntervencionPlan.IndiceActiva] = ErroresNnn.IntervencionYaPlanificada,
         [ConfiguracionResultadoPlan.IndiceResultado] = Error.Conflicto("resultado-ya-planificado", "Ese resultado NOC ya está en el plan de este diagnóstico."),
         [ConfiguracionSugerenciaEmitida.IndicePendiente] = ErroresNnn.SugerenciaConcurrente,
+        [ConfiguracionNotaClinica.IndiceTurno] = ErroresNnn.NotaTurnoYaRegistrada,
     };
 
     public async Task<Resultado<Unidad>> GuardarCambiosAsync(CancellationToken ct = default)

@@ -52,7 +52,9 @@ internal static class ReglasNota
 {
     public static void Tipo<T>(IRuleBuilder<T, string?> regla, bool obligatorio) =>
         regla.Must(t => (!obligatorio && t is null) || Enumeraciones.TryParseNombre<TipoNota>(t, out _))
-            .WithMessage($"El tipo debe ser {Enumeraciones.Nombres<TipoNota>()}.");
+            .WithMessage($"El tipo debe ser {Enumeraciones.Nombres<TipoNota>()}.")
+            .Must(t => !Enumeraciones.TryParseNombre<TipoNota>(t, out var tipo) || tipo != TipoNota.ProcesoEnfermeria)
+            .WithMessage("La nota del PAE del turno se firma desde su borrador: POST /pacientes/{id}/nota-turno.");
 
     public static void Texto<T>(IRuleBuilder<T, string?> regla) =>
         regla.Must(t => t?.Trim().Length is >= NotaClinica.LargoMinimoTexto and <= NotaClinica.LargoMaximoTexto)
@@ -187,7 +189,16 @@ public sealed class EditarNota(
         }
 
         var tipo = Enumeraciones.TryParseNombre<TipoNota>(comando.Tipo, out var nuevoTipo) ? nuevoTipo : nota.Tipo;
-        var anterior = nota.Editar(comando.UsuarioId, tipo, comando.Texto!, ahora);
+        NotaClinicaVersion? anterior;
+        try
+        {
+            anterior = nota.Editar(comando.UsuarioId, tipo, comando.Texto!, ahora);
+        }
+        catch (ExcepcionDeDominio ex)
+        {
+            return ErroresComunes.ValidacionDeCampo("tipo", ex.Message);
+        }
+
         if (anterior is not null)
         {
             notas.AgregarVersion(anterior);

@@ -38,15 +38,23 @@ public sealed class Fase8ProcesoEnfermeriaTests(FabricaVitalify fabrica) : Prueb
         },
     };
 
-    /// <summary>E1 desde el wearable: FR 26 (3 puntos) y SpO2 90 (3 puntos), en tiempo real.</summary>
+    /// <summary>
+    /// E1 desde el wearable: FR 26 (3 puntos) y SpO2 90 (3 puntos), en tiempo real desde hace 70 s. Como son criterios solo del
+    /// sensor, con un parámetro en 3 deben persistir 60 s antes de sugerirse (fase 9); las sugerencias salen "por confirmar".
+    /// </summary>
     private async Task<(HttpClient Enfermera, FichaPacienteDto Ficha)> PacienteE1Async()
     {
         var (enfermera, ficha, sensor, _) = await PacienteConSensorAsync();
-        await (await ClienteAdministradorAsync()).RegistrarTelemetriaAsync(new
+        var administrador = await ClienteAdministradorAsync();
+        using (Fabrica.Reloj.Adelantar(TimeSpan.FromSeconds(-70)))
         {
-            dispositivo = sensor.Codigo, ts = ClienteApi.Ts(Fabrica.Reloj.AhoraUtc), seq = Interlocked.Increment(ref _seq), fc = 80, fr = 26, spo2 = 90,
-            caida = false,
-        });
+            await administrador.RegistrarTelemetriaAsync(new
+            {
+                dispositivo = sensor.Codigo, ts = ClienteApi.Ts(Fabrica.Reloj.AhoraUtc), seq = Interlocked.Increment(ref _seq), fc = 80, fr = 26, spo2 = 90,
+                caida = false,
+            });
+        }
+
         return (enfermera, ficha);
     }
 
@@ -70,7 +78,7 @@ public sealed class Fase8ProcesoEnfermeriaTests(FabricaVitalify fabrica) : Prueb
 
         var sugerencias = await SugerenciasAsync(enfermera, ficha.Id);
 
-        Assert.Equal("2026.11.1", sugerencias.VersionReglas);
+        Assert.Equal("2026.12.1", sugerencias.VersionReglas);
         Assert.Equal("Vitalify sugiere; la enfermera decide.", sugerencias.Aviso);
         Assert.Equal(["00030", "00032"], sugerencias.Sugerencias.Select(s => s.Diagnostico.Codigo).Order());
         var patron = sugerencias.Sugerencias.Single(s => s.Diagnostico.Codigo == "00032");

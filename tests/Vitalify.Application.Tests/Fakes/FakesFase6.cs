@@ -164,6 +164,14 @@ public sealed class TiempoRealFalso : INotificadorTiempoReal
         Sugerencias.Add(sugerencias);
         return Task.CompletedTask;
     }
+
+    public List<RecordatoriosPlanDto> Recordatorios { get; } = [];
+
+    public Task RecordatoriosPlanAsync(Guid servicioId, RecordatoriosPlanDto recordatorios, CancellationToken ct = default)
+    {
+        Recordatorios.Add(recordatorios);
+        return Task.CompletedTask;
+    }
 }
 
 /// <summary>Como el adaptador real: programadas o, de respaldo, las enfermeras activas del servicio.</summary>

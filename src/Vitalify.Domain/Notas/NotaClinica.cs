@@ -12,6 +12,12 @@ public enum TipoNota
 
     /// <summary>Opinión de otro servicio o especialidad.</summary>
     Interconsulta = 3,
+
+    /// <summary>
+    /// La nota de enfermería del turno en los cinco pasos del PAE (fase 9), firmada a partir del borrador que arma Vitalify.
+    /// Una por hospitalización y guardia (índice único <c>ux_nota_turno</c>).
+    /// </summary>
+    ProcesoEnfermeria = 4,
 }
 
 /// <summary>
@@ -40,11 +46,39 @@ public sealed class NotaClinica
     /// <summary>Número de la versión vigente: 1 al crearla y uno más con cada corrección.</summary>
     public int Version { get; private set; }
 
+    /// <summary>La guardia de una nota del PAE, por ejemplo <c>2026-11-16/GuardiaDiurna</c>; null en las demás.</summary>
+    public string? Guardia { get; private set; }
+
+    public const int LargoMaximoGuardia = 40;
+
     private NotaClinica()
     {
     }
 
+    /// <summary>La enfermera firma la nota del PAE de una guardia (revisó y, si hizo falta, corrigió el borrador).</summary>
+    public static NotaClinica RegistrarDeTurno(Guid hospitalizacionId, Guid pacienteId, Guid autorId, string guardia, string texto, DateTime ahora)
+    {
+        if (string.IsNullOrWhiteSpace(guardia) || guardia.Length > LargoMaximoGuardia)
+        {
+            throw new ExcepcionDeDominio("La guardia de la nota no es válida.");
+        }
+
+        var nota = Crear(hospitalizacionId, pacienteId, autorId, TipoNota.ProcesoEnfermeria, texto, ahora);
+        nota.Guardia = guardia;
+        return nota;
+    }
+
     public static NotaClinica Registrar(Guid hospitalizacionId, Guid pacienteId, Guid autorId, TipoNota tipo, string texto, DateTime ahora)
+    {
+        if (tipo == TipoNota.ProcesoEnfermeria)
+        {
+            throw new ExcepcionDeDominio("La nota del PAE del turno se firma desde su borrador (nota-turno).");
+        }
+
+        return Crear(hospitalizacionId, pacienteId, autorId, tipo, texto, ahora);
+    }
+
+    private static NotaClinica Crear(Guid hospitalizacionId, Guid pacienteId, Guid autorId, TipoNota tipo, string texto, DateTime ahora)
     {
         ExigirTipo(tipo);
         return new NotaClinica
@@ -81,6 +115,11 @@ public sealed class NotaClinica
         }
 
         ExigirTipo(tipo);
+        if ((Guardia is not null) != (tipo == TipoNota.ProcesoEnfermeria))
+        {
+            throw new ExcepcionDeDominio("Una nota del PAE del turno no cambia de tipo, y las demás no pasan a serlo.");
+        }
+
         var nuevo = Limpiar(texto);
         if (nuevo == Texto && tipo == Tipo)
         {

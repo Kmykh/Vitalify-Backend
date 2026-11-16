@@ -26,4 +26,17 @@ internal sealed class RepositorioNotas(TransaccionalDbContext db) : IRepositorio
     public void Agregar(NotaClinica nota) => db.Notas.Add(nota);
 
     public void AgregarVersion(NotaClinicaVersion version) => db.VersionesNotas.Add(version);
+
+    public Task<NotaClinica?> ObtenerDeTurnoAsync(Guid hospitalizacionId, string guardia, CancellationToken ct = default) =>
+        db.Notas.AsNoTracking().SingleOrDefaultAsync(
+            n => n.HospitalizacionId == hospitalizacionId && n.Tipo == TipoNota.ProcesoEnfermeria && n.Guardia == guardia, ct);
+
+    public async Task<IReadOnlyList<(Guid HospitalizacionId, string Guardia)>> ListarGuardiasConNotaTurnoAsync(
+        DateTime desde, DateTime hasta, CancellationToken ct = default) =>
+        (await db.Notas.AsNoTracking()
+            .Where(n => n.Tipo == TipoNota.ProcesoEnfermeria && n.Guardia != null && n.CreadaEn >= desde && n.CreadaEn <= hasta)
+            .Select(n => new { n.HospitalizacionId, n.Guardia })
+            .ToListAsync(ct))
+        .Select(n => (n.HospitalizacionId, n.Guardia!))
+        .ToList();
 }

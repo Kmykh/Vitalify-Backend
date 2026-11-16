@@ -80,14 +80,17 @@ public class MotorClinicoTests
     public async Task Gana_el_valor_mas_reciente_entre_el_sensor_y_la_observacion()
     {
         var pacienteId = await PacienteConSensorAsync();
-        await RegistrarLecturaDelWearableAsync(temp: 34.5m);
+        await RegistrarLecturaDelWearableAsync(temp: 38.2m);
         _e.Reloj.Avanzar(TimeSpan.FromSeconds(5));
 
         var conTermometro = await Observar(pacienteId, fr: null, pas: null, pad: null, conciencia: null, oxigeno: null, temperatura: 36.9m);
         Assert.Equal(36.9m, conTermometro.Valor.Riesgo.Parametros.Temperatura);
+        Assert.Equal(FuenteSigno.Manual, _e.Historial.Evaluaciones[^1].FuenteTemperatura);
 
-        await RegistrarLecturaDelWearableAsync(temp: 34.6m, segundos: 5);
-        Assert.Equal(34.6m, _e.Historial.Evaluaciones[^1].Temperatura);
+        // El sensor vuelve a ganar con una lectura posterior: puntúa la mediana de sus últimos 60 s (38,2 y 38,4).
+        await RegistrarLecturaDelWearableAsync(temp: 38.4m, segundos: 5);
+        Assert.Equal(38.3m, _e.Historial.Evaluaciones[^1].Temperatura);
+        Assert.Equal(FuenteSigno.Sensor, _e.Historial.Evaluaciones[^1].FuenteTemperatura);
     }
 
     [Fact]
@@ -203,7 +206,14 @@ public class MotorClinicoTests
         Assert.Single(_e.Historial.Evaluaciones);
         Assert.Equal(6, _e.TiempoReal.Riesgos.Count);
 
-        // SpO2 95 suma 1 punto: se guarda al instante.
+        // SpO2 95 sostenida suma 1 punto. Con la mediana de 60 s (fase 9), puntúa cuando es la mayoría de la ventana: a la
+        // cuarta lectura. Ahí se guarda al instante.
+        for (var i = 0; i < 3; i++)
+        {
+            await LecturaAsync(95, TimeSpan.FromSeconds(10));
+            Assert.Single(_e.Historial.Evaluaciones);
+        }
+
         await LecturaAsync(95, TimeSpan.FromSeconds(10));
         Assert.Equal(2, _e.Historial.Evaluaciones.Count);
         Assert.Equal(1, _e.Historial.Evaluaciones.Last().News2Total);
@@ -213,6 +223,37 @@ public class MotorClinicoTests
         Assert.Equal(2, _e.Historial.Evaluaciones.Count);
         await LecturaAsync(95, TimeSpan.FromSeconds(10));
         Assert.Equal(3, _e.Historial.Evaluaciones.Count);
-        Assert.Equal(9, _e.TiempoReal.Riesgos.Count);
+        Assert.Equal(12, _e.TiempoReal.Riesgos.Count);
+    }
+
+    [Fact]
+    public async Task Un_valor_suelto_del_sensor_no_puntua_la_mediana_de_60_s_si()
+    {
+        await PacienteConSensorAsync();
+        for (var i = 0; i < 5; i++)
+        {
+            _e.Reloj.Avanzar(TimeSpan.FromSeconds(10));
+            await RegistrarLecturaDelWearableAsync(fc: 80, spo2: 97, temp: 36.8m);
+        }
+
+        // Un pico de FC por movimiento: la mediana sigue en 80.
+        _e.Reloj.Avanzar(TimeSpan.FromSeconds(10));
+        await RegistrarLecturaDelWearableAsync(fc: 140, spo2: 97, temp: 36.8m);
+        Assert.Equal(0, _e.Historial.Evaluaciones[^1].News2Total);
+        Assert.Equal(80, _e.Historial.Evaluaciones[^1].Fc);
+        Assert.Equal(FuenteSigno.Sensor, _e.Historial.Evaluaciones[^1].FuenteTemperatura);
+    }
+
+    [Fact]
+    public async Task La_temperatura_de_piel_de_36_o_menos_no_puntua_y_queda_faltante()
+    {
+        await PacienteConSensorAsync();
+
+        await RegistrarLecturaDelWearableAsync(temp: 35.5m);
+
+        var evaluacion = Assert.Single(_e.Historial.Evaluaciones);
+        Assert.Null(evaluacion.Temperatura);
+        Assert.Null(evaluacion.FuenteTemperatura);
+        Assert.Contains(ParametroClinico.Temperatura, evaluacion.News2().Faltantes);
     }
 }

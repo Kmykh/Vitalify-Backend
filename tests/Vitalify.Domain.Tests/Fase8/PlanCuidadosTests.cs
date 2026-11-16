@@ -21,7 +21,7 @@ public sealed class PlanCuidadosTests
         Assert.Equal(EstadoDiagnosticoPlan.Activo, d.Estado);
         Assert.Equal((Enfermera, Ahora), (d.ConfirmadoPor!.Value, d.ConfirmadoEn!.Value));
         Assert.Equal("R1", d.ReglaOrigen);
-        Assert.Equal("2026.11.1", d.VersionReglas);
+        Assert.Equal("2026.12.1", d.VersionReglas);
     }
 
     [Fact]
@@ -47,12 +47,12 @@ public sealed class PlanCuidadosTests
     [InlineData("no")]
     public void Descartar_una_sugerencia_exige_un_motivo_de_5_a_300_caracteres(string? motivo) =>
         Assert.Throws<ExcepcionDeDominio>(() => DiagnosticoPlan.DescartarSugerencia(
-            Guid.NewGuid(), Guid.NewGuid(), "00032", "R1", null, null, "2026.11.1", motivo!, Enfermera, Ahora));
+            Guid.NewGuid(), Guid.NewGuid(), "00032", "R1", null, null, "2026.12.1", motivo!, Enfermera, Ahora));
 
     [Fact]
     public void Descartar_una_sugerencia_queda_registrado_sin_haber_estado_activa()
     {
-        var d = DiagnosticoPlan.DescartarSugerencia(Guid.NewGuid(), Guid.NewGuid(), "00032", "R1", null, null, "2026.11.1",
+        var d = DiagnosticoPlan.DescartarSugerencia(Guid.NewGuid(), Guid.NewGuid(), "00032", "R1", null, null, "2026.12.1",
             "  FR por llanto, ya normalizó  ", Enfermera, Ahora);
 
         Assert.Equal(EstadoDiagnosticoPlan.Descartado, d.Estado);
@@ -136,7 +136,7 @@ public sealed class PlanCuidadosTests
     public void Una_sugerencia_emitida_se_resuelve_una_sola_vez()
     {
         var sugerencia = new SugerenciaNnn("00032", ["3350"], ["0415"], ["R1"], "FR 22 rpm", PrioridadSugerencia.Media, null, null);
-        var s = SugerenciaEmitida.Emitir(Guid.NewGuid(), Guid.NewGuid(), sugerencia, "2026.11.1", Ahora);
+        var s = SugerenciaEmitida.Emitir(Guid.NewGuid(), Guid.NewGuid(), sugerencia, "2026.12.1", Ahora);
 
         s.Confirmar(Guid.NewGuid(), Ahora.AddMinutes(3));
 

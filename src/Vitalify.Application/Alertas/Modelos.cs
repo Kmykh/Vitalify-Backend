@@ -140,6 +140,13 @@ public sealed record PlanActualizadoDto(Guid PacienteId, Guid HospitalizacionId)
 /// <summary>Evento <c>sugerenciasNnn</c>: cuántas sugerencias NNN tiene pendientes el paciente, sin códigos.</summary>
 public sealed record SugerenciasNnnDto(Guid PacienteId, int Cantidad);
 
+/// <summary>Lo pendiente del plan de un paciente en un recordatorio: cantidades, nunca códigos ni etiquetas NANDA-I.</summary>
+public sealed record RecordatorioPacienteDto(
+    Guid PacienteId, Guid HospitalizacionId, string Cama, int Vencidas, int Proximas, int ValoracionesPendientes, bool NotaTurnoPendiente);
+
+/// <param name="Motivo"><c>vencidas</c> (algo del plan se venció) o <c>cierre-guardia</c> (falta una hora para el cambio de turno).</param>
+public sealed record RecordatoriosPlanDto(string Motivo, IReadOnlyList<RecordatorioPacienteDto> Pacientes);
+
 /// <summary>Evento <c>signosActualizados</c> (como máximo uno cada 5 s por paciente).</summary>
 public sealed record SignosActualizadosDto(
     Guid PacienteId, Guid HospitalizacionId, string Cama, DateTime MedidoEn, int? Fc, int? Fr, int? Spo2, decimal? Temperatura,

@@ -158,9 +158,58 @@ internal sealed class EjemplosOpenApiNnn : IOperationFilter
             """, """
             { "id": "5e4d3c2b-1a09-4f8e-8d7c-6b5a49382716", "tipo": "riesgo", "prioridad": "media", "estado": "atendida" }
             """),
+
+        // Fase 9: automatización asistida del PAE.
+        ["GET api/v1/mi-turno"] = (null, """
+            { "servicioId": "c0ffee00-1234-4abc-8def-0123456789ab", "guardia": "2026-11-16/GuardiaDiurna",
+              "inicioGuardia": "2026-11-16T12:00:00Z", "finGuardia": "2026-11-17T00:00:00Z",
+              "pacientes": [
+                { "pacienteId": "0b9a7e52-3c1d-4f6a-8e2b-5d4c3b2a1f00", "hospitalizacionId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+                  "nombreCompleto": "Elena Vargas Soto", "cama": "MED-B-02", "news2": 7, "evaluacionCompleta": true, "nivelRespuesta": "alto",
+                  "alerta": { "id": "5e4d3c2b-1a09-4f8e-8d7c-6b5a49382716", "tipo": "riesgo", "prioridad": "alta", "creadaEn": "2026-11-16T14:02:00Z" },
+                  "vencidas": [ { "intervencionId": "7a6b5c4d-3e2f-4a1b-9c8d-7e6f5a4b3c2d", "planDiagnosticoId": "6f1c2a4e-7d3b-4c8e-9a51-2b7e0d4f8c11",
+                                  "codigo": "3350", "etiqueta": "Monitorización respiratoria", "proximaEn": "2026-11-16T14:30:00Z", "agenda": "vencida" } ],
+                  "proximas": [], "sugerenciasPendientes": 1, "valoracionesPendientes": 2, "notaTurnoFirmada": false } ],
+              "totalVencidas": 1, "totalSugerencias": 1, "aviso": "Vitalify sugiere; la enfermera decide." }
+            """),
+        ["POST api/v1/pacientes/{id}/plan-cuidados/sugerencias/confirmar-paquete"] = ("""
+            { "diagnosticoCodigo": "00032" }
+            """, Diagnostico),
+        ["GET api/v1/pacientes/{id}/plan-cuidados/valoracion-turno"] = (null, """
+            { "pacienteId": "0b9a7e52-3c1d-4f6a-8e2b-5d4c3b2a1f00", "hospitalizacionId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+              "guardia": "2026-11-16/GuardiaDiurna", "evaluacionId": "9c8b7a65-4321-4fed-8cba-987654321abc", "evaluadaEn": "2026-11-16T22:40:00Z",
+              "evaluacionCompleta": true,
+              "resultados": [
+                { "planResultadoId": "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e", "planDiagnosticoId": "6f1c2a4e-7d3b-4c8e-9a51-2b7e0d4f8c11",
+                  "diagnosticoCodigo": "00032", "diagnosticoEtiqueta": "Patrón respiratorio ineficaz", "codigo": "0802", "etiqueta": "Signos vitales",
+                  "puntuacionBasal": 2, "puntuacionMeta": 4, "valoradoEnGuardia": false,
+                  "indicadores": [
+                    { "codigo": "080204", "etiqueta": "Frecuencia respiratoria", "parametroVital": "fr", "puntuacionSugerida": 3, "ultimaPuntuacion": 2, "cambio": true },
+                    { "codigo": "0802", "etiqueta": "Signos vitales (global)", "parametroVital": null, "puntuacionSugerida": 3, "ultimaPuntuacion": null, "cambio": false } ] } ],
+              "aviso": "Vitalify sugiere; la enfermera decide." }
+            """),
+        ["POST api/v1/pacientes/{id}/plan-cuidados/valoracion-turno"] = ("""
+            { "resultados": [ { "resultadoId": "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e",
+                                "indicadores": [ { "codigo": "080204", "puntuacion": 3 }, { "codigo": "0802", "puntuacion": 3 } ] } ] }
+            """, """
+            { "valoraciones": 2 }
+            """),
+        ["GET api/v1/pacientes/{id}/nota-turno/borrador"] = (null, """
+            { "pacienteId": "0b9a7e52-3c1d-4f6a-8e2b-5d4c3b2a1f00", "hospitalizacionId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+              "guardia": "2026-11-16/GuardiaDiurna",
+              "texto": "Nota de enfermería del turno (PAE) · Cama MED-B-02 · Guardia diurna del 16/11/2026 (07:00–19:00)\n\n1. Valoración\n- NEWS2: 3 al inicio, peor 7, ahora 4. MEWS: 2 al inicio, peor 5, ahora 3.\n…\n5. Evaluación\n- NOC 0802 Signos vitales: 3 a las 17:40 (basal 2, meta 4: mejora).\n\nLos datos del wearable vienen de un sensor no certificado como dispositivo médico. Borrador generado por Vitalify con los datos del turno: revíselo y complételo antes de firmar.",
+              "notaFirmadaId": null, "aviso": "Vitalify sugiere; la enfermera decide." }
+            """),
+        ["POST api/v1/pacientes/{id}/nota-turno"] = ("""
+            { "texto": "Nota de enfermería del turno (PAE) · Cama MED-B-02 … (el borrador revisado)" }
+            """, """
+            { "id": "8e7d6c5b-4a39-4281-9f0e-1d2c3b4a5968", "hospitalizacionId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+              "tipo": "ProcesoEnfermeria", "texto": "Nota de enfermería del turno (PAE) · Cama MED-B-02 …", "creadaEn": "2026-11-16T23:55:00Z",
+              "version": 1 }
+            """),
     };
 
-    /// <summary>Las rutas que deben tener ejemplo (las nuevas de la fase 8 y atender con intervenciones).</summary>
+    /// <summary>Las rutas que deben tener ejemplo (las nuevas de las fases 8 y 9 y atender con intervenciones).</summary>
     public static IReadOnlyCollection<string> Rutas => Ejemplos.Keys;
 
     public void Apply(OpenApiOperation operation, OperationFilterContext context)

@@ -64,8 +64,9 @@ public class HistorialTests
     public async Task El_historial_de_riesgo_trae_puntos_y_faltantes_y_agrupado_el_peor_nivel()
     {
         var (pacienteId, enfermera, _) = await PacienteAsync();
-        await Lectura(fr: 16, spo2: 97, fc: 80, segundos: -60); // NEWS2 0
-        await Lectura(fr: 25, spo2: 91, fc: 95);                // NEWS2 7
+        await Lectura(fr: 16, spo2: 97, fc: 80); // NEWS2 0
+        _e.Reloj.Avanzar(TimeSpan.FromMinutes(6)); // fuera de la mediana de 60 s y de la vigencia de 5 min de la FR
+        await Lectura(fr: 25, spo2: 91, fc: 95); // NEWS2 7
 
         var crudo = (await _e.ObtenerHistorialRiesgo().EjecutarAsync(new(pacienteId, null, null, null, null, enfermera.Id, null))).Valor;
         var agrupado = (await _e.ObtenerHistorialRiesgo().EjecutarAsync(new(pacienteId, null, null, null, "1h", enfermera.Id, null))).Valor;
@@ -128,7 +129,8 @@ public class HistorialTests
     public async Task El_resumen_junta_extremos_alertas_por_tipo_notas_y_proxima_toma()
     {
         var (pacienteId, enfermera, medico) = await PacienteAsync();
-        await Lectura(fr: 16, spo2: 97, fc: 70, temp: 36.1m, segundos: -120);
+        // La lectura normal queda fuera de la mediana de 60 s y de la vigencia de 5 min de la FR (fase 9): la siguiente puntúa sola.
+        await Lectura(fr: 16, spo2: 97, fc: 70, temp: 36.1m, segundos: -400);
         await Lectura(fr: 25, spo2: 91, fc: 95, temp: 36.5m, segundos: -60); // NEWS2 7: alerta alta
         await Lectura(fr: 16, spo2: 97, fc: 80, caida: true);                  // alerta de caída
         await Observar(pacienteId, enfermera.Id, pas: 140, pad: 90);
@@ -323,8 +325,17 @@ public class EsperaTrasAtenderTests
     /// <summary>NEWS2 5 (medio): FR 21 (2), SpO2 93 (2) y FC 95 (1).</summary>
     private Task Media() => Lectura(fr: 21, spo2: 93, fc: 95);
 
-    /// <summary>NEWS2 7 (alto).</summary>
-    private Task Alta() => Lectura(fr: 25, spo2: 91, fc: 95);
+    /// <summary>
+    /// NEWS2 7 (alto), sostenido: con la mediana de 60 s del sensor (fase 9), un cambio puntúa cuando es la mayoría de la
+    /// ventana; tras tres lecturas medias hacen falta cuatro altas.
+    /// </summary>
+    private async Task Alta()
+    {
+        for (var i = 0; i < 4; i++)
+        {
+            await Lectura(fr: 25, spo2: 91, fc: 95);
+        }
+    }
 
     private async Task Lectura(int fr, int spo2, int fc)
     {

@@ -120,6 +120,9 @@ public interface INotificadorTiempoReal
 
     /// <summary>Evento <c>sugerenciasNnn</c> al grupo del servicio (fase 8).</summary>
     Task SugerenciasNnnAsync(Guid servicioId, SugerenciasNnnDto sugerencias, CancellationToken ct = default);
+
+    /// <summary>Evento <c>recordatoriosPlan</c> al grupo del servicio (fase 9): solo ids, camas y cantidades, nunca códigos.</summary>
+    Task RecordatoriosPlanAsync(Guid servicioId, RecordatoriosPlanDto recordatorios, CancellationToken ct = default);
 }
 
 /// <summary>

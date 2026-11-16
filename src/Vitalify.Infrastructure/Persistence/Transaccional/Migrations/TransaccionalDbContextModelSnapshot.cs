@@ -517,6 +517,10 @@ namespace Vitalify.Infrastructure.Persistence.Transaccional.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("confirmado_por");
 
+                    b.Property<bool?>("ConfirmadoSinCambios")
+                        .HasColumnType("boolean")
+                        .HasColumnName("confirmado_sin_cambios");
+
                     b.Property<string>("DiagnosticoCodigo")
                         .IsRequired()
                         .HasMaxLength(5)
@@ -556,6 +560,11 @@ namespace Vitalify.Infrastructure.Persistence.Transaccional.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)")
                         .HasColumnName("regla_origen");
+
+                    b.Property<string>("VersionProtocolo")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("version_protocolo");
 
                     b.Property<string>("VersionReglas")
                         .HasMaxLength(20)
@@ -616,6 +625,12 @@ namespace Vitalify.Infrastructure.Persistence.Transaccional.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("observacion");
+
+                    b.Property<string>("Origen")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("origen");
 
                     b.Property<Guid>("PlanIntervencionId")
                         .HasColumnType("uuid")
@@ -942,6 +957,14 @@ namespace Vitalify.Infrastructure.Persistence.Transaccional.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("resuelta_en");
 
+                    b.Property<Guid?>("UltimaEvaluacionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ultima_evaluacion_id");
+
+                    b.Property<DateTime?>("UltimaVezPropuestaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ultima_vez_propuesta_en");
+
                     b.Property<string>("VersionReglas")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -1073,6 +1096,11 @@ namespace Vitalify.Infrastructure.Persistence.Transaccional.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("editada_en");
 
+                    b.Property<string>("Guardia")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("guardia");
+
                     b.Property<Guid>("HospitalizacionId")
                         .HasColumnType("uuid")
                         .HasColumnName("hospitalizacion_id");
@@ -1115,6 +1143,11 @@ namespace Vitalify.Infrastructure.Persistence.Transaccional.Migrations
                     b.HasIndex("HospitalizacionId", "CreadaEn")
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_nota_clinica_hospitalizacion_id_creada_en");
+
+                    b.HasIndex("HospitalizacionId", "Guardia")
+                        .IsUnique()
+                        .HasDatabaseName("ux_nota_turno")
+                        .HasFilter("tipo = 'ProcesoEnfermeria' AND guardia IS NOT NULL");
 
                     b.ToTable("nota_clinica", "vitalify");
                 });
