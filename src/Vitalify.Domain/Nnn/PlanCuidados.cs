@@ -25,6 +25,28 @@ public enum FrecuenciaIntervencion
     CadaTurno = 2,
     CadaHora = 3,
     SegunNecesidad = 4,
+
+    /// <summary>
+    /// Según el nivel de respuesta NEWS2 vigente (<see cref="ProtocoloNnn"/>): sube al instante si el paciente empeora y
+    /// baja solo con una toma manual completa en el nivel inferior.
+    /// </summary>
+    PorProtocolo = 5,
+}
+
+/// <summary>Cómo se registró una ejecución.</summary>
+public enum OrigenEjecucion
+{
+    /// <summary>La enfermera la marcó.</summary>
+    Manual = 1,
+
+    /// <summary>La registró la toma manual completa de la enfermera (solo la NIC 6680, a su nombre).</summary>
+    TomaManual = 2,
+
+    /// <summary>La enfermera la marcó al atender una alerta.</summary>
+    Alerta = 3,
+
+    /// <summary>La enfermera marcó varias de una vez ("registrar lo hecho").</summary>
+    Lote = 4,
 }
 
 public enum EstadoSugerencia
@@ -77,6 +99,15 @@ public sealed partial class DiagnosticoPlan
     /// <summary>Versión de las reglas del motor vigente al registrarlo.</summary>
     public string? VersionReglas { get; private set; }
 
+    /// <summary>
+    /// Si la enfermera confirmó el paquete propuesto tal cual (fase 9); null si no venía de un paquete. Sirve para medir el
+    /// sesgo de automatización: un "sí" sin revisar no es lo mismo que una decisión.
+    /// </summary>
+    public bool? ConfirmadoSinCambios { get; private set; }
+
+    /// <summary>Versión del protocolo con que se armó el paquete (<see cref="ProtocoloNnn.Version"/>).</summary>
+    public string? VersionProtocolo { get; private set; }
+
     private DiagnosticoPlan()
     {
     }
@@ -86,12 +117,20 @@ public sealed partial class DiagnosticoPlan
     /// <summary>La enfermera confirma un diagnóstico (sugerido o elegido del catálogo): queda Activo.</summary>
     public static DiagnosticoPlan Confirmar(
         Guid hospitalizacionId, Guid pacienteId, string diagnosticoCodigo, OrigenDiagnostico origen, string? reglaOrigen,
-        Guid? alertaId, Guid? evaluacionId, string? versionReglas, Guid enfermeraId, DateTime ahora)
+        Guid? alertaId, Guid? evaluacionId, string? versionReglas, Guid enfermeraId, DateTime ahora, bool? confirmadoSinCambios = null,
+        string? versionProtocolo = null)
     {
         var d = Nuevo(hospitalizacionId, pacienteId, diagnosticoCodigo, origen, reglaOrigen, alertaId, evaluacionId, versionReglas);
+        if (versionProtocolo is { Length: > LargoMaximoVersion })
+        {
+            throw new ExcepcionDeDominio("La versión del protocolo es demasiado larga.");
+        }
+
         d.Estado = EstadoDiagnosticoPlan.Activo;
         d.ConfirmadoPor = enfermeraId;
         d.ConfirmadoEn = ahora;
+        d.ConfirmadoSinCambios = confirmadoSinCambios;
+        d.VersionProtocolo = confirmadoSinCambios is null ? null : versionProtocolo;
         return d;
     }
 
@@ -225,14 +264,20 @@ public sealed class IntervencionPlan
     }
 
     /// <summary>Registra lo que se hizo. La observación es texto clínico: nunca va a los logs.</summary>
-    public EjecucionIntervencion Ejecutar(Guid usuarioId, DateTime ahora, Guid? alertaId, string? observacion)
+    public EjecucionIntervencion Ejecutar(
+        Guid usuarioId, DateTime ahora, Guid? alertaId, string? observacion, OrigenEjecucion origen = OrigenEjecucion.Manual)
     {
         if (!Activa)
         {
             throw new ExcepcionDeDominio("La intervención ya no está activa.");
         }
 
-        var ejecucion = EjecucionIntervencion.Registrar(Id, usuarioId, ahora, alertaId, observacion);
+        if (origen == OrigenEjecucion.TomaManual && IntervencionCodigo != ProtocoloNnn.NicSignosVitales)
+        {
+            throw new ExcepcionDeDominio("La toma manual solo registra la NIC 6680 (monitorización de signos vitales).");
+        }
+
+        var ejecucion = EjecucionIntervencion.Registrar(Id, usuarioId, ahora, alertaId, observacion, origen);
         if (Frecuencia == FrecuenciaIntervencion.UnaVez)
         {
             Activa = false;
@@ -254,12 +299,21 @@ public sealed class EjecucionIntervencion
     public Guid? AlertaId { get; private set; }
     public string? Observacion { get; private set; }
 
+    /// <summary>Cómo se registró (fase 9). Las anteriores quedan como <c>Manual</c>.</summary>
+    public OrigenEjecucion Origen { get; private set; } = OrigenEjecucion.Manual;
+
     private EjecucionIntervencion()
     {
     }
 
-    internal static EjecucionIntervencion Registrar(Guid planIntervencionId, Guid usuarioId, DateTime ahora, Guid? alertaId, string? observacion)
+    internal static EjecucionIntervencion Registrar(
+        Guid planIntervencionId, Guid usuarioId, DateTime ahora, Guid? alertaId, string? observacion, OrigenEjecucion origen = OrigenEjecucion.Manual)
     {
+        if (!Enum.IsDefined(origen))
+        {
+            throw new ExcepcionDeDominio("El origen de la ejecución no es válido.");
+        }
+
         var texto = string.IsNullOrWhiteSpace(observacion) ? null : observacion.Trim();
         if (texto is { Length: > LargoMaximoObservacion })
         {
@@ -274,6 +328,7 @@ public sealed class EjecucionIntervencion
             EjecutadaEn = ahora,
             AlertaId = alertaId,
             Observacion = texto,
+            Origen = origen,
         };
     }
 }
@@ -397,6 +452,19 @@ public sealed class SugerenciaEmitida
     public DateTime? ResueltaEn { get; private set; }
     public Guid? PlanDiagnosticoId { get; private set; }
 
+    /// <summary>La última vez que el motor la propuso (fase 9): mientras no pasen <see cref="Histeresis"/> sin proponerla, no expira.</summary>
+    public DateTime? UltimaVezPropuestaEn { get; private set; }
+
+    /// <summary>La evaluación de esa última vez: con ella se vuelve a mostrar mientras dura la histéresis.</summary>
+    public Guid? UltimaEvaluacionId { get; private set; }
+
+    /// <summary>
+    /// Una sugerencia que el motor dejó de proponer no expira enseguida: espera 30 min continuos sin el criterio (como
+    /// <c>Alertas__MinutosEsperaTrasAtender</c>), salvo que una toma manual lo descarte. Expirar con una sola lectura
+    /// inflaba "emitidas" y "expiradas" y sesgaba la tasa de aceptación (Fable, CE).
+    /// </summary>
+    public static readonly TimeSpan Histeresis = TimeSpan.FromMinutes(30);
+
     private SugerenciaEmitida()
     {
     }
@@ -417,8 +485,21 @@ public sealed class SugerenciaEmitida
             AlertaId = sugerencia.AlertaId,
             EmitidaEn = ahora,
             Estado = EstadoSugerencia.Pendiente,
+            UltimaVezPropuestaEn = ahora,
+            UltimaEvaluacionId = sugerencia.EvaluacionId,
         };
     }
+
+    /// <summary>El motor la volvió a proponer: se corre la histéresis.</summary>
+    public void SeguirPropuesta(Guid? evaluacionId, DateTime ahora)
+    {
+        UltimaVezPropuestaEn = ahora;
+        UltimaEvaluacionId = evaluacionId ?? UltimaEvaluacionId;
+    }
+
+    /// <summary>¿Expira ahora que el motor no la propone? Tras la histéresis, o enseguida si una toma manual la descartó.</summary>
+    public bool DebeExpirar(DateTime ahora, bool descartadaPorTomaManual) =>
+        EstaPendiente && (descartadaPorTomaManual || ahora - (UltimaVezPropuestaEn ?? EmitidaEn) >= Histeresis);
 
     public bool EstaPendiente => Estado == EstadoSugerencia.Pendiente;
 
