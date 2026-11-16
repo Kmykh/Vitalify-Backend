@@ -105,6 +105,9 @@ public sealed class NotificadorSignalR(IHubContext<HubMonitoreo> hub, Conexiones
     public Task SugerenciasNnnAsync(Guid servicioId, SugerenciasNnnDto sugerencias, CancellationToken ct = default) =>
         EnviarAsync(GruposMonitoreo.Servicio(servicioId), "sugerenciasNnn", sugerencias, ct);
 
+    public Task RecordatoriosPlanAsync(Guid servicioId, RecordatoriosPlanDto recordatorios, CancellationToken ct = default) =>
+        EnviarAsync(GruposMonitoreo.Servicio(servicioId), "recordatoriosPlan", recordatorios, ct);
+
     private async Task EnviarAsync(string grupo, string evento, object datos, CancellationToken ct)
     {
         try
