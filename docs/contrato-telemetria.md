@@ -72,10 +72,12 @@ Con QoS 1, **el mismo mensaje puede llegar dos veces**: por ejemplo, si el PUBAC
 | `bateria` | número | no | % | Batería del wearable (0 a 100) |
 
 - **Todas las variables son opcionales**, porque cada sensor puede fallar por separado: si el sensor de temperatura no mide, se omite `temp`. Un campo con `null` es lo mismo que un campo ausente.
-- **Lo que envía el wearable de Vitalify:** `fc` (del ECG si los electrodos dan un ritmo confiable; si no, del PPG), `spo2`, `temp`, `fr` y `caida`.
+- **Lo que envía el wearable de Vitalify:** `fc` (del ECG si los electrodos dan un ritmo confiable; si no, del PPG), `spo2`, `temp`, `fr`, `caida` y, desde el firmware 2.2, `bateria`.
   - **La frecuencia respiratoria la mide el wearable** y llega en `fr`. La enfermera solo la cuenta a mano si el sensor no tiene una vigente.
+  - Desde el firmware 2.4, `fr` es la combinación de la del MPU6050 (inclinación del tórax) con la del pulso (arritmia sinusal respiratoria, amplitud del latido y línea de base del PPG; `fr_cardiaca.h` del firmware). Si coinciden (±4 rpm) se promedian, con doble peso al MPU; si el MPU no tiene FR (el paciente se mueve), cubre la del pulso. Para el backend sigue siendo una sola `fr`, del sensor.
   - Sin dedo no van `fc` ni `spo2`, salvo que la FC venga del ECG; sin sonda no va `temp`; sin paciente conectado no se envía nada.
-  - **No mide `pas`, `pad` ni `bateria`.** La presión, el nivel de conciencia y el oxígeno suplementario los registra la enfermera con el asistente de toma manual (ver `docs/motor-clinico.md`).
+  - **`bateria`** (0–100 %) va solo si el wearable tiene el divisor de la batería en el pin VP (`bateria.h` del firmware); sin él se omite. No es un signo: sola no hace una lectura.
+  - **No mide `pas` ni `pad`.** La presión, el nivel de conciencia y el oxígeno suplementario los registra la enfermera con el asistente de toma manual (ver `docs/motor-clinico.md`).
   - **Solo envía mientras está `vinculado`** (ver [Comandos al wearable](#comandos-al-wearable)).
   - `seq` vuelve a 0 cuando el ESP32 se reinicia.
 
@@ -84,6 +86,7 @@ Ejemplos reales, generados por `construirJsonTelemetria` del firmware:
 ```json
 {"dispositivo":"ESP32-001","ts":"2026-09-30T14:05:10.250Z","seq":18234,"fc":82,"spo2":97,"temp":36.8,"caida":false}
 {"dispositivo":"ESP32-001","ts":"2026-09-30T14:05:10.250Z","seq":5,"temp":-0.5,"caida":true}
+{"dispositivo":"ESP32-001","ts":"2026-09-30T14:05:10.250Z","seq":18234,"fc":82,"fr":16,"spo2":97,"temp":36.8,"caida":false,"bateria":87}
 ```
 
 `ContratoFirmwareTests` (backend) prueba que esos mismos JSON se interpretan sin errores. `IotMqttTests` los publica en un Mosquitto real y verifica que se registren.
