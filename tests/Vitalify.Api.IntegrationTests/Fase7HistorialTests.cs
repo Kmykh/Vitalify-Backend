@@ -18,7 +18,7 @@ public class Fase7HistorialTests(FabricaVitalify fabrica) : PruebaApi(fabrica)
     private long _seq;
 
     /// <summary>Una lectura que llega en tiempo real hace <paramref name="hace"/> (el riesgo se evalúa con la hora de la API).</summary>
-    private async Task EnviarHaceAsync(HttpClient administrador, string sensor, TimeSpan hace, int fc, int fr, int spo2, bool caida = false)
+    private async Task EnviarHaceAsync(HttpClient administrador, string sensor, TimeSpan hace, int fc, int? fr, int spo2, bool caida = false)
     {
         using (Fabrica.Reloj.Adelantar(-hace))
         {
@@ -70,8 +70,9 @@ public class Fase7HistorialTests(FabricaVitalify fabrica) : PruebaApi(fabrica)
         var administrador = await ClienteAdministradorAsync();
         var ahora = Fabrica.Reloj.AhoraUtc;
         var inicio = new DateTime(ahora.AddHours(-2).Ticks - (ahora.AddHours(-2).Ticks % TimeSpan.FromMinutes(5).Ticks), DateTimeKind.Utc);
-        await EnviarHaceAsync(administrador, sensor.Codigo, ahora - inicio.AddMinutes(1), fc: 70, fr: 16, spo2: 97);
-        await EnviarHaceAsync(administrador, sensor.Codigo, ahora - inicio.AddMinutes(2), fc: 80, fr: 18, spo2: 95); // NEWS2 1 (SpO2 94–95)
+        // Sin FR (paciente en movimiento): la FR del sensor vale 5 min y se puntúa la mediana de sus 3 últimos valores (fase 9).
+        await EnviarHaceAsync(administrador, sensor.Codigo, ahora - inicio.AddMinutes(1), fc: 70, fr: null, spo2: 97);
+        await EnviarHaceAsync(administrador, sensor.Codigo, ahora - inicio.AddMinutes(2), fc: 80, fr: null, spo2: 95); // NEWS2 1 (SpO2 94–95)
         await EnviarHaceAsync(administrador, sensor.Codigo, ahora - inicio.AddMinutes(6), fc: 95, fr: 25, spo2: 91, caida: true); // NEWS2 7
         await EnviarHaceAsync(administrador, sensor.Codigo, ahora - inicio.AddMinutes(20), fc: 100, fr: 16, spo2: 97);
         var rango = $"desde={Ts(inicio)}&hasta={Ts(inicio.AddMinutes(10))}";

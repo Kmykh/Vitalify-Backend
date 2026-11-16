@@ -143,8 +143,12 @@ public class Fase6TurnosTests(FabricaVitalify fabrica) : PruebaApi(fabrica)
         }
 
         await enfermera.PostAsJsonAsync($"/api/v1/pacientes/{estable.Id}/observaciones", new { fr = 16, pas = 120, pad = 80, conciencia = "Alerta", oxigenoSuplementario = false });
-        await administrador.RegistrarTelemetriaAsync(new { dispositivo = sensor.Codigo, ts = Ts(Fabrica.Reloj.AhoraUtc.AddSeconds(-30)), seq = 1, fr = 22, spo2 = 93, fc = 95 });
-        await administrador.RegistrarTelemetriaAsync(new { dispositivo = sensor.Codigo, ts = Ts(Fabrica.Reloj.AhoraUtc), seq = 2, fr = 25, spo2 = 91, fc = 95 });
+        // NEWS2 5 y después 7 sostenido: el motor puntúa la mediana de 60 s del sensor (fase 9).
+        await administrador.RegistrarTelemetriaAsync(new { dispositivo = sensor.Codigo, ts = Ts(Fabrica.Reloj.AhoraUtc.AddSeconds(-65)), seq = 1, fr = 22, spo2 = 93, fc = 95 });
+        for (var i = 3; i >= 0; i--)
+        {
+            await administrador.RegistrarTelemetriaAsync(new { dispositivo = sensor.Codigo, ts = Ts(Fabrica.Reloj.AhoraUtc.AddSeconds(-10 * i)), seq = 5 - i, fr = 25, spo2 = 91, fc = 95 });
+        }
         await enfermera.PostAsJsonAsync($"/api/v1/pacientes/{grave.Id}/observaciones", new { preocupacionClinica = true });
 
         var entrega = (await enfermera.GetFromJsonAsync<EntregaTurnoDto>($"/api/v1/servicios/{servicio.Id}/entrega-turno"))!;

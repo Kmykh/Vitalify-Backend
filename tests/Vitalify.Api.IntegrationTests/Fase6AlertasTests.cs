@@ -58,11 +58,26 @@ public class Fase6AlertasTests(FabricaVitalify fabrica) : PruebaApi(fabrica)
             dispositivo = sala.Sensor.Codigo, ts = Ts(Fabrica.Reloj.AhoraUtc), seq = 1, fr, spo2, fc, temp, caida,
         });
 
-    /// <summary>NEWS2 7 con el sensor: FR 25 (3) + SpO2 91 (3) + FC 95 (1).</summary>
-    private Task<Application.Telemetria.ResultadoIngesta> News2SieteAsync(Sala sala) => EnviarAsync(sala, fr: 25, spo2: 91, fc: 95);
+    /// <summary>
+    /// Varias lecturas iguales: el motor puntúa la mediana de 60 s del sensor (fase 9), así que un cambio cuenta cuando es la
+    /// mayoría de la ventana, como en un paciente real (un valor suelto por movimiento no abre ni sube alertas).
+    /// </summary>
+    private async Task<Application.Telemetria.ResultadoIngesta> SostenidoAsync(Sala sala, int fr, int spo2, int fc)
+    {
+        Application.Telemetria.ResultadoIngesta? ultimo = null;
+        for (var i = 0; i < 4; i++)
+        {
+            ultimo = await EnviarAsync(sala, fr, spo2, fc);
+        }
 
-    /// <summary>NEWS2 5 con el sensor: FR 22 (2) + SpO2 93 (2) + FC 95 (1).</summary>
-    private Task<Application.Telemetria.ResultadoIngesta> News2CincoAsync(Sala sala) => EnviarAsync(sala, fr: 22, spo2: 93, fc: 95);
+        return ultimo!;
+    }
+
+    /// <summary>NEWS2 7 con el sensor, sostenido: FR 25 (3) + SpO2 91 (3) + FC 95 (1).</summary>
+    private Task<Application.Telemetria.ResultadoIngesta> News2SieteAsync(Sala sala) => SostenidoAsync(sala, fr: 25, spo2: 91, fc: 95);
+
+    /// <summary>NEWS2 5 con el sensor, sostenido: FR 22 (2) + SpO2 93 (2) + FC 95 (1).</summary>
+    private Task<Application.Telemetria.ResultadoIngesta> News2CincoAsync(Sala sala) => SostenidoAsync(sala, fr: 22, spo2: 93, fc: 95);
 
     private Task<AlertaClinica> AlertaAsync(Sala sala, TipoAlerta tipo) =>
         Fabrica.ConsultarAsync(db => db.Alertas.AsNoTracking().SingleAsync(a => a.HospitalizacionId == sala.Paciente.HospitalizacionActiva!.Id && a.Tipo == tipo));
@@ -105,7 +120,10 @@ public class Fase6AlertasTests(FabricaVitalify fabrica) : PruebaApi(fabrica)
         Assert.Equal((PrioridadAlerta.Media, "medio"), (media.Prioridad, media.NivelRiesgo));
 
         await EnviarAsync(sala, fr: 22, spo2: 93, fc: 96); // mismo nivel: valores nuevos, sin notificar
-        await News2SieteAsync(sala);
+        using (Fabrica.Reloj.Adelantar(TimeSpan.FromSeconds(70))) // el deterioro de un minuto después (mediana de 60 s del sensor)
+        {
+            await News2SieteAsync(sala);
+        }
 
         var alta = await AlertaAsync(sala, TipoAlerta.Riesgo);
         Assert.Equal(media.Id, alta.Id);
@@ -285,7 +303,7 @@ public class Fase6AlertasTests(FabricaVitalify fabrica) : PruebaApi(fabrica)
 
         Assert.Single(await AlertasDeRiesgoAsync(sala));
 
-        using (Fabrica.Reloj.Adelantar(TimeSpan.FromSeconds(20)))
+        using (Fabrica.Reloj.Adelantar(TimeSpan.FromSeconds(80))) // fuera de la mediana de 60 s de las lecturas anteriores
         {
             await News2SieteAsync(sala);
         }

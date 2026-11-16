@@ -51,6 +51,12 @@ public sealed class TiempoRealRegistrado : INotificadorTiempoReal
         return Interno!.SugerenciasNnnAsync(servicioId, sugerencias, ct);
     }
 
+    public Task RecordatoriosPlanAsync(Guid servicioId, RecordatoriosPlanDto recordatorios, CancellationToken ct = default)
+    {
+        Registrar("recordatoriosPlan", recordatorios);
+        return Interno!.RecordatoriosPlanAsync(servicioId, recordatorios, ct);
+    }
+
     private void Registrar(string evento, object datos) => _eventos.Enqueue(new EventoTiempoReal(evento, JsonSerializer.Serialize(datos, datos.GetType(), Web)));
 }
 

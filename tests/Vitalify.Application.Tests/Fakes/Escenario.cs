@@ -165,13 +165,13 @@ public sealed class Escenario
 
     public ObtenerHistorialSignos ObtenerHistorialSignos() => new(Episodios(), Historial, AuditoriaHistorial(), Reloj);
 
-    public EvaluadorRiesgo Evaluador() => new(Historial, Historial, Historial, OpcionesTelemetria.PorDefecto, Clinicas, Reloj);
+    public EvaluadorRiesgo Evaluador() => new(Historial, Historial, Historial, Historial, OpcionesTelemetria.PorDefecto, Clinicas, Reloj);
 
     public PresentadorRiesgo PresentadorRiesgo() => new(Historial);
 
     public ServicioObservaciones ServicioObservaciones() =>
         new(Historial, Evaluador(), Historial, PresentadorRiesgo(), PublicadorRiesgo(), ServicioAlertas(), Bitacora, Clinicas,
-            Domain.Telemetria.RangosFisiologicos.PorDefecto);
+            Domain.Telemetria.RangosFisiologicos.PorDefecto, []);
 
     public RegistrarObservacion RegistrarObservacion() =>
         new(new TomaManualValidador(Domain.Telemetria.RangosFisiologicos.PorDefecto, Clinicas, Reloj),
