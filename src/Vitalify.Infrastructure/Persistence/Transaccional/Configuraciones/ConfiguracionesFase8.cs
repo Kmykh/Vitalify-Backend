@@ -94,6 +94,7 @@ internal sealed class ConfiguracionDiagnosticoPlan : IEntityTypeConfiguration<Di
         builder.Property(d => d.Estado).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(d => d.MotivoCierre).HasMaxLength(DiagnosticoPlan.LargoMaximoMotivo);
         builder.Property(d => d.VersionReglas).HasMaxLength(DiagnosticoPlan.LargoMaximoVersion);
+        builder.Property(d => d.VersionProtocolo).HasMaxLength(DiagnosticoPlan.LargoMaximoVersion);
 
         builder.HasIndex(d => new { d.HospitalizacionId, d.DiagnosticoCodigo })
             .IsUnique().HasFilter("estado = 'Activo'").HasDatabaseName(IndiceActivo);
@@ -141,6 +142,7 @@ internal sealed class ConfiguracionEjecucionIntervencion : IEntityTypeConfigurat
         builder.HasKey(e => e.Id);
         builder.Property(e => e.Id).ValueGeneratedNever();
         builder.Property(e => e.Observacion).HasMaxLength(EjecucionIntervencion.LargoMaximoObservacion);
+        builder.Property(e => e.Origen).HasConversion<string>().HasMaxLength(20).IsRequired();
 
         builder.HasIndex(e => new { e.PlanIntervencionId, e.EjecutadaEn });
         builder.HasIndex(e => e.AlertaId);

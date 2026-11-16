@@ -52,6 +52,21 @@ namespace Vitalify.Infrastructure.Persistence.Historial.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("fr");
 
+                    b.Property<string>("FuenteFr")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("fuente_fr");
+
+                    b.Property<string>("FuentePas")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("fuente_pas");
+
+                    b.Property<string>("FuenteTemperatura")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("fuente_temperatura");
+
                     b.Property<Guid>("HospitalizacionId")
                         .HasColumnType("uuid")
                         .HasColumnName("hospitalizacion_id");

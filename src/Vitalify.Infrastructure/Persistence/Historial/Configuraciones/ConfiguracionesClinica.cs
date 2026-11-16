@@ -44,6 +44,9 @@ internal sealed class ConfiguracionEvaluacionRiesgo : IEntityTypeConfiguration<E
         builder.Property(e => e.Temperatura).HasPrecision(4, 1);
         builder.Property(e => e.Conciencia).HasConversion<string>().HasMaxLength(20);
         builder.Property(e => e.EscalaSpo2).HasConversion<string>().HasMaxLength(10).IsRequired();
+        builder.Property(e => e.FuenteFr).HasConversion<string>().HasMaxLength(10);
+        builder.Property(e => e.FuentePas).HasConversion<string>().HasMaxLength(10);
+        builder.Property(e => e.FuenteTemperatura).HasConversion<string>().HasMaxLength(10);
         builder.Property(e => e.News2Nivel).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(e => e.MewsNivel).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Ignore(e => e.Parametros);

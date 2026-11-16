@@ -9,6 +9,9 @@ namespace Vitalify.Infrastructure.Persistence.Transaccional.Configuraciones;
 
 internal sealed class ConfiguracionNotaClinica : IEntityTypeConfiguration<NotaClinica>
 {
+    /// <summary>Una nota del PAE por hospitalización y guardia (fase 9).</summary>
+    public const string IndiceTurno = "ux_nota_turno";
+
     public void Configure(EntityTypeBuilder<NotaClinica> builder)
     {
         builder.ToTable("nota_clinica");
@@ -22,6 +25,11 @@ internal sealed class ConfiguracionNotaClinica : IEntityTypeConfiguration<NotaCl
 
         builder.HasIndex(n => new { n.HospitalizacionId, n.CreadaEn }).IsDescending(false, true);
         builder.HasIndex(n => n.PacienteId);
+
+        // Fase 9: la nota del PAE del turno lleva su guardia y hay una por hospitalización y guardia.
+        builder.Property(n => n.Guardia).HasMaxLength(NotaClinica.LargoMaximoGuardia);
+        builder.HasIndex(n => new { n.HospitalizacionId, n.Guardia })
+            .IsUnique().HasFilter("tipo = 'ProcesoEnfermeria' AND guardia IS NOT NULL").HasDatabaseName(IndiceTurno);
 
         // Nada clínico se borra en cascada.
         builder.HasOne<Hospitalizacion>().WithMany().HasForeignKey(n => n.HospitalizacionId).OnDelete(DeleteBehavior.Restrict);
