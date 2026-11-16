@@ -263,7 +263,7 @@ public sealed class AtenderAlerta(
             // Fase 8: lo que se hizo por la alerta queda como ejecución de las intervenciones NIC del plan.
             var preparadas = await ejecuciones.PrepararAsync(
                 comando.IntervencionesEjecutadas!, alerta.HospitalizacionId, alerta.Id, null, comando.UsuarioId, comando.Ip, ahora,
-                "intervencionesEjecutadas", ct);
+                "intervencionesEjecutadas", Domain.Nnn.OrigenEjecucion.Alerta, ct);
             if (!preparadas.EsExito)
             {
                 return preparadas.Error;

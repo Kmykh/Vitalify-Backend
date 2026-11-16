@@ -29,6 +29,18 @@ public sealed class PresentadorRiesgo(IRepositorioObservaciones observaciones)
     }
 }
 
+/// <summary>Se guardó una toma manual. <see cref="Completa"/>: trae la presión y la conciencia (lo que solo mide la enfermera).</summary>
+public sealed record ObservacionRegistrada(Guid ObservacionId, Guid HospitalizacionId, Guid PacienteId, Guid RegistradaPor, DateTime ObservadaEn, bool Completa);
+
+/// <summary>
+/// Punto de extensión después de guardar una toma manual (como <c>IManejadorLecturaRegistrada</c> para el wearable). Un
+/// fallo de un manejador queda en la bitácora y no corta el registro de la toma.
+/// </summary>
+public interface IManejadorObservacionRegistrada
+{
+    Task ManejarAsync(ObservacionRegistrada evento, CancellationToken ct = default);
+}
+
 /// <summary>
 /// Guarda una toma manual y recalcula el riesgo en el historial. Lo comparten <see cref="RegistrarObservacion"/> y la
 /// confirmación de la vinculación por QR (observación inicial), para no duplicar las reglas.
@@ -42,7 +54,8 @@ public sealed class ServicioObservaciones(
     ServicioAlertas alertas,
     IBitacoraFallos bitacora,
     OpcionesClinicas opciones,
-    RangosFisiologicos rangos)
+    RangosFisiologicos rangos,
+    IEnumerable<IManejadorObservacionRegistrada> manejadores)
 {
     /// <summary>Construye la observación en el dominio (lanza <c>ExcepcionDeDominio</c> si es inválida). No guarda.</summary>
     public ObservacionEnfermeria Construir(Hospitalizacion hospitalizacion, TomaManualComando toma, Guid usuarioId, DateTime ahora)
@@ -71,6 +84,22 @@ public sealed class ServicioObservaciones(
 
         await publicador.PublicarAsync(evaluacion, ct: ct);
         await AlertasDeLaTomaAsync(hospitalizacion, observacion, ct);
+
+        var evento = new ObservacionRegistrada(
+            observacion.Id, hospitalizacion.Id, hospitalizacion.PacienteId, observacion.RegistradaPor, observacion.ObservadaEn,
+            observacion.Pas is not null && observacion.Conciencia is not null);
+        foreach (var manejador in manejadores)
+        {
+            try
+            {
+                await manejador.ManejarAsync(evento, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                bitacora.Registrar($"Manejador {manejador.GetType().Name} de la observación {observacion.Id}", ex);
+            }
+        }
+
         return await presentador.PresentarAsync(evaluacion, ct);
     }
 

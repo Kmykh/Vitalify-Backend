@@ -181,6 +181,23 @@ public static class DependencyInjection
         services.AddScoped<ObtenerPlanCuidados>();
         services.AddScoped<ObtenerIndicadoresNnn>();
 
+        // Fase 9: automatización asistida del PAE (paquete en un toque, agenda y recordatorios, 6680 desde la toma manual,
+        // valoración del turno en lote, propuesta de cierre y nota del turno).
+        services.AddScoped<ServicioPaquetesNnn>();
+        services.AddScoped<ServicioAgendaPlan>();
+        services.AddScoped<ServicioResolucionPlan>();
+        services.AddScoped<ConfirmarPaqueteSugerido>();
+        services.AddScoped<IManejadorObservacionRegistrada, EjecucionSignosAlRegistrarToma>();
+        services.AddScoped<ObtenerValoracionTurno>();
+        services.AddSingleton<IValidator<RegistrarValoracionTurnoComando>, RegistrarValoracionTurnoValidador>();
+        services.AddScoped<RegistrarValoracionTurno>();
+        services.AddScoped<ObtenerPanelTurno>();
+        services.AddSingleton<EstadoRecordatoriosPlan>();
+        services.AddScoped<VigilarPlanCuidados>();
+        services.AddScoped<ObtenerBorradorNotaTurno>();
+        services.AddSingleton<IValidator<FirmarNotaTurnoComando>, FirmarNotaTurnoValidador>();
+        services.AddScoped<FirmarNotaTurno>();
+
         return services;
     }
 }

@@ -54,4 +54,10 @@ public interface IRepositorioNotas
     void Agregar(NotaClinica nota);
 
     void AgregarVersion(NotaClinicaVersion version);
+
+    /// <summary>La nota del PAE de esa hospitalización y guardia (fase 9), si ya se firmó.</summary>
+    Task<NotaClinica?> ObtenerDeTurnoAsync(Guid hospitalizacionId, string guardia, CancellationToken ct = default);
+
+    /// <summary>Las guardias con nota del PAE firmada en el rango (para los indicadores de la tesis).</summary>
+    Task<IReadOnlyList<(Guid HospitalizacionId, string Guardia)>> ListarGuardiasConNotaTurnoAsync(DateTime desde, DateTime hasta, CancellationToken ct = default);
 }
