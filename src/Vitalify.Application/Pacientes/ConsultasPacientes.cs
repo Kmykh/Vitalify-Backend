@@ -84,7 +84,8 @@ public sealed class ListarPacientesMonitoreados(
                     ConexionSensor: RegistrarPresenciaDispositivo.Texto(presencia.Obtener(l.CodigoDispositivo!)),
                     AlertasAbiertas: abierta is { } a
                         ? new AlertasAbiertasDto(a.Cantidad, Alertas.TextosAlerta.De(a.Maxima))
-                        : new AlertasAbiertasDto(0, null));
+                        : new AlertasAbiertasDto(0, null),
+                    MotivoPrincipal: evaluacion is null ? null : MotivoPuntajeDto.Desde(Domain.Clinica.MotivoPuntaje.De(evaluacion)));
                 return (Fila: fila, Nivel: evaluacion is null ? 0 : (int)evaluacion.News2Nivel, Alerta: abierta is { } x ? (int)x.Maxima : 0);
             })
             // HU18: de mayor a menor riesgo. Primero el nivel NEWS2 (un "bajo-medio" va antes que un "bajo" con más

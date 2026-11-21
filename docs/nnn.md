@@ -240,7 +240,7 @@ Trae el nombre del paciente, como la entrega de turno: es REST y solo para el pe
 | `GET /api/v1/nnn/catalogo?tipo=nanda\|nic\|noc&q=` | Administrador y personal clínico | Busca por código o etiqueta, sin tildes; hasta 50 resultados |
 | `GET /api/v1/nnn/diagnosticos/{codigo}/vinculos` | Administrador y personal clínico | NIC y NOC sugeridos, con los indicadores de cada NOC |
 | `PUT /api/v1/nnn/catalogo/{tipo}/{codigo}/verificacion` | Administrador | Marca la entrada como verificada |
-| `GET /api/v1/pacientes/{id}/nnn/sugerencias` | Personal clínico | Sugerencias actuales, con el motivo y la versión de las reglas |
+| `GET /api/v1/pacientes/{id}/nnn/sugerencias` | Personal clínico | Sugerencias actuales, con el motivo técnico, la `explicacion` en lenguaje de piso (`ExplicacionesNnn`: el signo, su valor y el rango normal, sin códigos) y la versión de las reglas |
 | `GET /api/v1/alertas/{id}/sugerencias-nnn` | Personal clínico | Sugerencias de la evaluación que abrió la alerta |
 | `GET /api/v1/pacientes/{id}/plan-cuidados?hospitalizacionId=` | Personal clínico | Plan completo, con la serie de valoraciones para graficar |
 | `POST /api/v1/pacientes/{id}/plan-cuidados/diagnosticos` | Enfermera | Confirma un diagnóstico con sus NIC y NOC |

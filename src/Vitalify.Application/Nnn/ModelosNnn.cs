@@ -41,10 +41,12 @@ public sealed record CodigoEtiquetaDto(string Codigo, string Etiqueta, bool Veri
 /// <param name="ConfirmarCon">Los signos a tomar a mano (<c>fr</c>, <c>spo2</c>, <c>temperatura</c>, <c>pas</c>, <c>fc</c>…).</param>
 /// <param name="Retenida">El criterio ya no se cumple, pero sigue pendiente 30 min (histéresis) antes de expirar.</param>
 /// <param name="Paquete">Lo que se planifica si la enfermera la confirma con un toque (fase 9).</param>
+/// <param name="Explicacion">El motivo en lenguaje de piso: el signo, su valor y el rango normal (sin códigos ni "puntos NEWS2").</param>
 public sealed record SugerenciaNnnDto(
     CodigoEtiquetaDto Diagnostico, IReadOnlyList<CodigoEtiquetaDto> Intervenciones, IReadOnlyList<CodigoEtiquetaDto> Resultados,
     string Regla, IReadOnlyList<string> Reglas, string Motivo, string Prioridad, Guid? EvaluacionId, Guid? AlertaId,
-    bool PorConfirmar = false, IReadOnlyList<string>? ConfirmarCon = null, bool Retenida = false, PaqueteNnnDto? Paquete = null);
+    bool PorConfirmar = false, IReadOnlyList<string>? ConfirmarCon = null, bool Retenida = false, PaqueteNnnDto? Paquete = null,
+    string? Explicacion = null);
 
 /// <param name="Frecuencia"><c>UnaVez</c>, <c>CadaTurno</c>, <c>CadaHora</c>, <c>SegunNecesidad</c> o <c>PorProtocolo</c>.</param>
 public sealed record PaqueteIntervencionDto(string Codigo, string Etiqueta, bool Verificado, string Frecuencia);
@@ -228,7 +230,7 @@ public sealed class PresentadorPlanCuidados(IRepositorioCatalogoNnn catalogo, Di
             s.Intervenciones.Select(i => Codigo(c, TaxonomiaNnn.Nic, i)).ToList(),
             s.Resultados.Select(r => Codigo(c, TaxonomiaNnn.Noc, r)).ToList(),
             s.Regla, s.Reglas, s.Motivo, TextosNnn.De(s.Prioridad), s.EvaluacionId, s.AlertaId,
-            s.PorConfirmar, s.ConfirmarCon?.Select(TextosNnn.De).ToList(), s.Retenida, paquete);
+            s.PorConfirmar, s.ConfirmarCon?.Select(TextosNnn.De).ToList(), s.Retenida, paquete, s.Explicacion);
 
     public Task<IReadOnlyList<DiagnosticoPlanDto>> PresentarAsync(PlanCuidadosLectura plan, CancellationToken ct = default) =>
         PresentarAsync(plan, ExtrasPlan.Ninguno, ct);

@@ -26,7 +26,7 @@ ESP32  <──QoS 1──  Mosquitto  <──QoS 1──  backend (misma conexi�
 | Tópico de solicitudes | `device/{codigo}/solicitudes`: el wearable pide un QR nuevo con `{"accion":"solicitar-qr"}` |
 | QoS | **1** (al menos una vez), en el wearable y en el backend |
 | Formato | JSON en UTF-8 |
-| Frecuencia | Una lectura cada 10 s, y otra al instante si se confirma una caída |
+| Frecuencia | Una lectura por segundo (desde el 2026-11-21, para ver los signos en vivo en la app; antes, cada 10 s), y otra al instante si se confirma una caída. Sin red, el búfer del wearable guarda una cada 10 s y todas las caídas |
 | Búfer del wearable | Hasta 360 lecturas (1 h) sin red ni broker; se envían en orden al volver |
 
 **Backend (`src/Vitalify.Api/Entrada/Mqtt/ReceptorMqtt.cs`):**
@@ -188,7 +188,7 @@ El backend le habla al wearable por `device/{codigo}/comandos`, con QoS 1 y JSON
    |---|---|---|---|
    | `esperando-qr` (al arrancar) | `mostrar-qr` o `desvinculado` | El QR y "Escanee para vincular" | **No envía** |
    | `emparejando` | `emparejando` | "Emparejando…" y cuánto le queda a la app | No envía |
-   | `vinculado` | `vinculado` | Cama e iniciales (por ejemplo, `MED-B-01 · R.M.`) | Envía cada 10 s y al instante si hay una caída |
+   | `vinculado` | `vinculado` | Cama e iniciales (por ejemplo, `MED-B-01 · R.M.`) | Envía una lectura por segundo y al instante si hay una caída |
 
    Un `mostrar-qr` o un `desvinculado` también hace volver a `esperando-qr` desde cualquier estado.
 3. **Dibujar el QR** a partir del texto de `qr`. El firmware (`tesis/vinculacion.cpp` y `tesis/pantallas.cpp`) lo hace así:

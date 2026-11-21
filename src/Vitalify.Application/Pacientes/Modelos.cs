@@ -73,7 +73,18 @@ public sealed record PacienteHospitalizadoDto(
 public sealed record PacienteMonitoreadoDto(
     Guid PacienteId, string NombreCompleto, int Edad, string Cama, string Servicio, string CodigoDispositivo,
     DateTime IngresoEn, int? UltimoNews2, int? UltimoMews, string NivelRiesgo, bool? EvaluacionCompleta,
-    DateTime? UltimaLecturaEn, string Senal, string ConexionSensor, AlertasAbiertasDto AlertasAbiertas);
+    DateTime? UltimaLecturaEn, string Senal, string ConexionSensor, AlertasAbiertasDto AlertasAbiertas,
+    MotivoPuntajeDto? MotivoPrincipal = null);
+
+/// <summary>
+/// El parámetro que más sube el NEWS2 ("fr", 3, "26 rpm"), para la lista y las alertas. Null si ninguno suma puntos.
+/// </summary>
+/// <param name="Parametro"><c>fr</c>, <c>spo2</c>, <c>oxigenoSuplementario</c>, <c>pas</c>, <c>fc</c>, <c>conciencia</c> o <c>temperatura</c>.</param>
+public sealed record MotivoPuntajeDto(string Parametro, int Puntos, string Valor)
+{
+    public static MotivoPuntajeDto? Desde(Domain.Clinica.MotivoPuntaje? m) =>
+        m is null ? null : new(Clinica.TextosClinicos.De(m.Parametro), m.Puntos, m.Valor);
+}
 
 public sealed record AlertasAbiertasDto(int Cantidad, string? PrioridadMaxima);
 

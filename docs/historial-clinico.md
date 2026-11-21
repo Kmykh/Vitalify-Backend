@@ -120,7 +120,7 @@ Algunas aclaraciones:
 
 ## Retención del historial
 
-El plan gratuito de Supabase tiene 500 MB, y un wearable manda 8640 lecturas al día. Por eso `RetencionHistorialWorker` corre **una vez al día a las 03:00 de Lima** (`Historial__HoraRetencion`, en la zona de `Turnos__ZonaHoraria`) y llama a `ResumirLecturasAntiguas`:
+El plan gratuito de Supabase tiene 500 MB, y un wearable manda 86 400 lecturas al día (una por segundo: unos 20 MB diarios por paciente; vigila `GET /sistema/almacenamiento`). Por eso `RetencionHistorialWorker` corre **una vez al día a las 03:00 de Lima** (`Historial__HoraRetencion`, en la zona de `Turnos__ZonaHoraria`) y llama a `ResumirLecturasAntiguas`:
 
 - **Qué resume:** las lecturas crudas de cada episodio **finalizado** cuyo egreso tiene más de `Historial__DiasRetencionCrudo` días (30). Pasan a `vitalify_historial.lectura_signos_resumen`: un grupo cada 5 min, con promedio, mínimo, máximo y cantidad de mediciones por variable, la cantidad de lecturas y si hubo una caída.
 - **Qué nunca toca:** una hospitalización activa, ni un episodio egresado hace menos de 30 días. Por eso ninguna lectura de menos de 30 días se toca. Se resume el episodio completo de una vez: nunca queda mitad crudo y mitad resumido.
