@@ -119,12 +119,12 @@ public sealed class AlertasAlRegistrarLectura(ServicioAlertas alertas) : IManeja
 }
 
 /// <summary>
-/// Como máximo un <c>signosActualizados</c> cada 2 s por paciente (singleton): deja pasar cada lectura del wearable (una cada
-/// 5 s) y frena una ráfaga (por ejemplo, el búfer que se vacía al volver la red).
+/// Como máximo un <c>signosActualizados</c> cada 0,5 s por paciente (singleton): deja pasar cada lectura del wearable (una
+/// por segundo) y frena una ráfaga (por ejemplo, el búfer que se vacía al volver la red).
 /// </summary>
 public sealed class LimitadorSignosTiempoReal
 {
-    public static readonly TimeSpan Intervalo = TimeSpan.FromSeconds(2);
+    public static readonly TimeSpan Intervalo = TimeSpan.FromMilliseconds(500);
 
     private readonly Dictionary<Guid, DateTime> _ultimos = [];
     private readonly object _cerrojo = new();
@@ -145,8 +145,8 @@ public sealed class LimitadorSignosTiempoReal
 }
 
 /// <summary>
-/// Evento <c>signosActualizados</c> al grupo del servicio, limitado a uno cada 2 s por paciente. Una lectura con caída pasa
-/// siempre: la ficha la muestra al instante.
+/// Evento <c>signosActualizados</c> al grupo del servicio, limitado a uno cada 0,5 s por paciente. Una lectura con caída
+/// pasa siempre: la ficha la muestra al instante.
 /// </summary>
 public sealed class PublicarSignosEnTiempoReal(
     ContextoHospitalizaciones contextos, INotificadorTiempoReal tiempoReal, LimitadorSignosTiempoReal limitador, IReloj reloj) : IManejadorLecturaRegistrada
