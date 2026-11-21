@@ -47,10 +47,11 @@ public sealed record ReglaNnn(string Id, string Descripcion, Func<ContextoReglas
 /// </summary>
 /// <param name="PorConfirmar">El criterio se apoya solo en datos del wearable (sensor no certificado): antes de confirmarla conviene una toma manual de <paramref name="ConfirmarCon"/>.</param>
 /// <param name="Retenida">El motor ya no la propone, pero sigue pendiente durante la histéresis (30 min).</param>
+/// <param name="Explicacion">El mismo motivo en lenguaje de piso (<see cref="ExplicacionesNnn"/>): el signo, su valor y el rango normal.</param>
 public sealed record SugerenciaNnn(
     string DiagnosticoCodigo, IReadOnlyList<string> Intervenciones, IReadOnlyList<string> Resultados, IReadOnlyList<string> Reglas,
     string Motivo, PrioridadSugerencia Prioridad, Guid? EvaluacionId, Guid? AlertaId, bool PorConfirmar = false,
-    IReadOnlyList<ParametroClinico>? ConfirmarCon = null, bool Retenida = false)
+    IReadOnlyList<ParametroClinico>? ConfirmarCon = null, bool Retenida = false, string? Explicacion = null)
 {
     public string Regla => Reglas[0];
 }
@@ -353,6 +354,12 @@ public sealed class MotorSugerenciasNnn
                 var intervenciones = c.SelectMany(x => x.Intervenciones).Distinct(StringComparer.Ordinal).ToList();
                 var reglas = grupo.Select(x => x.regla.Id).ToList();
                 var motivo = string.Join(". ", c.Select(x => x.Motivo));
+                var explicaciones = grupo.Select(x => ExplicacionesNnn.Para(x.regla.Id, contexto)).OfType<string>().ToList();
+                if (colaboracion)
+                {
+                    explicaciones.Add(ExplicacionesNnn.ColaboracionMedica(contexto));
+                }
+
                 if (colaboracion)
                 {
                     if (!intervenciones.Contains(ReglasNnn.NicColaboracionMedica))
@@ -372,7 +379,7 @@ public sealed class MotorSugerenciasNnn
                 return (orden: grupo.Min(x => x.orden), sistema: grupo.Min(x => ReglasNnn.Sistema(x.regla.Id)), sugerencia: new SugerenciaNnn(
                     grupo.Key, intervenciones, c.SelectMany(x => x.Resultados).Distinct(StringComparer.Ordinal).ToList(), reglas, motivo,
                     c.Max(x => x.Prioridad), contexto.Evaluacion?.Id, c.Select(x => x.AlertaId).FirstOrDefault(a => a is not null),
-                    porConfirmar, confirmarCon));
+                    porConfirmar, confirmarCon, Explicacion: explicaciones.Count == 0 ? null : string.Join(" ", explicaciones)));
             })
             .OrderByDescending(x => x.sugerencia.Prioridad)
             .ThenBy(x => x.sistema)
