@@ -40,13 +40,13 @@ Lo que no esté en ninguna de las dos queda como faltante.
 **Qué se guarda** en `vitalify_historial.evaluacion_riesgo`, con los valores usados, para ver la tendencia:
 
 - Las evaluaciones de una toma manual o de un cambio de escala de SpO2: siempre.
-- Las del wearable (17 280 al día por paciente, una cada 5 s): solo si respecto de la última guardada cambió el total o el nivel de NEWS2 o de MEWS, cambió si están completos o cambió la próxima toma manual, o si ya pasaron **5 minutos** (`EvaluacionRiesgo.AportaRespectoDe`). Así la tendencia no pierde ningún cambio y la tabla crece unas 12 filas por hora en un paciente estable, en lugar de 720.
+- Las del wearable (86 400 al día por paciente, una por segundo): solo si respecto de la última guardada cambió el total o el nivel de NEWS2 o de MEWS, cambió si están completos o cambió la próxima toma manual, o si ya pasaron **5 minutos** (`EvaluacionRiesgo.AportaRespectoDe`). Así la tendencia no pierde ningún cambio y la tabla crece unas 12 filas por hora en un paciente estable, en lugar de 3600.
 
 `RiesgoEvaluado` se publica con **cada** evaluación, se guarde o no. Las alertas reaccionan al instante (por ejemplo, al terminar la espera tras atender, AL-E9) y el tablero recibe el puntaje al día. Si la evaluación no se guardó, el evento lleva el id de la última guardada, que tiene el mismo puntaje. `GET /riesgo` muestra la última guardada: el mismo puntaje, con valores de hasta 5 min antes.
 
 ## Precisión del sensor (fase 9)
 
-NEWS2 y MEWS se validaron con tomas puntuales de una enfermera (Downey 2018; Weenk 2019). El wearable manda una lectura cada 5 s, y un valor suelto por movimiento o mal contacto puntuaría y dispararía alertas y sugerencias NNN. Por eso `EvaluadorRiesgo` filtra lo del sensor antes de puntuar (`Domain/Clinica/PrecisionSensor.cs`, versión `2026.12.1`):
+NEWS2 y MEWS se validaron con tomas puntuales de una enfermera (Downey 2018; Weenk 2019). El wearable manda una lectura por segundo, y un valor suelto por movimiento o mal contacto puntuaría y dispararía alertas y sugerencias NNN. Por eso `EvaluadorRiesgo` filtra lo del sensor antes de puntuar (`Domain/Clinica/PrecisionSensor.cs`, versión `2026.12.1`):
 
 | Parámetro del sensor | Qué se puntúa | Vigencia |
 |---|---|---|
