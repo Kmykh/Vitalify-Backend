@@ -147,7 +147,7 @@ public sealed record RecordatorioPacienteDto(
 /// <param name="Motivo"><c>vencidas</c> (algo del plan se venció) o <c>cierre-guardia</c> (falta una hora para el cambio de turno).</param>
 public sealed record RecordatoriosPlanDto(string Motivo, IReadOnlyList<RecordatorioPacienteDto> Pacientes);
 
-/// <summary>Evento <c>signosActualizados</c> (como máximo uno cada 5 s por paciente).</summary>
+/// <summary>Evento <c>signosActualizados</c> (como máximo uno cada 2 s por paciente; las caídas, siempre).</summary>
 public sealed record SignosActualizadosDto(
     Guid PacienteId, Guid HospitalizacionId, string Cama, DateTime MedidoEn, int? Fc, int? Fr, int? Spo2, decimal? Temperatura,
     int? Pas, int? Pad, bool Caida);

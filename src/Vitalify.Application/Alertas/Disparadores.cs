@@ -13,13 +13,14 @@ namespace Vitalify.Application.Alertas;
 /// el mismo puntaje.
 /// </summary>
 /// <param name="Guardada">Si esta evaluación se guardó (cambió algo): las sugerencias NNN solo se recalculan entonces.</param>
+/// <param name="Motivo">El parámetro que más sube el NEWS2, para la alerta (null si ninguno suma).</param>
 public sealed record RiesgoEvaluado(
     Guid HospitalizacionId, Guid PacienteId, Guid EvaluacionId, DateTime EvaluadaEn, int News2, NivelRiesgoNews2 News2Nivel,
-    int Mews, NivelRiesgoMews MewsNivel, bool Completo, OrigenEvaluacion Origen, bool Guardada = true)
+    int Mews, NivelRiesgoMews MewsNivel, bool Completo, OrigenEvaluacion Origen, bool Guardada = true, MotivoPuntaje? Motivo = null)
 {
     public static RiesgoEvaluado Desde(EvaluacionRiesgo e) =>
         new(e.HospitalizacionId, e.PacienteId, e.Id, e.EvaluadaEn, e.News2Total, e.News2Nivel, e.MewsTotal, e.MewsNivel,
-            e.News2Completo && e.MewsCompleto, e.Origen);
+            e.News2Completo && e.MewsCompleto, e.Origen, Motivo: MotivoPuntaje.De(e));
 }
 
 public interface IManejadorRiesgoEvaluado
@@ -62,16 +63,25 @@ public sealed class AlertaDeRiesgoAlEvaluar(ServicioAlertas alertas) : IManejado
             return;
         }
 
+        var detalle = new Dictionary<string, string>
+        {
+            ["news2Nivel"] = TextosClinicos.De(evento.News2Nivel),
+            ["mewsNivel"] = TextosClinicos.De(evento.MewsNivel),
+            ["completo"] = evento.Completo ? "true" : "false",
+            ["origen"] = evento.Origen.ToString(),
+            ["evaluacionId"] = evento.EvaluacionId.ToString(),
+        };
+
+        // Lo que más subió el puntaje ("fr", "3", "26 rpm"): la app lo muestra en la alerta sin abrir la ficha.
+        if (evento.Motivo is { } m)
+        {
+            detalle["motivoParametro"] = TextosClinicos.De(m.Parametro);
+            detalle["motivoPuntos"] = m.Puntos.ToString(CultureInfo.InvariantCulture);
+            detalle["motivoValor"] = m.Valor;
+        }
+
         await alertas.DispararAsync(new DisparoAlerta(
-            evento.HospitalizacionId, TipoAlerta.Riesgo, riesgo.Prioridad, riesgo.Nivel, evento.News2, evento.Mews,
-            new Dictionary<string, string>
-            {
-                ["news2Nivel"] = TextosClinicos.De(evento.News2Nivel),
-                ["mewsNivel"] = TextosClinicos.De(evento.MewsNivel),
-                ["completo"] = evento.Completo ? "true" : "false",
-                ["origen"] = evento.Origen.ToString(),
-                ["evaluacionId"] = evento.EvaluacionId.ToString(),
-            }), ct);
+            evento.HospitalizacionId, TipoAlerta.Riesgo, riesgo.Prioridad, riesgo.Nivel, evento.News2, evento.Mews, detalle), ct);
     }
 }
 
@@ -108,10 +118,13 @@ public sealed class AlertasAlRegistrarLectura(ServicioAlertas alertas) : IManeja
     }
 }
 
-/// <summary>Como máximo un <c>signosActualizados</c> cada 5 s por paciente (singleton).</summary>
+/// <summary>
+/// Como máximo un <c>signosActualizados</c> cada 2 s por paciente (singleton): deja pasar cada lectura del wearable (una cada
+/// 5 s) y frena una ráfaga (por ejemplo, el búfer que se vacía al volver la red).
+/// </summary>
 public sealed class LimitadorSignosTiempoReal
 {
-    public static readonly TimeSpan Intervalo = TimeSpan.FromSeconds(5);
+    public static readonly TimeSpan Intervalo = TimeSpan.FromSeconds(2);
 
     private readonly Dictionary<Guid, DateTime> _ultimos = [];
     private readonly object _cerrojo = new();
@@ -131,13 +144,17 @@ public sealed class LimitadorSignosTiempoReal
     }
 }
 
-/// <summary>Evento <c>signosActualizados</c> al grupo del servicio, limitado a uno cada 5 s por paciente.</summary>
+/// <summary>
+/// Evento <c>signosActualizados</c> al grupo del servicio, limitado a uno cada 2 s por paciente. Una lectura con caída pasa
+/// siempre: la ficha la muestra al instante.
+/// </summary>
 public sealed class PublicarSignosEnTiempoReal(
     ContextoHospitalizaciones contextos, INotificadorTiempoReal tiempoReal, LimitadorSignosTiempoReal limitador, IReloj reloj) : IManejadorLecturaRegistrada
 {
     public async Task ManejarAsync(LecturaRegistrada lectura, CancellationToken ct = default)
     {
-        if (!limitador.Permitir(lectura.PacienteId, reloj.AhoraUtc) || await contextos.ObtenerAsync(lectura.HospitalizacionId, ct) is not { } contexto)
+        if ((!lectura.Caida && !limitador.Permitir(lectura.PacienteId, reloj.AhoraUtc))
+            || await contextos.ObtenerAsync(lectura.HospitalizacionId, ct) is not { } contexto)
         {
             return;
         }
