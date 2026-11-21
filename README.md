@@ -146,7 +146,7 @@ Detrás del proxy, la API usa la IP real del cliente (`X-Forwarded-For`, solo de
 | POST | `/api/v1/pacientes/{id}/dispositivo` | Enfermera | Vincula un sensor disponible sin QR (respaldo de la HU06); publica "vinculado" |
 | DELETE | `/api/v1/pacientes/{id}/dispositivo` | Enfermera | Libera el sensor; el wearable recibe "desvinculado" y un QR nuevo |
 | POST | `/api/v1/pacientes/{id}/egreso` | Enfermera | Egreso con motivo; libera el sensor en la misma transacción (HU08) |
-| GET | `/api/v1/pacientes/monitoreados` | Médico o Enfermera | Pacientes con sensor (HU07), de mayor a menor riesgo (HU18), con NEWS2, MEWS, nivel de riesgo, `senal`, `conexionSensor` y `alertasAbiertas` |
+| GET | `/api/v1/pacientes/monitoreados` | Médico o Enfermera | Pacientes con sensor (HU07), de mayor a menor riesgo (HU18), con NEWS2, MEWS, nivel de riesgo, `senal`, `conexionSensor`, `alertasAbiertas` y `motivoPrincipal` (el parámetro que más sube el NEWS2: `parametro`, `puntos` y `valor`, por ejemplo `fr`, 3, `26 rpm`) |
 | GET | `/api/v1/pacientes/{id}/signos/actual` | Médico o Enfermera | Último valor de cada signo con `vigente`, `pendiente-actualizacion` o `sin-datos` |
 | GET | `/api/v1/pacientes/{id}/hospitalizaciones` | Médico o Enfermera | Episodios del paciente: ingreso, egreso y motivo, cama, servicio, diagnóstico y sensores usados |
 | GET | `/api/v1/pacientes/{id}/signos/historial?hospitalizacionId=&desde=&hasta=&agrupar=` | Médico o Enfermera | Lecturas del episodio (por defecto el activo o el último, completo); sin agrupar hasta 7 días; `agrupar=1m\|5m\|15m\|1h` da promedio, mínimo y máximo por intervalo |

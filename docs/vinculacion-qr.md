@@ -36,7 +36,7 @@ sequenceDiagram
     API->>B: vinculado { cama, iniciales } (retenido)
     B->>W: vinculado
     API-->>E: 201 { paciente, dispositivo, riesgo, avisos }
-    W->>B: device/ESP32-001/telemetria (cada 10 s, solo mientras está vinculado)
+    W->>B: device/ESP32-001/telemetria (cada 5 s, solo mientras está vinculado)
 
     E->>API: POST /api/v1/pacientes/{id}/egreso
     API->>B: desvinculado (retenido)

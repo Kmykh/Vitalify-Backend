@@ -192,7 +192,7 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
 
 - **Hardware real** (README del IoT):
   - ESP32 (DevKit en la placa; también ESP32-S3) con MAX30102 (FC y SpO2), AD8232 (ECG; la FC sale del ECG si es confiable), DS18B20 (temperatura de piel) y MPU6050 sobre el tórax (caídas y FR; el firmware acepta un ADXL345 si no hay MPU6050).
-  - Publica en `device/{codigo}/telemetria`, con QoS 1, cada 10 s, y al instante si hay una caída. Usa un búfer offline de 1 h y publica `online`/`offline` (retenido, *last will*) en `device/{codigo}/estado`.
+  - Publica en `device/{codigo}/telemetria`, con QoS 1, cada 5 s (antes, 10 s), y al instante si hay una caída. Usa un búfer offline de 1 h y publica `online`/`offline` (retenido, *last will*) en `device/{codigo}/estado`.
   - **Mide la FR** con el MPU6050 (`respiracion.h`, solo con el paciente quieto) y, desde el firmware 2.4, también desde el pulso: FM, amplitud y línea de base del ECG y del PPG (`fr_cardiaca.h`). Si coinciden (±4 rpm), las promedia con doble peso al MPU. Llega una sola `fr`, la combinada. **No mide PAS ni PAD.** La batería (`bateria`, 0–100) llega desde el firmware 2.2 si el wearable tiene el divisor en VP (GPIO 36).
   - El firmware sigue los comandos de vinculación (`vinculacion.h`): muestra el QR, no envía telemetría hasta `vinculado` y descarta el búfer al desvincularse.
   - En producción, `MQTT_BROKER_TLS` en `secretos.h` lo conecta al dominio por el 8883 con TLS, confiando en ISRG Root X1 y X2 (`raices_tls.h`) y después de tener hora NTP. Sin esa definición usa el broker de la laptop (1883).
@@ -259,7 +259,7 @@ Ambos viven en `src/Vitalify.Infrastructure/Persistence/`:
   - `ServicioAlertas.DispararAsync` es el único que crea o actualiza alertas. `DestinatariosAlertas` decide a quién se avisa y `NotificadorAlertas` envía tiempo real y push y guarda `notificada_a`.
   - Disparadores:
     - `RiesgoEvaluado` (evento nuevo, lo publican `EvaluarRiesgoAlRegistrarLectura` y `ServicioObservaciones`) → `AlertaDeRiesgoAlEvaluar` y `PublicarRiesgoEnTiempoReal`;
-    - `LecturaRegistrada` → `AlertasAlRegistrarLectura` (caída y cierre de sin señal) y `PublicarSignosEnTiempoReal` (`LimitadorSignosTiempoReal`, uno cada 5 s por paciente);
+    - `LecturaRegistrada` → `AlertasAlRegistrarLectura` (caída y cierre de sin señal) y `PublicarSignosEnTiempoReal` (`LimitadorSignosTiempoReal`, uno cada 2 s por paciente; las caídas pasan siempre);
     - `VigilarAlertas` lo corre `VigilanteAlertasWorker` cada `Alertas__SegundosVigilancia` (30; 0 lo apaga) y revisa sin señal, tomas vencidas, escalamiento y cambio de turno.
   - Un fallo al notificar nunca rompe la ingesta.
   - `TomarAlerta`, `AtenderAlerta`, `ListarAlertas` y `ListarAlertasPaciente` exigen que el usuario sea del servicio de la alerta (`AccesoServicio`; 403 `usuario-sin-servicio` o `alerta-de-otro-servicio`).
